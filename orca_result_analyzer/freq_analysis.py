@@ -612,6 +612,10 @@ class FrequencyDialog(QDialog):
         chk_trans.setChecked(True)
         form.addRow("Transparent:", chk_trans)
         
+        chk_hq = QCheckBox()
+        chk_hq.setChecked(True)
+        form.addRow("High Quality (Adaptive):", chk_hq)
+        
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(dialog.accept)
         btns.rejected.connect(dialog.reject)
@@ -621,6 +625,7 @@ class FrequencyDialog(QDialog):
         
         fps = spin_fps.value()
         transparent = chk_trans.isChecked()
+        use_hq = chk_hq.isChecked()
         
         path, _ = QFileDialog.getSaveFileName(self, "Save GIF", "", "GIF Files (*.gif)")
         if not path: return
@@ -671,15 +676,33 @@ class FrequencyDialog(QDialog):
                 img_array = mw.plotter.screenshot(transparent_background=transparent, return_img=True)
                 if img_array is not None:
                      img = Image.fromarray(img_array)
-                     if transparent:
-                          img = img.convert("RGBA")
-                     else:
-                          img = img.convert("RGB").quantize(colors=256)
                      images.append(img)
                      
             if images:
                 duration = int(1000 / fps)
-                images[0].save(path, save_all=True, append_images=images[1:], duration=duration, loop=0, disposal=2)
+                processed_images = []
+                for img in images:
+                    if use_hq:
+                        if transparent:
+                            # Alpha preservation with adaptive palette
+                            alpha = img.split()[3]
+                            img_rgb = img.convert("RGB")
+                            # Quantize to 255 colors to leave room for transparency
+                            img_p = img_rgb.convert('P', palette=Image.Palette.ADAPTIVE, colors=255)
+                            # Set transparency
+                            mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
+                            img_p.paste(255, mask)
+                            img_p.info['transparency'] = 255
+                            processed_images.append(img_p)
+                        else:
+                            processed_images.append(img.convert("P", palette=Image.Palette.ADAPTIVE, colors=256))
+                    else:
+                        if transparent:
+                            processed_images.append(img.convert("RGBA"))
+                        else:
+                            processed_images.append(img.convert("RGB"))
+                
+                processed_images[0].save(path, save_all=True, append_images=processed_images[1:], duration=duration, loop=0, disposal=2)
                 QMessageBox.information(self, "Success", f"GIF saved to:\n{path}")
                 
         except Exception as e:
