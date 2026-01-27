@@ -9,6 +9,7 @@ A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA 
 ### 1. Molecular Orbitals (MO)
 - **Levels**: View orbital energies and occupancy.
 - **Visualization**: Generate and view 3D Cubes for selected orbitals (Isosurfaces).
+- **Limitations**: Currently supports S, P, D, and F shells. **G-shells (and higher) are not yet supported** and will be skipped during visualization.
 - **Performance Note**: For large systems or higher resolution, using ORCA's `orca_plot` utility to generate `.cube` files and the **Cube File Viewer** plugin is recommended for better performance.
 
 ### 2. Frequency Analysis (IR / Raman)
