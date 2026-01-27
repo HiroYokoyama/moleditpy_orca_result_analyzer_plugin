@@ -289,11 +289,22 @@ class OrcaResultAnalyzerDialog(QDialog):
     def update_button_states(self):
         data = self.parser.data
         
-        has_mo = bool(data.get("mocoeffs"))
-        self.btn_mo.setEnabled(has_mo)
-        self.btn_mo.setToolTip("" if has_mo else "No MO coefficients found")
+        # Enable MO button if MO coefficients OR orbital energies exist
+        # Strict check: must be non-empty dict or list
+        mo_coeffs = data.get("mo_coeffs", {})
+        orb_energies = data.get("orbital_energies", [])
         
-        has_freq = bool(data.get("frequencies"))
+        has_mo = bool(mo_coeffs) or (bool(orb_energies) and len(orb_energies) > 0)
+        self.btn_mo.setEnabled(has_mo)
+        tooltip = ""
+        if not has_mo:
+            tooltip = "No MO data found"
+        elif orb_energies and not mo_coeffs:
+            tooltip = "Orbital energies available (no coefficients for visualization)"
+        self.btn_mo.setToolTip(tooltip)
+        
+        freqs = data.get("frequencies", [])
+        has_freq = bool(freqs and len(freqs) > 0)
         self.btn_freq.setEnabled(has_freq)
         self.btn_freq.setToolTip("" if has_freq else "No frequency data found")
         
@@ -301,10 +312,20 @@ class OrcaResultAnalyzerDialog(QDialog):
         has_scan = bool(data.get("scan_steps"))
         self.btn_traj.setEnabled(has_scan)
         self.btn_traj.setToolTip("" if has_scan else "No trajectory/scan steps found")
-        
-        has_forces = bool(data.get("gradients"))
+       
+        # Enable Forces button if gradients OR frequencies exist (can load Hessian)
+        grads = data.get("gradients", [])
+        has_gradients = bool(grads and len(grads) > 0)
+        has_forces = has_gradients or has_freq
         self.btn_forces.setEnabled(has_forces)
-        self.btn_forces.setToolTip("" if has_forces else "No gradients found")
+        tooltip = ""
+        if not has_forces:
+             tooltip = "No gradients or frequency data found"
+        elif has_freq and not has_gradients:
+             tooltip = "Load Hessian file for force constants"
+        elif has_gradients:
+             tooltip = "View Forces (Gradients)"
+        self.btn_forces.setToolTip(tooltip)
         
         has_thermal = bool(data.get("thermal") or (data.get("frequencies") and "thermo" in str(data))) 
         self.btn_therm.setEnabled(bool(data.get("thermal")))
@@ -371,11 +392,20 @@ class OrcaResultAnalyzerDialog(QDialog):
             print(f"Error loading 3D: {e}")
 
     def show_mo_analyzer(self):
-        if not self.parser.data.get("mo_coeffs"):
-            QMessageBox.warning(self, "No Data", "No Molecular Orbital coefficients found.")
+        mo_coeffs = self.parser.data.get("mo_coeffs")
+        orb_energies = self.parser.data.get("orbital_energies")
+        
+        data_to_show = mo_coeffs if mo_coeffs else orb_energies
+        
+        if not data_to_show:
+            QMessageBox.warning(self, "No Data", "No Molecular Orbital coefficients or energies found.")
             return
-        dlg = MODialog(self, self.parser.data["mo_coeffs"])
-        dlg.exec()
+            
+        if hasattr(self, 'mo_dlg') and self.mo_dlg is not None:
+            self.mo_dlg.close()
+            
+        self.mo_dlg = MODialog(self, data_to_show)
+        self.mo_dlg.show()
         
     def show_freq(self):
         freqs = self.parser.data.get("frequencies", [])
@@ -405,12 +435,17 @@ class OrcaResultAnalyzerDialog(QDialog):
         
     def show_forces(self):
         grads = self.parser.data.get("gradients", [])
-        if not grads:
-             QMessageBox.warning(self, "No Info", "No cartesian gradients found.")
+        has_freq = bool(self.parser.data.get("frequencies"))
+        
+        # If no gradients but has frequency data, allow opening for Hessian loading
+        if not grads and not has_freq:
+             QMessageBox.warning(self, "No Info", "No cartesian gradients or frequency data found.")
              return
+        
         if hasattr(self, 'force_dlg') and self.force_dlg is not None:
              self.force_dlg.close()
-        self.force_dlg = ForceViewerDialog(self, grads)
+        # Pass parser to enable Hessian file loading
+        self.force_dlg = ForceViewerDialog(self, grads, parser=self.parser)
         self.force_dlg.show()
         
     def show_thermal(self):

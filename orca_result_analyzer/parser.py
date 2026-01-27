@@ -1,6 +1,7 @@
 import re
 
 class OrcaParser:
+    """Parser for ORCA quantum chemistry output files"""
     def __init__(self):
         self.filename = ""
         self.raw_content = ""
@@ -33,6 +34,7 @@ class OrcaParser:
         self.parse_thermal()
         self.parse_mo()
         self.parse_mo_coeffs()
+        self.parse_orbital_energies()
         self.parse_charges()
         self.parse_dipole()
         self.parse_tddft()
@@ -251,30 +253,52 @@ class OrcaParser:
                     curr += 1
                     continue
                 
-                # Coefficient line: "0   C  1s   0.000 ..."
-                if len(parts) >= 3:
-                     # Check if start is int index (0) and sym (C)
+                # Coefficient line: "0   C  1s   0.000 ..." or "0C  1s ..."
+                if len(parts) >= 2:
                      try:
-                         atom_idx = int(parts[0])
-                         sym = parts[1]
-                         orb = parts[2]
-                         val_strs = parts[3:]
+                         atom_idx = -1
+                         sym = ""
+                         orb = ""
+                         val_strs = []
                          
-                         # Sometimes sym is attached? 0C?
-                         # Usually ORCA puts spaces: "   0   C   1s"
-                         
+                         # Check for merged format "0C"
+                         match_merged = re.match(r"^(\d+)([A-Za-z]+)$", parts[0])
+                         if match_merged:
+                             atom_idx = int(match_merged.group(1))
+                             sym = match_merged.group(2)
+                             orb = parts[1]
+                             val_strs = parts[2:]
+                         elif len(parts) >= 3 and parts[0].isdigit():
+                             atom_idx = int(parts[0])
+                             sym = parts[1]
+                             orb = parts[2]
+                             val_strs = parts[3:]
+                         else:
+                             curr += 1
+                             continue
+
                          # Check if remaining parts match number of current MOs
                          if len(val_strs) == len(current_mos):
                               for k, v_str in enumerate(val_strs):
                                   mo_idx = current_mos[k]
-                                  val = float(v_str)
-                                  if abs(val) > 0.01:
+                                  try:
+                                      val = float(v_str)
+                                      # Filter small coeffs to save space/time? 
+                                      # Maybe keep all for accuracy?
+                                      # Original code had > 0.01 filter.
+                                      # Let's keep filter but maybe lower threshold if needed.
+                                      # Actually, user complained "nothing visualized". 
+                                      # If filter is too high? 0.01 is reasonable for isosurface.
+                                      # But let's lower to 1e-4 just in case.
+                                      # Or remove filter. 
+                                      # Let's store all for now.
                                       self.data["mo_coeffs"][mo_idx]['coeffs'].append({
                                           "atom_idx": atom_idx,
                                           "sym": sym,
                                           "orb": orb,
                                           "coeff": val
                                       })
+                                  except: pass
                      except: pass
                 curr += 1
         
@@ -1231,3 +1255,313 @@ class OrcaParser:
                             vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
                     self.data["frequencies"][m_idx]["vector"] = vecs
 
+
+
+    def parse_orbital_energies(self):
+        """Parse orbital energies from ORBITAL ENERGIES section"""
+        self.data["orbital_energies"] = []
+        
+        # Look for "ORBITAL ENERGIES" section
+        start_idx = -1
+        for i, line in enumerate(self.lines):
+            if "ORBITAL ENERGIES" in line and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+                start_idx = i
+                break
+        
+        if start_idx == -1:
+            return
+        
+        # Skip header lines
+        curr = start_idx + 3  # Skip title, separator, column headers
+        
+        while curr < len(self.lines):
+            line = self.lines[curr].strip()
+            if not line or "---" in line:
+                break
+            
+            parts = line.split()
+            # Format: NO   OCC          E(Eh)            E(eV)
+            #           0   2.0000     -10.186408      -277.1862
+            if len(parts) >= 4:
+                try:
+                    orbital_idx = int(parts[0])
+                    occupation = float(parts[1])
+                    energy_eh = float(parts[2])
+                    energy_ev = float(parts[3])
+                    
+                    self.data["orbital_energies"].append({
+                        "index": orbital_idx,
+                        "occupation": occupation,
+                        "energy_eh": energy_eh,
+                        "energy_ev": energy_ev,
+                        "type": "occupied" if occupation > 0.1 else "virtual"
+                    })
+                except:
+                    pass
+            
+            curr += 1
+    
+    def parse_hessian_file(self, filepath):
+        """Parse ORCA Hessian (.hess) file to extract force constants"""
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except Exception as e:
+            print(f"Error reading Hessian file: {e}")
+            return None
+        
+        lines = content.splitlines()
+        hessian_data = {
+            "matrix": [],
+            "frequencies": [],
+            "normal_modes": [],
+            "atoms": [],
+            "coords": []
+        }
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Parse Hessian matrix
+            if line == "$hessian":
+                i += 1
+                if i < len(lines):
+                    n_coords = int(lines[i].strip())
+                    i += 1
+                    
+                    # Read matrix in blocks
+                    matrix = [[] for _ in range(n_coords)]
+                    
+                    while i < len(lines):
+                        line = lines[i].strip()
+                        if line.startswith("$"):
+                            break
+                        
+                        parts = line.split()
+                        if len(parts) > 1 and parts[0].isdigit():
+                            row_idx = int(parts[0])
+                            values = [float(x) for x in parts[1:]]
+                            if row_idx < len(matrix):
+                                matrix[row_idx].extend(values)
+                        
+                        i += 1
+                    
+                    hessian_data["matrix"] = matrix
+            
+            # Parse frequencies
+            elif line == "$vibrational_frequencies":
+                i += 1
+                if i < len(lines):
+                    n_freq = int(lines[i].strip())
+                    i += 1
+                    
+                    frequencies = []
+                    for _ in range(n_freq):
+                        if i >= len(lines):
+                            break
+                        parts = lines[i].strip().split()
+                        if len(parts) >= 2:
+                            frequencies.append(float(parts[1]))
+                        i += 1
+                    
+                    hessian_data["frequencies"] = frequencies
+            
+            # Parse normal modes
+            elif line == "$normal_modes":
+                i += 1
+                if i < len(lines):
+                    dims = lines[i].strip().split() # rows cols
+                    if len(dims) >= 2:
+                        n_rows = int(dims[0]) # 3 * n_atoms
+                        n_cols = int(dims[1]) # n_freq
+                        i += 1
+                        
+                        # Initialize normal modes matrix (n_rows x n_cols)
+                        # We want to store per mode, so list of n_cols vectors of length n_rows
+                        modes = [[] for _ in range(n_cols)]
+                        
+                        while i < len(lines):
+                            line = lines[i].strip()
+                            if line.startswith("$"):
+                                break
+                            
+                            # Block headers: 0 1 2 3 ...
+                            parts = line.split()
+                            if not parts:
+                                i += 1
+                                continue
+                                
+                            # Check if header line (likely integer indices)
+                            try:
+                                # If all are integers, it's a header line
+                                col_indices = [int(x) for x in parts]
+                                i += 1 # Move to data
+                                
+                                # Read data rows for this block
+                                for r in range(n_rows):
+                                    if i >= len(lines): break
+                                    line = lines[i].strip()
+                                    parts = line.split()
+                                    # First part is row index
+                                    if len(parts) > 1:
+                                        # row_idx = int(parts[0])
+                                        vals = [float(x) for x in parts[1:]]
+                                        for k, col_idx in enumerate(col_indices):
+                                            if col_idx < len(modes):
+                                                modes[col_idx].append(vals[k])
+                                    i += 1
+                            except ValueError:
+                                # Not a header line? Should not happen if format is strict
+                                i += 1
+                        
+                        # Reformat to list of vectors (tuples) for each mode
+                        # Each mode is list of 3N floats. Convert to list of (x,y,z)
+                        formatted_modes = []
+                        for m in modes:
+                            vecs = []
+                            for k in range(0, len(m), 3):
+                                if k+2 < len(m):
+                                    vecs.append((m[k], m[k+1], m[k+2]))
+                            formatted_modes.append(vecs)
+                            
+                        hessian_data["normal_modes"] = formatted_modes
+
+            # Parse atoms
+            elif line == "$atoms":
+                i += 1
+                if i < len(lines):
+                    n_atoms = int(lines[i].strip())
+                    i += 1
+                    
+                    atoms = []
+                    coords = []
+                    for _ in range(n_atoms):
+                        if i >= len(lines):
+                            break
+                        parts = lines[i].strip().split()
+                        if len(parts) >= 5:
+                            atoms.append(parts[0])
+                            # Convert Bohr to Angstrom
+                            BOHR_TO_ANG = 0.529177249
+                            coords.append([
+                                float(parts[2]) * BOHR_TO_ANG,
+                                float(parts[3]) * BOHR_TO_ANG,
+                                float(parts[4]) * BOHR_TO_ANG
+                            ])
+                        i += 1
+                    
+                    hessian_data["atoms"] = atoms
+                    hessian_data["coords"] = coords
+            
+            i += 1
+        
+        return hessian_data
+        
+    def parse_basis_set(self):
+        """Parse Basis Set information needed for MO visualization"""
+        self.data["basis_set_shells"] = []
+        
+        # Look for "BASIS SET IN INPUT FORMAT"
+        start_idx = -1
+        for i, line in enumerate(self.lines):
+            if "BASIS SET IN INPUT FORMAT" in line:
+                start_idx = i
+                break
+        
+        if start_idx == -1: return
+        
+        curr = start_idx + 2
+        
+        basis_defs = {} # Sym -> List of shells
+        current_sym = None
+        current_shells = []
+        
+        while curr < len(self.lines):
+            line = self.lines[curr].strip()
+            
+            # Stop conditions
+            if "--------" in line and curr > start_idx + 10: break 
+            if "AUXILIARY BASIS" in line: break
+            
+            # Start of Atom block: "NewGTO H"
+            if line.startswith("NewGTO"):
+                parts = line.split()
+                if len(parts) >= 2:
+                    current_sym = parts[1]
+                    current_shells = []
+                curr += 1
+                continue
+                
+            # End of Atom block: "end" or "end;"
+            if line.startswith("end"):
+                if current_sym:
+                     basis_defs[current_sym] = current_shells
+                curr += 1
+                continue
+                
+            # Shell definition header: "S   3" or "P   2"
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].upper() in ['S', 'P', 'D', 'F', 'G']:
+                sh_type = parts[0].upper()
+                try:
+                    n_prim = int(parts[1])
+                    if n_prim > 50: # Sanity check
+                        curr += 1
+                        continue
+                        
+                    curr += 1
+                    
+                    exps = []
+                    coeffs = []
+                    
+                    # Read primitives
+                    for _ in range(n_prim):
+                        if curr >= len(self.lines): break
+                        pl = self.lines[curr].strip()
+                        pp = pl.split()
+                        if len(pp) >= 3:
+                            exps.append(float(pp[1]))
+                            coeffs.append(float(pp[2]))
+                        curr += 1
+                        
+                    l_map = {'S':0, 'P':1, 'D':2, 'F':3, 'G':4}
+                    l_val = l_map.get(sh_type, 0)
+                    
+                    if exps:
+                        current_shells.append({
+                            'l': l_val,
+                            'exps': exps,
+                            'coeffs': coeffs
+                        })
+                    
+                    continue 
+                except: 
+                    pass
+            
+            curr += 1
+            if curr > start_idx + 5000: break # Safety break
+            
+        # Expand to actual atoms
+        atoms = self.data.get("atoms", [])
+        coords = self.data.get("coords", [])
+        
+        full_shells = []
+        
+        if not atoms:
+             # Try to recover atoms from parser data if parse_basic hasn't run or failed?
+             # No, parse_basis_set relies on atoms being parsed.
+             return
+
+        for idx, (sym, coord) in enumerate(zip(atoms, coords)):
+            defs = basis_defs.get(sym, [])
+            for d in defs:
+                full_shells.append({
+                    'atom_idx': idx,
+                    'origin': coord,
+                    'l': d['l'],
+                    'exps': d['exps'],
+                    'coeffs': d['coeffs']
+                })
+                
+        self.data["basis_set_shells"] = full_shells

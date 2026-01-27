@@ -457,12 +457,19 @@ class FrequencyDialog(QDialog):
             
             scale = self.spin_vec_scale.value()
             
-            # Use add_mesh with glyphs for robustness across plotter implementations
-            poly = pv.PolyData(points)
-            poly.point_data['vectors'] = vectors
-            geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
-            arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
-            self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
+            # Use add_arrows if available (simpler, often better vis)
+            if hasattr(self.mw.plotter, 'add_arrows'):
+                 self.vector_actor = self.mw.plotter.add_arrows(
+                    points, vectors, mag=scale, color=self.vector_color, show_scalar_bar=False
+                 )
+            else:
+                # Use add_mesh with glyphs for robustness across plotter implementations
+                poly = pv.PolyData(points)
+                poly.point_data['vectors'] = vectors
+                geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
+                arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
+                self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
+                
             self.mw.plotter.render()
         except Exception as e:
             print(f"Error in FrequencyDialog.update_view: {e}")

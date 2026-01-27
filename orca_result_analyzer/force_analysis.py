@@ -1,29 +1,73 @@
 
 import numpy as np
 import pyvista as pv
-from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QDoubleSpinBox, QGroupBox, QSpinBox, QColorDialog)
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+                             QDoubleSpinBox, QGroupBox, QSpinBox, QColorDialog,
+                             QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem,
+                             QTabWidget, QWidget)
 from PyQt6.QtGui import QColor
+import os
 
 class ForceViewerDialog(QDialog):
-    def __init__(self, parent_dlg, gradients):
+    def __init__(self, parent_dlg, gradients, parser=None):
         super().__init__(parent_dlg)
         self.setWindowTitle("Force Viewer")
-        self.resize(350, 450)
+        self.resize(500, 600)
         self.parent_dlg = parent_dlg
         self.gradients = gradients # List of {atom_idx, atom_sym, vector}
+        self.parser = parser
         self.actors = []
         self.force_color = "red"
         self.force_res = 20
+        self.hessian_data = None
         
         main_layout = QVBoxLayout(self)
         
+        # Tabs for Gradients and Hessian
+        self.tabs = QTabWidget()
+        main_layout.addWidget(self.tabs)
+        
+        # Tab 1: Gradient Visualization
+        # Tab 1: Gradient Visualization
+        grad_widget = QWidget()
+        grad_layout = QVBoxLayout(grad_widget)
+        
+        has_gradients = bool(self.gradients and len(self.gradients) > 0)
+        
+        if has_gradients:
+            self._setup_gradient_tab(grad_layout)
+            self.tabs.addTab(grad_widget, "Gradients")
+        else:
+            grad_layout.addWidget(QLabel("No gradient (force) data found in output file.\nThis is normal for successful frequency jobs."))
+            grad_layout.addStretch()
+            self.tabs.addTab(grad_widget, "Gradients (Empty)")
+        
+        # Tab 2: Hessian/Force Constants
+        hess_widget = QWidget()
+        hess_layout = QVBoxLayout(hess_widget)
+        self._setup_hessian_tab(hess_layout)
+        self.tabs.addTab(hess_widget, "Force Constants")
+        
+        # Auto-switch to Hessian tab if no gradients
+        if not has_gradients:
+             self.tabs.setCurrentIndex(1)
+             
+        # Close button
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.close)
+        main_layout.addWidget(btn_close)
+        
+        # Init
+        self.update_vectors()
+    
+    def _setup_gradient_tab(self, layout):
+        """Setup the gradient visualization tab"""
         # 1. Info Section
         info_group = QGroupBox("Gradient Info")
         info_layout = QVBoxLayout(info_group)
-        info_layout.addWidget(QLabel(f"Visualizing forces for <b>{len(gradients)}</b> atoms."))
+        info_layout.addWidget(QLabel(f"Visualizing forces for <b>{len(self.gradients)}</b> atoms."))
         info_layout.addWidget(QLabel("<i>Note: Force = -Gradient</i>"))
-        main_layout.addWidget(info_group)
+        layout.addWidget(info_group)
         
         # 2. 3D Appearance Section
         view_group = QGroupBox("3D Visualization")
@@ -58,49 +102,160 @@ class ForceViewerDialog(QDialog):
         color_row.addStretch()
         view_layout.addLayout(color_row)
         
-        main_layout.addWidget(view_group)
-        main_layout.addStretch()
+        layout.addWidget(view_group)
+        layout.addStretch()
+    
+    def _setup_hessian_tab(self, layout):
+        """Setup the Hessian/Force Constants tab"""
+        info_lbl = QLabel("Load a Hessian file (.hess) to view force constants and frequencies")
+        layout.addWidget(info_lbl)
         
-        # 3. Actions
-        btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.close)
-        main_layout.addWidget(btn_close)
+        # Load button
+        btn_load = QPushButton("Load Hessian File")
+        btn_load.clicked.connect(self.load_hessian_file)
+        layout.addWidget(btn_load)
         
-        # Init
-        self.update_vectors()
+        # Frequencies Table
+        self.freq_label = QLabel("Frequencies:")
+        layout.addWidget(self.freq_label)
+        
+        self.freq_table = QTableWidget()
+        self.freq_table.setColumnCount(2)
+        self.freq_table.setHorizontalHeaderLabels(["Mode", "Frequency (cm⁻¹)"])
+        self.freq_table.setAlternatingRowColors(True)
+        # Limit height
+        self.freq_table.setFixedHeight(150)
+        layout.addWidget(self.freq_table)
+        
+        # Force Constants Table
+        layout.addWidget(QLabel("Force Constants (Diagonal):"))
+        self.hessian_table = QTableWidget()
+        self.hessian_table.setColumnCount(3)
+        self.hessian_table.setHorizontalHeaderLabels(["Atom Pair", "Force Constant", "Unit"])
+        layout.addWidget(self.hessian_table)
+        
+        layout.addStretch()
+    
+    def load_hessian_file(self):
+        """Load and parse a Hessian file"""
+        if not self.parser:
+            QMessageBox.warning(self, "No Parser", "Parser not available")
+            return
+        
+        # Get directory from parent
+        start_dir = ""
+        if hasattr(self.parent_dlg, 'file_path'):
+            start_dir = os.path.dirname(self.parent_dlg.file_path)
+        
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Open Hessian File", start_dir, "Hessian Files (*.hess);;All Files (*.*)"
+        )
+        
+        if not filepath:
+            return
+        
+        # Parse the file
+        self.hessian_data = self.parser.parse_hessian_file(filepath)
+        
+        if not self.hessian_data or not self.hessian_data.get("matrix"):
+            QMessageBox.warning(self, "Parse Error", "Failed to parse Hessian file")
+            return
+        
+        # Display force constants
+        self.display_force_constants()
+        
+        QMessageBox.information(self, "Success", f"Loaded Hessian file successfully!\nFrequencies: {len(self.hessian_data.get('frequencies', []))}")
+    
+    def display_force_constants(self):
+        """Display force constants from Hessian matrix"""
+        if not self.hessian_data:
+            return
+        
+        matrix = self.hessian_data.get("matrix", [])
+        atoms = self.hessian_data.get("atoms", [])
+        
+        if not matrix:
+            return
+        
+        # Clear table
+        self.hessian_table.setRowCount(0)
+        
+        # Display diagonal elements (force constants for each coordinate)
+        n_atoms = len(atoms)
+        row = 0
+        
+        for i in range(min(len(matrix), n_atoms * 3)):
+            atom_idx = i // 3
+            coord_idx = i % 3
+            coord_name = ['X', 'Y', 'Z'][coord_idx]
+            
+            if atom_idx < len(atoms) and i < len(matrix) and i < len(matrix[i]):
+                atom_label = f"{atoms[atom_idx]}{atom_idx}"
+                force_const = matrix[i][i] if i < len(matrix[i]) else 0.0
+                
+                self.hessian_table.insertRow(row)
+                self.hessian_table.setItem(row, 0, QTableWidgetItem(f"{atom_label}-{coord_name}"))
+                self.hessian_table.setItem(row, 1, QTableWidgetItem(f"{force_const:.6f}"))
+                self.hessian_table.setItem(row, 2, QTableWidgetItem("Eh/Bohr²"))
+                row += 1
+        
+        self.hessian_table.resizeColumnsToContents()
+        
+        # Display frequencies if available
+        freqs = self.hessian_data.get("frequencies", [])
+        self.freq_table.setRowCount(len(freqs))
+        if freqs:
+            self.freq_label.setText(f"Frequencies ({len(freqs)} modes):")
+            for i, freq in enumerate(freqs):
+                self.freq_table.setItem(i, 0, QTableWidgetItem(f"Mode {i}"))
+                self.freq_table.setItem(i, 1, QTableWidgetItem(f"{freq:.2f}"))
+        else:
+             self.freq_label.setText("Frequencies: None found")
         
     def update_vectors(self):
-        # Clear old
-        self.clear_vectors()
-        
-        # Access main window via context if available, or direct parent if not?
-        # OrcaResultAnalyzerDialog uses context to get main_window().
-        
-        mw = None
-        if hasattr(self.parent_dlg, 'context') and self.parent_dlg.context:
-             mw = self.parent_dlg.context.get_main_window()
-        elif hasattr(self.parent_dlg, 'mw'):
-             mw = self.parent_dlg.mw
-             
-        if not mw or not hasattr(mw, 'plotter'): return
-        
-        try:
-            # Helper to get atom pos
-            mol = getattr(mw, 'current_mol', None)
-            if not mol: return
-            conf = mol.GetConformer()
+        """Update the force vectors in the visualizer"""
+        # Guard clause: if widgets not initialized (e.g. no gradients tab), return
+        if not hasattr(self, 'spin_scale'):
+            return
             
+        try:
+            mw = None
+            if hasattr(self.parent_dlg, 'context') and self.parent_dlg.context:
+                 mw = self.parent_dlg.context.get_main_window()
+            elif hasattr(self.parent_dlg, 'mw'):
+                 mw = self.parent_dlg.mw
+            
+            if not mw or not hasattr(mw, 'plotter'): return
+            
+            # Clear old
+            self.clear_vectors()
+            
+            # Get settings
             scale = self.spin_scale.value()
             
-            for item in self.gradients:
-                idx = item['atom_idx']
-                if idx < mol.GetNumAtoms():
-                    pos = conf.GetAtomPosition(idx)
-                    start = np.array([pos.x, pos.y, pos.z])
-                    vec = np.array(item['vector'])
-                    
-                    mag = np.linalg.norm(vec)
-                    if mag < 1e-6: continue
+            # Draw
+            for idx, item in enumerate(self.gradients):
+                # item: {atom_idx, atom_sym, vector: [dx, dy, dz]}
+                # We need atom positions. 
+                # Parser has data["coords"]. 
+                # Let's hope self.parser exists or gradients include positions?
+                # Gradients dict in parser usually: {'atom_idx': i, 'sym': s, 'grad': [x,y,z]}
+                # We need coords separately.
+                atom_idx = item.get('atom_idx', idx)
+                
+                # Fetch coord from parser
+                if self.parser and "coords" in self.parser.data:
+                    coords = self.parser.data["coords"]
+                    if atom_idx < len(coords):
+                        start = coords[atom_idx]
+                    else: continue
+                else: continue
+                
+                grad = item.get('grad', item.get('vector'))
+                if grad:
+                    vec = np.array(grad)
+                    length = np.linalg.norm(vec)
+                    if length < 1e-6: continue
                     
                     # Gradient is derivative of Energy. Force is -Gradient.
                     # Usually we visualize Force (-Gradient) to show where atoms want to go.

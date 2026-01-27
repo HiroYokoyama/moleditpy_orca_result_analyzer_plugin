@@ -97,7 +97,10 @@ class BasisSetEngine:
     def _prepare_definitions(self):
         # Cartesian Definitions (1:1)
         cart_s = [ [(1.0, (0,0,0))] ] # S
-        cart_p = [ [(1.0, (1,0,0))], [(1.0, (0,1,0))], [(1.0, (0,0,1))] ] # Px, Py, Pz
+        # ORCA P-order: pz, px, py (based on benzene-ene.out observation)
+        # Engine expects: [0] -> pz, [1] -> px, [2] -> py
+        # Definitions must map these to (0,0,1), (1,0,0), (0,1,0)
+        cart_p = [ [(1.0, (0,0,1))], [(1.0, (1,0,0))], [(1.0, (0,1,0))] ] # Pz, Px, Py
         
         # d shells
         # ORCA usually uses Spherical Harmonics for d/f in standard output unless explicitly Cartesian.
@@ -296,7 +299,7 @@ class CalcWorker(QThread):
                 min_c, 
                 vectors, 
                 vol_data, 
-                comment=f"MO {self.mo_idx}"
+                comment=f"MO {self.mo_idx + 1}"
             )
             
             self.finished_sig.emit(True, self.output_path)
