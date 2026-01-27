@@ -48,7 +48,7 @@ Visualize vibrational modes and spectra.
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
 ## Requirements
-- **ORCA Output**: The plugin reads the main output file (`.out` or `.log`) and looks for the `.fchk` file for advanced 3D orbital visualization.
+- **ORCA Output**: The plugin reads the main output file (`.out` or `.log`) and retrieves Basis Set information directly for advanced 3D orbital visualization.
 - **Dependencies**: 
     - `matplotlib`: For graphing.
     - `Pillow` (PIL): For GIF generation.
@@ -56,7 +56,6 @@ Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins dir
 ## Required ORCA Keywords
 To ensure all features (especially **MO Cube Generation**) work correctly, include the following in your ORCA input:
 ```text
-! NormalPrint
 %output
   Print[P_Basis] 2  # Required for Basis Set parsing (Cube Gen)
   Print[P_Mos] 1    # Ensure MO coefficients are printed
