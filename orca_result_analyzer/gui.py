@@ -176,7 +176,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         """
         
         # MO Analysis
-        self.btn_mo = QPushButton("MO Coefficients & Cube Gen")
+        self.btn_mo = QPushButton("MO Diagram & Cube Gen")
         self.btn_mo.setStyleSheet(button_style)
         self.btn_mo.clicked.connect(self.show_mo_analyzer)
         grid.addWidget(self.btn_mo, 0, 0)
@@ -489,5 +489,5 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No NMR chemical shielding data found.")
             return
-        dlg = NMRDialog(self, data)
-        dlg.exec()
+        dlg = NMRDialog(self, data, file_path=self.file_path)
+        dlg.show()

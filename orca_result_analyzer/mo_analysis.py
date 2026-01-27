@@ -106,10 +106,14 @@ class MODialog(QDialog):
         
         # 3. Action Buttons
         btn_layout = QHBoxLayout()
-        btn_vis = QPushButton("Visualize Selected")
-        btn_vis.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
-        btn_vis.clicked.connect(self.visualize_current_mo)
-        btn_layout.addWidget(btn_vis)
+        self.btn_vis = QPushButton("Visualize Selected")
+        self.btn_vis.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
+        self.btn_vis.clicked.connect(self.visualize_current_mo)
+        self.btn_vis.setEnabled(False) # Default disabled until selection
+        btn_layout.addWidget(self.btn_vis)
+        
+        # Connect selection
+        self.tree.itemSelectionChanged.connect(self.on_selection_changed)
         
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
@@ -217,6 +221,27 @@ class MODialog(QDialog):
 
     def on_double_click(self, item, col):
         self.visualize_current_mo()
+
+    def on_selection_changed(self):
+        items = self.tree.selectedItems()
+        has_coeffs = False
+        if items:
+            try:
+                mo_id_txt = items[0].text(0).split()[0]
+                display_id = int(mo_id_txt)
+                internal_id = display_id - 1
+                
+                # Check coeffs in parser data
+                if self.parent_dlg.parser and "mo_coeffs" in self.parent_dlg.parser.data:
+                    if internal_id in self.parent_dlg.parser.data["mo_coeffs"]:
+                        has_coeffs = True
+            except: pass
+            
+        self.btn_vis.setEnabled(has_coeffs)
+        if items and not has_coeffs:
+            self.btn_vis.setToolTip(f"No coefficients available for MO {items[0].text(0)}")
+        else:
+            self.btn_vis.setToolTip("")
 
     def get_engine(self):
         if not BasisSetEngine:

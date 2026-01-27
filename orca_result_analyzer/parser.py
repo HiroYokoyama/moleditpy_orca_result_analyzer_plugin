@@ -381,39 +381,41 @@ class OrcaParser:
         self.parse_gradients()
 
     def parse_gradients(self):
-        """Parse Cartesian Gradients"""
+        """Parse Cartesian Gradients (takes the last occurrence as the current forces)"""
         self.data["gradients"] = []
-        found = False
-        start_idx = -1
+        
+        # Find the last block
+        last_start = -1
         for i, line in enumerate(self.lines):
             if "CARTESIAN GRADIENTS" in line and "-------" not in line:
-                start_idx = i
-                found = True
+                last_start = i
         
-        if not found: return
+        if last_start == -1: return
         
-        curr = start_idx + 2
+        curr = last_start + 2
         while curr < len(self.lines):
             line = self.lines[curr].strip()
-            if "-------" in line: break
-            if not line: break
-            
+            if "-------" in line or not line: break
             parts = line.split()
-            # 1 C : X Y Z
-            if len(parts) >= 6:
+            
+            # Format: 0 C : X Y Z (len 6) or 0 C X Y Z (len 5)
+            if len(parts) >= 5:
                 try:
                     idx = int(parts[0])
                     sym = parts[1]
-                    vx = float(parts[3])
-                    vy = float(parts[4])
-                    vz = float(parts[5])
+                    if parts[2] == ":":
+                        if len(parts) >= 6:
+                            vx, vy, vz = float(parts[3]), float(parts[4]), float(parts[5])
+                        else: break
+                    else:
+                        vx, vy, vz = float(parts[2]), float(parts[3]), float(parts[4])
+                        
                     self.data["gradients"].append({
                         'atom_idx': idx, 
                         'atom_sym': sym, 
                         'vector': [vx, vy, vz]
                     })
-                except: pass
-            
+                except: break
             curr += 1
 
     def parse_dipole(self):
@@ -1142,20 +1144,40 @@ class OrcaParser:
                 # In optimization + freq, it's at end.
         
         if freq_start != -1:
-            curr = freq_start + 4
+            curr = freq_start + 1
+            # Skip until we find first data line (Index: Value)
+            while curr < len(self.lines) and curr < freq_start + 10:
+                line = self.lines[curr].strip()
+                if ":" in line and ("cm**-1" in line or "cm-1" in line):
+                    break # Found data match
+                curr += 1
+                
+            # Now parse data
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if "NORMAL MODES" in line: break
+                if "NORMAL MODES" in line or "-------" in line:
+                    # If we already have freqs, a dashed line means end
+                    if len(self.data["frequencies"]) > 0: break
+                
                 if not line:
                     curr += 1
                     continue
                 
-                if ":" in line and "cm**-1" in line:
+                # Format:   0:         0.00 cm**-1
+                if ":" in line and ("cm**-1" in line or "cm-1" in line):
                     parts = line.split()
+                    # Find value after colon?
+                    # usually parts: "0:", "0.00", "cm**-1"
                     try:
-                        val = float(parts[1])
+                        # Value is typically index 1 if index 0 ends with colon
+                        val_str = parts[1]
+                        val = float(val_str)
                         self.data["frequencies"].append({"freq": val, "ir": 0.0, "raman": 0.0, "vector": []})
                     except: pass
+                elif len(self.data["frequencies"]) > 0 and ":" not in line:
+                    # Maybe end of block
+                    break
+                    
                 curr += 1
 
         # 2. IR Spectrum
@@ -1453,6 +1475,31 @@ class OrcaParser:
                     
                     hessian_data["atoms"] = atoms
                     hessian_data["coords"] = coords
+
+            # Parse Gradient (Forces)
+            elif line == "$gradient":
+                i += 1
+                if i < len(lines):
+                    n_grad = int(lines[i].strip())
+                    i += 1
+                    
+                    gradiants_vec = []
+                    for _ in range(n_grad):
+                        if i >= len(lines): break
+                        # Format: val
+                        # Sometimes it's blocked? No, typically just list of 3N lines or blocks
+                        # ORCA .hess gradient block:
+                        # y
+                        # index val
+                        parts = lines[i].strip().split()
+                        if len(parts) >= 2:
+                            gradiants_vec.append(float(parts[1]))
+                        i += 1
+                    
+                    # Convert 3N list to list of vectors
+                    # We need atoms to map them if we want to be safe, but typically ordered
+                    # Store as simple list for now
+                    hessian_data["gradient_vec"] = gradiants_vec
             
             i += 1
         
