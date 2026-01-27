@@ -40,6 +40,7 @@ class SpectrumWidget(QWidget):
         
         self.show_sticks = True
         self.show_gaussian = True
+        self.show_legend = True
         
         # Setup matplotlib canvas
         layout = QVBoxLayout(self)
@@ -244,8 +245,8 @@ class SpectrumWidget(QWidget):
         
         self.canvas.axes.grid(True, alpha=0.3)
         
-        # Add legend if both shown
-        if self.show_gaussian and self.show_sticks:
+        # Add legend if both shown and legend enabled
+        if self.show_gaussian and self.show_sticks and self.show_legend:
             self.canvas.axes.legend(loc='best')
         
         self.canvas.draw()

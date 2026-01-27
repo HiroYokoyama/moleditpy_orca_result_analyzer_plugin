@@ -1120,18 +1120,43 @@ class OrcaParser:
                 
                 for key, val_key in thermal_keys.items():
                     if key in line:
-                         parts = line.split()
-                         try:
-                             # usually last value is Hartrees, maybe "..." before it
-                             val = float(parts[-1])
-                             if "Entropy" in key:
-                                 # Entropy line might be different unit or format?
-                                 # ORCA: "Final Entropy                      ...    0.000000 Eh" ?
-                                 # Usually printed as:
-                                 # "Total Entropy correction           ...   -0.123456 Eh"
-                                 pass
-                             self.data["thermal"][val_key] = val
-                         except: pass
+                         # Use regex to find the last floating point number
+                         # Pattern: optional minus, digits, dot, digits, optional scientific notation
+                         # We look for this pattern at the end of string, possibly followed by unit
+                         import re
+                         # Matches number like -123.456 or 1.23e-5
+                         # We want the LAST number in the line.
+                         # Example: "Total thermal energy                  ...   -231.82710283 Eh"
+                         # or "Final entropy ... 0.0302 Eh ... kcal/mol" - wait, entropy parsing might be tricky
+                         
+                         matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
+                         if matches:
+                             try:
+                                 # Usually the value in Eh is what we want.
+                                 # If multiple numbers (e.g. Energy + kcal/mol), usually the first one is Eh if "Eh" is present.
+                                 # But let's check the line structure.
+                                 # "Total thermal energy ... -231.82710283 Eh" -> Match is [-231.82710283]
+                                 # "Final Entropy ... 0.03022056 Eh 18.96 kcal/mol" -> Matches [0.03022056, 18.96]
+                                 # We generally want the Eh value.
+                                 
+                                 # If line contains "Eh", we take the number immediately preceding "Eh" if possible,
+                                 # or just the first number if the structure is known.
+                                 # For "Total thermal energy", "Total Enthalpy", "Final Gibbs": usually "... <val> Eh"
+                                 # For "Final Entropy", it is "... <val> Eh ... <val2> kcal/mol"
+                                 
+                                 # Safest strategy: 
+                                 # If "Eh" in line, split by "Eh", take last token of first part?
+                                 if "Eh" in line:
+                                     pre_eh = line.split("Eh")[0]
+                                     val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
+                                     if val_matches:
+                                         val = float(val_matches[-1])
+                                         self.data["thermal"][val_key] = val
+                                 else:
+                                     # Fallback to last number found
+                                     val = float(matches[-1])
+                                     self.data["thermal"][val_key] = val
+                             except: pass
                 curr += 1
             
         # 2. Final Energy
