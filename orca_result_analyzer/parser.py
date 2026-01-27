@@ -1222,12 +1222,12 @@ class OrcaParser:
                     curr += 1
                     continue
             
-                            
-                    for m_idx, vec_flat in mode_buffer.items():
-                        if 0 <= m_idx < len(self.data["frequencies"]):
-                            vecs = []
-                            for k in range(0, len(vec_flat), 3):
-                                if k+2 < len(vec_flat):
-                                    vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
-                            self.data["frequencies"][m_idx]["vector"] = vecs
+            # Process collected mode buffer AFTER parsing all mode blocks
+            for m_idx, vec_flat in mode_buffer.items():
+                if 0 <= m_idx < len(self.data["frequencies"]):
+                    vecs = []
+                    for k in range(0, len(vec_flat), 3):
+                        if k+2 < len(vec_flat):
+                            vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
+                    self.data["frequencies"][m_idx]["vector"] = vecs
 

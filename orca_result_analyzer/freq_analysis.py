@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
                              QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
                              QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox)
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor
 import time
 import math
 import numpy as np
@@ -458,12 +459,13 @@ class FrequencyDialog(QDialog):
             
             # Use add_mesh with glyphs for robustness across plotter implementations
             poly = pv.PolyData(points)
-            poly.vectors = vectors
+            poly.point_data['vectors'] = vectors
             geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
             arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
             self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
             self.mw.plotter.render()
-        except: pass
+        except Exception as e:
+            print(f"Error in FrequencyDialog.update_view: {e}")
 
     def start_animation(self):
         if self.current_mode_idx < 0: return
@@ -502,15 +504,7 @@ class FrequencyDialog(QDialog):
     def animate_frame(self):
         if self.current_mode_idx < 0: return
         
-        # Using a time-based or step-based approach?
-        # existing was step based: step += 1; phase = step * 0.2
-        # If we change FPS, step based simple approach makes it faster
-        # which is what we want.
-        
         self.animation_step += 1
-        
-        # Adjust speed factor relative to FPS? usually phase += delta
-        # Let's keep it simple: constant increment per frame, FPS controls frame rate.
         phase = self.animation_step * 0.2
         
         amp = self.spin_amp.value()
@@ -531,7 +525,56 @@ class FrequencyDialog(QDialog):
                 conf.SetAtomPosition(i, Point3D(nx, ny, nz))
             
             self.mw.draw_molecule_3d(mol)
-        except: pass
+            
+            # Update vectors if enabled
+            if self.chk_vector.isChecked():
+                self.update_vectors_at_displaced_position()
+                
+        except Exception as e:
+            print(f"Error in animate_frame: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def update_vectors_at_displaced_position(self):
+        """Redraw vectors at current displaced atomic positions"""
+        if self.vector_actor:
+            try:
+                self.mw.plotter.remove_actor(self.vector_actor)
+            except: pass
+            self.vector_actor = None
+        
+        vecs = self.frequencies[self.current_mode_idx].get("vector", [])
+        if not vecs or not hasattr(self.mw, 'current_mol'):
+            return
+            
+        try:
+            mol = self.mw.current_mol
+            conf = mol.GetConformer()
+            
+            # Get current (displaced) coordinates
+            coords = []
+            for i in range(conf.GetNumAtoms()):
+                pos = conf.GetAtomPosition(i)
+                coords.append([pos.x, pos.y, pos.z])
+            
+            coords_array = np.array(coords)
+            vecs_array = np.array(vecs)
+            scale = self.spin_vec_scale.value()
+            
+            # Use add_arrows if available, otherwise fall back to glyph method
+            if hasattr(self.mw.plotter, 'add_arrows'):
+                self.vector_actor = self.mw.plotter.add_arrows(
+                    coords_array, vecs_array, mag=scale, color=self.vector_color, show_scalar_bar=False
+                )
+            else:
+                # Fallback to glyph method
+                poly = pv.PolyData(coords_array)
+                poly.point_data['vectors'] = vecs_array
+                geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
+                arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
+                self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
+        except Exception as e:
+            print(f"Error updating vectors: {e}")
 
     def reset_geometry(self):
         try:
@@ -541,7 +584,10 @@ class FrequencyDialog(QDialog):
             for i, (bx, by, bz) in enumerate(self.base_coords):
                 conf.SetAtomPosition(i, Point3D(bx, by, bz))
             self.mw.draw_molecule_3d(mol)
-        except: pass
+        except Exception as e:
+            print(f"Error in reset_geometry: {e}")
+            import traceback
+            traceback.print_exc()
         
     def save_gif(self):
         if not HAS_PIL:
@@ -644,7 +690,6 @@ class FrequencyDialog(QDialog):
              if was_playing: self.start_animation()
 
     def pick_color(self):
-        from PyQt6.QtGui import QColor
         color = QColorDialog.getColor(QColor(self.vector_color), self, "Select Vector Color")
         if color.isValid():
             self.vector_color = color.name()

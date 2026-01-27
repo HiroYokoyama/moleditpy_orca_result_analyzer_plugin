@@ -272,9 +272,9 @@ class TrajectoryResultDialog(QDialog):
              
     def on_scroll(self, event):
         if event.button == 'up':
-            self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
-        elif event.button == 'down':
             self.slider.setValue(max(self.slider.value() - 1, 0))
+        elif event.button == 'down':
+            self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
 
     def on_pick(self, event):
         if event.artist and hasattr(event, 'ind'):

@@ -4,6 +4,7 @@ import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QCheckBox, QDoubleSpinBox, QColorDialog, QSpinBox,
                              QGroupBox, QFrame)
+from PyQt6.QtGui import QColor
 
 class DipoleDialog(QDialog):
     def __init__(self, parent_dlg, dipole_data):
@@ -119,7 +120,6 @@ class DipoleDialog(QDialog):
             print(f"Error drawing dipole: {e}")
 
     def pick_color(self):
-        from PyQt6.QtGui import QColor
         color = QColorDialog.getColor(QColor(self.arrow_color), self, "Select Arrow Color")
         if color.isValid():
             self.arrow_color = color.name()
