@@ -24,6 +24,8 @@ from .nmr_analysis import NMRDialog
 from .tddft_analysis import TDDFTDialog
 from .thermal_analysis import ThermalTableDialog
 
+from . import PLUGIN_VERSION
+
 class OrcaResultAnalyzerDialog(QDialog):
     def __init__(self, parent, parser, file_path, context=None):
         super().__init__(parent)
@@ -32,7 +34,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.file_path = file_path
         self.context = context
         
-        self.setWindowTitle(f"ORCA Analyzer - {self.parser.filename}")
+        self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
         
         self.init_ui()
@@ -307,10 +309,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         has_thermal = bool(data.get("thermal") or (data.get("frequencies") and "thermo" in str(data))) 
         self.btn_therm.setEnabled(bool(data.get("thermal")))
         
-        has_tddft = bool(data.get("tddft_excitations"))
+        has_tddft = bool(data.get("tddft"))
         self.btn_tddft.setEnabled(has_tddft)
         
-        has_dipole = bool(data.get("dipole"))
+        has_dipole = bool(data.get("dipoles"))
         self.btn_dipole.setEnabled(has_dipole)
         
         has_charges = bool(data.get("charges"))
@@ -428,7 +430,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         dlg.exec()
 
     def show_dipole(self):
-        d = self.parser.data.get("dipole")
+        d = self.parser.data.get("dipoles")
         if not d:
             QMessageBox.warning(self, "No Info", "No dipole moment found.")
             return

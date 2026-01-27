@@ -1,11 +1,12 @@
 import os
-from .gui import OrcaResultAnalyzerDialog
-from .parser import OrcaParser
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "none"
+PLUGIN_VERSION = "0.1.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
+
+from .gui import OrcaResultAnalyzerDialog
+from .parser import OrcaParser
 
 # Global reference to keep window alive
 _analyzer_window = None

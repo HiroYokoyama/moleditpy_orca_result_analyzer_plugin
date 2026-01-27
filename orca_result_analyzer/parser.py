@@ -1,3 +1,5 @@
+import re
+
 class OrcaParser:
     def __init__(self):
         self.filename = ""
@@ -12,7 +14,8 @@ class OrcaParser:
             "mult": 1,
             "frequencies": [], # List of dicts: {freq, ir, raman, vector}
             "excitation_energies": [], # TDDFT
-            "dipoles": [],
+            "dipole": None,
+            "dipoles": None,
             "nmr_shielding": [],
             "charges": {} # Type -> List
         }
@@ -390,20 +393,9 @@ class OrcaParser:
             curr += 1
 
     def parse_dipole(self):
-        # Look for "TOTAL DIPOLE MOMENT"
-        # -------------
-        # DIPOLE MOMENT
-        # -------------
-        # ...
-        # Total Dipole Moment    :   1.234   2.345   3.456
-        # Magnitude (Debye)      :   4.567
-        
+        # Look for "Total Dipole Moment"
+        self.data["dipoles"] = None
         self.data["dipole"] = None
-        
-        start_idx = -1
-        # Reverse search might be safer for final dipole
-        # But usually explicitly labeled "DIPOLE MOMENT" block.
-        # Let's search from end or find all and take last.
         
         candidates = []
         for i, line in enumerate(self.lines):
@@ -415,7 +407,6 @@ class OrcaParser:
         # Take the last occurrence
         idx = candidates[-1]
         line = self.lines[idx]
-        # Format: Total Dipole Moment    :    -0.00000     0.00000     0.00000
         parts = line.split(":")
         if len(parts) > 1:
             try:
@@ -423,31 +414,23 @@ class OrcaParser:
                 if len(vec_str) >= 3:
                      x, y, z = float(vec_str[0]), float(vec_str[1]), float(vec_str[2])
                      
-                     # Look for magnitude
-                     # Next line maybe?
-                     # Magnitude (Debye)      :      0.00000
                      mag = 0.0
                      if idx + 1 < len(self.lines):
                          line2 = self.lines[idx+1]
                          if "Magnitude" in line2 and ":" in line2:
                              mag = float(line2.split(":")[1].strip())
                          else:
-                             # Calculate manually
                              import math
                              mag = math.sqrt(x*x + y*y + z*z)
                              
-                     self.data["dipole"] = {
+                     self.data["dipoles"] = {
                          "vector": (x, y, z),
                          "magnitude": mag
                      }
+                     self.data["dipole"] = self.data["dipoles"]
             except: pass
 
-        self.parse_nmr()
-        self.parse_charges()
-        self.parse_charges()
-        self.parse_scan()
-        self.parse_gradient()
-        self.parse_basis_set()
+
         
     def parse_basis_set(self):
         self.data["basis_set_shells"] = [] # List of {type, center, exps, coeffs}
@@ -583,63 +566,7 @@ class OrcaParser:
         
         self.data["basis_set_shells"] = full_shells
 
-        self.data["gradients"] = [] # List of {atom_idx, atom_sym, vector: (x,y,z)}
-        
-        # Look for CARTESIAN GRADIENT
-        # ------------------
-        # CARTESIAN GRADIENT
-        # ------------------
-        #
-        #   1   C   :   -0.000003588    0.000001235    0.000000985
-        
-        start_idx = -1
-        for i, line in enumerate(self.lines):
-            if "CARTESIAN GRADIENT" in line:
-                start_idx = i
-                # Could be multiple (optimization steps). Use last one?
-                # Usually scan implies last one.
-        
-        if start_idx != -1:
-             curr = start_idx + 3 # Skip header lines (adjusted during run if needed)
-             
-             while curr < len(self.lines):
-                 line = self.lines[curr].strip()
-                 if "Difference to the" in line or "Total Gradient" in line: break # End of block
-                 if not line: 
-                     curr += 1
-                     continue
-                 
-                 parts = line.split()
-                 # Format: Index Sym : X Y Z
-                 # 0 C : ...
-                 # ORCA sometimes:   0   C   : ...
-                 if len(parts) >= 6 and parts[2] == ":":
-                     try:
-                         idx = int(parts[0])
-                         sym = parts[1]
-                         gx = float(parts[3])
-                         gy = float(parts[4])
-                         gz = float(parts[5])
-                         self.data["gradients"].append({
-                             "atom_idx": idx,
-                             "atom_sym": sym,
-                             "vector": (gx, gy, gz)
-                         })
-                     except: pass
-                 elif len(parts) >= 5: # Maybe different format
-                      # Try parsing last 3 as floats
-                      try:
-                          gx, gy, gz = float(parts[-3]), float(parts[-2]), float(parts[-1])
-                          sym = parts[1]
-                          idx = int(parts[0])
-                          self.data["gradients"].append({
-                             "atom_idx": idx,
-                             "atom_sym": sym,
-                             "vector": (gx, gy, gz)
-                         })
-                      except: pass
-                 
-                 curr += 1
+
 
         self.data["scan_steps"] = [] # List of {step: int, energy: float, atoms: [], coords: []}
         
@@ -892,6 +819,11 @@ class OrcaParser:
                 start_idx = i
                 found_block = True
                 break
+            # Fallback for simpler header
+            if "ABSORPTION SPECTRUM" in line and "ELECTRIC DIPOLE" in line and not found_block:
+                start_idx = i
+                found_block = True
+                break
                 
         if found_block:
             curr = start_idx + 1
@@ -1103,61 +1035,63 @@ class OrcaParser:
             # "Final Gibbs free energy               ..."
             
             thermal_keys = {
+                # Electronic Energy (usually first in summary)
+                "Electronic energy": "electronic_energy",
+                
+                # Inner Energy Terms
                 "Zero point energy": "zpe",
+                "Thermal vibrational correction": "corr_vib",
+                "Thermal rotational correction": "corr_rot",
+                "Thermal translational correction": "corr_trans",
                 "Total thermal energy": "thermal_energy",
+                
+                # Corrections Summary
+                "Total thermal correction": "corr_thermal_total",
+                "Non-thermal (ZPE) correction": "corr_zpe",
+                "Total correction": "corr_total",
+                
+                # Enthalpy
                 "Total Enthalpy": "enthalpy",
-                "Final Entropy": "entropy",
-                "Final Gibbs free energy": "gibbs"
+                "Thermal Enthalpy correction": "enthalpy_corr",
+                
+                # Entropy Components
+                "Electronic entropy": "s_el",
+                "Vibrational entropy": "s_vib",
+                "Rotational entropy": "s_rot",
+                "Translational entropy": "s_trans",
+                "Final entropy term": "entropy", 
+                
+                # Gibbs Free Energy
+                "Final Gibbs free energy": "gibbs",
+                "G-E(el)": "gibbs_corr"
             }
             
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line:
-                    curr += 1
-                    continue
-                if "Timings for individual modules" in line: break # Safe stop
-                if curr > start_line + 100: break # Safety
+                if "Timings for individual modules" in line: break
                 
+                # specific check for temperature
+                if "Temperature" in line and "K" in line and "..." in line:
+                    match = re.search(r"(\d+\.\d+)\s*K", line)
+                    if match:
+                         self.data["thermal"]["temperature"] = float(match.group(1))
+
                 for key, val_key in thermal_keys.items():
                     if key in line:
-                         # Use regex to find the last floating point number
-                         # Pattern: optional minus, digits, dot, digits, optional scientific notation
-                         # We look for this pattern at the end of string, possibly followed by unit
-                         import re
-                         # Matches number like -123.456 or 1.23e-5
-                         # We want the LAST number in the line.
-                         # Example: "Total thermal energy                  ...   -231.82710283 Eh"
-                         # or "Final entropy ... 0.0302 Eh ... kcal/mol" - wait, entropy parsing might be tricky
-                         
-                         matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
-                         if matches:
-                             try:
-                                 # Usually the value in Eh is what we want.
-                                 # If multiple numbers (e.g. Energy + kcal/mol), usually the first one is Eh if "Eh" is present.
-                                 # But let's check the line structure.
-                                 # "Total thermal energy ... -231.82710283 Eh" -> Match is [-231.82710283]
-                                 # "Final Entropy ... 0.03022056 Eh 18.96 kcal/mol" -> Matches [0.03022056, 18.96]
-                                 # We generally want the Eh value.
-                                 
-                                 # If line contains "Eh", we take the number immediately preceding "Eh" if possible,
-                                 # or just the first number if the structure is known.
-                                 # For "Total thermal energy", "Total Enthalpy", "Final Gibbs": usually "... <val> Eh"
-                                 # For "Final Entropy", it is "... <val> Eh ... <val2> kcal/mol"
-                                 
-                                 # Safest strategy: 
-                                 # If "Eh" in line, split by "Eh", take last token of first part?
-                                 if "Eh" in line:
-                                     pre_eh = line.split("Eh")[0]
-                                     val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
-                                     if val_matches:
-                                         val = float(val_matches[-1])
-                                         self.data["thermal"][val_key] = val
-                                 else:
-                                     # Fallback to last number found
-                                     val = float(matches[-1])
-                                     self.data["thermal"][val_key] = val
-                             except: pass
+                        matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
+                        if matches:
+                            if "Eh" in line:
+                                pre_eh = line.split("Eh")[0]
+                                val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
+                                if val_matches:
+                                    val = float(val_matches[-1])
+                                    self.data["thermal"][val_key] = val
+                            else:
+                                val = float(matches[-1])
+                                self.data["thermal"][val_key] = val
                 curr += 1
+            return 
+
             
         # 2. Final Energy
         for line in reversed(self.lines):
@@ -1170,36 +1104,7 @@ class OrcaParser:
                     break
                 except: pass
 
-        # 3. Geometry (Last occurrence)
-        coord_start = -1
-        for i, line in enumerate(self.lines):
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
-                coord_start = i
-        
-        if coord_start != -1:
-            self.data["atoms"] = []
-            self.data["coords"] = []
-            curr = coord_start + 2
-            while curr < len(self.lines):
-                line = self.lines[curr].strip()
-                if not line:
-                    curr += 1
-                    continue
-                    
-                parts = line.split()
-                if len(parts) >= 4:
-                    sym = parts[0]
-                    try:
-                        x = float(parts[1])
-                        y = float(parts[2])
-                        z = float(parts[3])
-                        self.data["atoms"].append(sym)
-                        self.data["coords"].append((x, y, z))
-                    except ValueError:
-                        break
-                else:
-                    break
-                curr += 1
+
 
     def parse_frequencies(self):
         self.data["frequencies"] = []
@@ -1317,11 +1222,12 @@ class OrcaParser:
                     curr += 1
                     continue
             
-            # Format vectors
-            for m_idx, vec_flat in mode_buffer.items():
-                if 0 <= m_idx < len(self.data["frequencies"]):
-                    vecs = []
-                    for k in range(0, len(vec_flat), 3):
-                        if k+2 < len(vec_flat):
-                            vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
-                    self.data["frequencies"][m_idx]["vector"] = vecs
+                            
+                    for m_idx, vec_flat in mode_buffer.items():
+                        if 0 <= m_idx < len(self.data["frequencies"]):
+                            vecs = []
+                            for k in range(0, len(vec_flat), 3):
+                                if k+2 < len(vec_flat):
+                                    vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
+                            self.data["frequencies"][m_idx]["vector"] = vecs
+

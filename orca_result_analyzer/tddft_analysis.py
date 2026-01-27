@@ -24,7 +24,7 @@ class TDDFTDialog(QDialog):
         if SpectrumWidget:
             # Data format for widget: List of dicts. 
             # Our excitations have 'energy_nm' and 'osc'.
-            self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=20.0)
+            self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=5.0)
             self.spectrum.show_legend = False
             layout.addWidget(self.spectrum)
         else:
@@ -49,7 +49,7 @@ class TDDFTDialog(QDialog):
         ctrl_row1.addWidget(QLabel(" | Sigma (nm):"))
         self.spin_sigma = QDoubleSpinBox()
         self.spin_sigma.setRange(1.0, 100.0)
-        self.spin_sigma.setValue(20.0)
+        self.spin_sigma.setValue(5.0)
         if self.spectrum:
             self.spin_sigma.valueChanged.connect(self.spectrum.set_sigma)
         ctrl_row1.addWidget(self.spin_sigma)
