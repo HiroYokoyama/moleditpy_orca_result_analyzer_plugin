@@ -41,9 +41,6 @@ Visualize vibrational modes and spectra.
 - **TDDFT/TDA**: UV-Vis absorption spectra with adjustable geometric broadening (Gaussian lineshape).
 - **NMR**: Chemical shielding summary validation.
 
-### 7. UI Refinements
-- **Color Schemes**: The Charge Viewer now supports custom color schemes (e.g., Red-White-Blue, Blue-White-Red, etc.) with a visual gradient bar legend.
-
 ## Installation
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
