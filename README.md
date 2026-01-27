@@ -2,6 +2,8 @@
 
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
+![Main UI](img/main.png)
+
 ## Features
 
 ### 1. Overview & Geometry
@@ -30,16 +32,42 @@ Visualize vibrational modes and spectra.
 - **Levels**: View orbital energies and occupancy.
 - **Visualization**: Generate and view 3D Cubes for selected orbitals (Isosurfaces).
 - **Composition**: Detailed element/atom contributions.
+- **Performance Note**: For large systems or higher resolution, using ORCA's `orca_plot` utility to generate `.cube` files and the **Cube File Viewer** plugin is recommended for better performance.
 
-### 5. Electronic & Atomic Properties
-- **Atomic Charges**: Mulliken and Loewdin charges.
-    - **3D Coloring**: Color atoms in the 3D viewer based on charge (Red=Negative, Blue=Positive).
-- **Dipole Moment**: Visualize the total dipole moment vector and magnitude.
+### 5. Thermochemistry
+Detailed analysis of thermodynamic properties based on frequency calculations.
+- **Broad Summary**: Access Electronic Energy, ZPE, Enthalpy (H), Gibbs Free Energy (G), and Entropy (S) terms.
+- **Detailed Corrections**: Optional breakdown of vibrational, rotational, and translational contributions to thermal energy and entropy.
+- **Export**: Copy table data to clipboard or export to CSV.
+
+### 6. TDDFT Spectrometry
+Analyze electronic excitations and absorption spectra.
+- **Absorption Spectrum**: View interactive transitions with adjustable Gaussian broadening.
+- **Peak List**: Detailed excitation energies, oscillator strengths, and state descriptions.
+
+### 7. Atomic Charges
+- **Populations**: Mulliken and Loewdin charge analysis.
+- **3D Coloring**: Color atoms in the 3D viewer based on charge (Red=Negative, Blue=Positive).
+
+### 8. Dipole Moment
+- **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
+
+### 9. Geometry Stability & Forces
+Analyze cartesian gradients and structural stability.
 - **Forces (Gradients)**: 3D visualization of gradient vectors on atoms.
+- **Hessian Analysis**: Manually load ORCA `.hess` files to display force constants and perform stability analysis.
 
-### 6. Spectroscopic Properties
-- **TDDFT/TDA**: UV-Vis absorption spectra with adjustable geometric broadening (Gaussian lineshape).
-- **NMR**: Chemical shielding summary validation.
+### 10. NMR Analysis
+Advanced NMR chemical shielding validation and visualization.
+- **Interactive Spectrum**: Stick spectrum (Stem plot) with nucleus-specific filtering (e.g., 1H, 13C).
+- **Reference Standards**: Support for experimental reference shielding constants ($\sigma_{ref}$) and chemical shifts ($\delta_{ref}$).
+- **Peak Identification**: Click peaks to highlight corresponding atoms in the 3D viewer.
+- **Peak Merging**: Group equivalent atoms for simplified spectrum analysis.
+- **Persistent Settings**: Manual reference values and merged peaks are saved automatically.
+
+## Interface & Usability
+- **Modeless Design**: Analysis windows can stay open alongside the main editor, allowing for side-by-side comparison.
+- **Keyboard Shortcuts**: Common actions bound to keys (e.g., `Ctrl+O` to open, `Ctrl+R` to reload).
 
 ## Installation
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
