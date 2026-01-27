@@ -1,4 +1,4 @@
-# ORCA Result Analyzer Plugin
+# MoleditPy ORCA Result Analyzer Plugin
 
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
@@ -87,3 +87,4 @@ To ensure all features (especially **MO Cube Generation**) work correctly, inclu
 end
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
