@@ -1,64 +1,73 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
                              QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QPushButton, QApplication)
+                             QPushButton, QApplication, QGroupBox)
 
 class NMRDialog(QDialog):
 
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("NMR Chemical Shielding")
-        self.resize(500, 600)
+        self.resize(550, 650)
         self.data = data
         self.displayed_data = list(data) # copy
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        # Controls
-        ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel("Reference Info:"))
+        # 1. Reference Shielding Section
+        ref_group = QGroupBox("Chemical Shift Reference")
+        ref_layout = QVBoxLayout(ref_group)
         
-        # Preset references
+        ref_row = QHBoxLayout()
+        ref_row.addWidget(QLabel("Preset:"))
         self.combo_ref = QComboBox()
         self.combo_ref.addItems(["Custom", "TMS (C) ~182.4", "TMS (H) ~31.8", "Benzene (C) ~57.6", "Water (H) ~30.8"])
         self.combo_ref.currentIndexChanged.connect(self.on_preset_change)
-        ctrl.addWidget(self.combo_ref)
+        ref_row.addWidget(self.combo_ref)
         
-        ctrl.addWidget(QLabel("Ref Shielding (ppm):"))
+        ref_row.addWidget(QLabel(" | Ref Shielding (ppm):"))
         self.spin_ref = QDoubleSpinBox()
-        self.spin_ref.setRange(-1000, 20000)
+        self.spin_ref.setRange(-10000, 20000)
         self.spin_ref.setValue(0.0)
+        self.spin_ref.setDecimals(2)
         self.spin_ref.valueChanged.connect(self.recalc)
-        ctrl.addWidget(self.spin_ref)
+        ref_row.addWidget(self.spin_ref)
+        ref_layout.addLayout(ref_row)
+        main_layout.addWidget(ref_group)
         
-        layout.addLayout(ctrl)
-        
-        # Filter by Element
-        flt_layout = QHBoxLayout()
-        flt_layout.addWidget(QLabel("Filter Element:"))
+        # 2. Filtering Section
+        filter_group = QGroupBox("Data Filter")
+        filter_layout = QHBoxLayout(filter_group)
+        filter_layout.addWidget(QLabel("Show Element:"))
         self.combo_elem = QComboBox()
         elements = sorted(list(set([d['atom_sym'] for d in self.data])))
         self.combo_elem.addItem("All")
         self.combo_elem.addItems(elements)
         self.combo_elem.currentTextChanged.connect(self.apply_filter)
-        flt_layout.addWidget(self.combo_elem)
-        flt_layout.addStretch()
-        layout.addLayout(flt_layout)
+        filter_layout.addWidget(self.combo_elem)
+        filter_layout.addStretch()
+        main_layout.addWidget(filter_group)
         
-        # Table
+        # 3. Table Section
+        table_group = QGroupBox("Computed Shifts")
+        table_layout = QVBoxLayout(table_group)
+        
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Idx", "Element", "Shielding (ppm)", "Shift (Ref-S) (ppm)"])
+        self.table.setHorizontalHeaderLabels(["Idx", "Element", "Shielding (ppm)", "Shift (ppm)"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.table)
+        self.table.verticalHeader().setVisible(False)
+        table_layout.addWidget(self.table)
         
-        btn_copy = QPushButton("Copy Table")
+        btn_copy = QPushButton("Copy to Clipboard")
         btn_copy.clicked.connect(self.copy_table)
-        layout.addWidget(btn_copy)
+        table_layout.addWidget(btn_copy)
+        main_layout.addWidget(table_group)
         
+        # 4. Actions
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
+        main_layout.addWidget(btn_close)
         
         self.apply_filter() # Populate
         

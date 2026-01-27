@@ -5,7 +5,7 @@ import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox)
+                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox, QGroupBox)
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
@@ -47,7 +47,7 @@ class ChargeDialog(QDialog):
         super().__init__(parent)
         self.parent_dlg = parent # OrcaResultAnalyzerDialog
         self.setWindowTitle("Atomic Charges")
-        self.resize(500, 600)
+        self.resize(550, 750)
         self.all_charges = all_charges 
         self.current_type = next(iter(self.all_charges)) if self.all_charges else ""
         
@@ -82,90 +82,98 @@ class ChargeDialog(QDialog):
             except Exception as e:
                 print(f"Error loading settings: {e}")
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        # Type Selector
-        head_layout = QHBoxLayout()
-        head_layout.addWidget(QLabel("Charge Type:"))
+        # 1. Type Selection Section
+        type_group = QGroupBox("Charge Method")
+        type_layout = QHBoxLayout(type_group)
+        type_layout.addWidget(QLabel("Select Type:"))
         self.combo_type = QComboBox()
         self.combo_type.addItems(list(self.all_charges.keys()))
         self.combo_type.currentTextChanged.connect(self.on_type_change)
-        head_layout.addWidget(self.combo_type)
-        layout.addLayout(head_layout)
+        type_layout.addWidget(self.combo_type)
+        main_layout.addWidget(type_group)
         
-        # Table
+        # 2. Data Table Section
+        table_group = QGroupBox("Charge Data")
+        table_layout = QVBoxLayout(table_group)
         self.table = QTableWidget()
         self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Idx", "Atom", "Charge"])
+        self.table.setHorizontalHeaderLabels(["Idx", "Atom", "Charge (e)"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.table)
+        self.table.verticalHeader().setVisible(False)
+        table_layout.addWidget(self.table)
+        main_layout.addWidget(table_group)
         
-        # Coloring Controls
-        grp_color = QWidget()
-        grp_layout = QVBoxLayout(grp_color)
+        # 3. 3D Visualization Section
+        view_group = QGroupBox("3D Visualization & Coloring")
+        view_layout = QVBoxLayout(view_group)
         
-        # Scheme Selector
-        scheme_layout = QHBoxLayout()
-        scheme_layout.addWidget(QLabel("Color Scheme:"))
+        # Scheme row
+        scheme_row = QHBoxLayout()
+        scheme_row.addWidget(QLabel("Scheme:"))
         self.combo_scheme = QComboBox()
         self.combo_scheme.addItems(list(self.schemes.keys()))
         self.combo_scheme.setCurrentText(self.current_scheme)
         self.combo_scheme.currentTextChanged.connect(self.on_scheme_change)
-        scheme_layout.addWidget(self.combo_scheme)
+        scheme_row.addWidget(self.combo_scheme)
         
-        # Custom scheme button
-        btn_custom = QPushButton("+ Custom")
+        btn_custom = QPushButton("+ New Scheme")
+        btn_custom.setFixedWidth(100)
         btn_custom.clicked.connect(self.edit_custom_scheme)
-        scheme_layout.addWidget(btn_custom)
-        
-        grp_layout.addLayout(scheme_layout)
+        scheme_row.addWidget(btn_custom)
+        view_layout.addLayout(scheme_row)
         
         # Gradient Bar
         self.grad_bar = GradientBar(self, self.schemes[self.current_scheme])
-        grp_layout.addWidget(self.grad_bar)
+        view_layout.addWidget(self.grad_bar)
         
         # Labels for gradient
         lbl_layout = QHBoxLayout()
-        lbl_layout.addWidget(QLabel("Negative"))
-        lbl_mid = QLabel("Neutral")
+        lbl_layout.addWidget(QLabel("<font color='gray'>Negative</font>"))
+        lbl_mid = QLabel("<font color='gray'>Neutral</font>")
         lbl_mid.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl_layout.addWidget(lbl_mid)
-        lbl_max = QLabel("Positive")
+        lbl_max = QLabel("<font color='gray'>Positive</font>")
         lbl_max.setAlignment(Qt.AlignmentFlag.AlignRight)
         lbl_layout.addWidget(lbl_max)
-        grp_layout.addLayout(lbl_layout)
+        view_layout.addLayout(lbl_layout)
         
-        # Show labels checkbox
-        self.chk_show_labels = QCheckBox("Show charge labels in 3D")
-        self.chk_show_labels.setChecked(False)
+        # Labels checkbox
+        self.chk_show_labels = QCheckBox("Show charge values as 3D labels")
         self.chk_show_labels.stateChanged.connect(self.toggle_labels)
-        grp_layout.addWidget(self.chk_show_labels)
+        view_layout.addWidget(self.chk_show_labels)
         
-        btn_colorize = QPushButton("Colorize Atoms in 3D View")
+        # Actions
+        btn_row = QHBoxLayout()
+        btn_colorize = QPushButton("Apply Coloring")
+        btn_colorize.setFixedHeight(30)
         btn_colorize.setStyleSheet("font-weight: bold; background-color: #2196F3; color: white;")
         btn_colorize.clicked.connect(self.apply_colors)
-        grp_layout.addWidget(btn_colorize)
+        btn_row.addWidget(btn_colorize)
         
-        # Reset color button
         btn_reset = QPushButton("Reset Colors")
-        btn_reset.setStyleSheet("background-color: #f44336; color: white;")
+        btn_reset.setFixedHeight(30)
         btn_reset.clicked.connect(self.reset_colors)
-        grp_layout.addWidget(btn_reset)
+        btn_row.addWidget(btn_reset)
+        view_layout.addLayout(btn_row)
         
-        layout.addWidget(grp_color)
+        main_layout.addWidget(view_group)
         
-        # Bottom Buttons
-        bottom_layout = QHBoxLayout()
-        
+        # 4. Actions
+        bottom_row = QHBoxLayout()
         btn_clear = QPushButton("Clear Selection")
         btn_clear.clicked.connect(self.table.clearSelection)
-        bottom_layout.addWidget(btn_clear)
+        bottom_row.addWidget(btn_clear)
+        
+        bottom_row.addStretch()
         
         btn_close = QPushButton("Close")
+        btn_close.setFixedWidth(100)
         btn_close.clicked.connect(self.accept)
-        bottom_layout.addWidget(btn_close)
+        bottom_row.addWidget(btn_close)
         
-        layout.addLayout(bottom_layout)
+        main_layout.addLayout(bottom_row)
         
         self.update_table()
         

@@ -1,7 +1,6 @@
-
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QRadioButton, QDoubleSpinBox, QCheckBox, QPushButton, 
-                             QFileDialog, QMessageBox)
+                             QFileDialog, QMessageBox, QGroupBox)
 
 try:
     from .spectrum_widget import SpectrumWidget
@@ -15,130 +14,132 @@ class TDDFTDialog(QDialog):
     def __init__(self, parent, excitations):
         super().__init__(parent)
         self.setWindowTitle("TDDFT Spectrum")
-        self.resize(900, 650)
+        self.resize(900, 700)
         self.excitations = excitations
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        # Spectrum Widget
+        # 0. Spectrum Display (Existing Widget)
         if SpectrumWidget:
             # Data format for widget: List of dicts. 
             # Our excitations have 'energy_nm' and 'osc'.
             self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=5.0)
             self.spectrum.show_legend = False
-            layout.addWidget(self.spectrum)
+            main_layout.addWidget(self.spectrum)
         else:
-            layout.addWidget(QLabel("SpectrumWidget not available."))
+            main_layout.addWidget(QLabel("SpectrumWidget not available."))
             self.spectrum = None
+            
+        # 1. Spectrum Settings Section
+        settings_group = QGroupBox("Spectrum Settings")
+        settings_layout = QHBoxLayout(settings_group)
         
-        # Controls organized into rows
-        # Row 1: Spectrum Type and Basic Controls
-        ctrl_row1 = QHBoxLayout()
-        
-        # Spectrum Type
-        ctrl_row1.addWidget(QLabel("Type:"))
+        settings_layout.addWidget(QLabel("Spectrum Type:"))
         self.radio_abs = QRadioButton("Absorption")
         self.radio_abs.setChecked(True)
         self.radio_abs.toggled.connect(self.switch_spectrum_type)
-        ctrl_row1.addWidget(self.radio_abs)
+        settings_layout.addWidget(self.radio_abs)
         
         self.radio_cd = QRadioButton("CD")
         self.radio_cd.toggled.connect(self.switch_spectrum_type)
-        ctrl_row1.addWidget(self.radio_cd)
+        settings_layout.addWidget(self.radio_cd)
         
-        ctrl_row1.addWidget(QLabel(" | Sigma (nm):"))
+        settings_layout.addWidget(QLabel(" | Sigma (nm):"))
         self.spin_sigma = QDoubleSpinBox()
         self.spin_sigma.setRange(1.0, 100.0)
         self.spin_sigma.setValue(5.0)
         if self.spectrum:
             self.spin_sigma.valueChanged.connect(self.spectrum.set_sigma)
-        ctrl_row1.addWidget(self.spin_sigma)
+        settings_layout.addWidget(self.spin_sigma)
         
-        self.chk_sticks = QCheckBox("Sticks")
+        self.chk_sticks = QCheckBox("Show Sticks")
         self.chk_sticks.setChecked(True)
         if self.spectrum:
             self.chk_sticks.stateChanged.connect(self.spectrum.set_sticks)
-        ctrl_row1.addWidget(self.chk_sticks)
+        settings_layout.addWidget(self.chk_sticks)
         
-        ctrl_row1.addStretch()
-        layout.addLayout(ctrl_row1)
+        settings_layout.addStretch()
+        main_layout.addWidget(settings_group)
         
-        # Row 2: Axis Range Controls
-        ctrl_row2 = QHBoxLayout()
+        # 2. Axis Controls Section
+        axis_group = QGroupBox("Axis Scale")
+        axis_layout = QVBoxLayout(axis_group)
         
         # X-Range
-        self.chk_auto_x = QCheckBox("Auto X")
+        x_row = QHBoxLayout()
+        self.chk_auto_x = QCheckBox("Auto Wavelength Range")
         self.chk_auto_x.setChecked(True)
         self.chk_auto_x.stateChanged.connect(self.toggle_auto_x)
-        ctrl_row2.addWidget(self.chk_auto_x)
+        x_row.addWidget(self.chk_auto_x)
         
-        ctrl_row2.addWidget(QLabel("X:"))
+        x_row.addWidget(QLabel("Range (nm):"))
         self.spin_x_min = QDoubleSpinBox()
-        self.spin_x_min.setRange(0, 10000)
+        self.spin_x_min.setRange(0, 50000)
         self.spin_x_min.setValue(200)
-        self.spin_x_min.setSuffix(" nm")
         self.spin_x_min.setEnabled(False)
-        self.spin_x_min.setMaximumWidth(100)
+        self.spin_x_min.setFixedWidth(80)
         self.spin_x_min.valueChanged.connect(self.update_x_range)
-        ctrl_row2.addWidget(self.spin_x_min)
+        x_row.addWidget(self.spin_x_min)
         
-        ctrl_row2.addWidget(QLabel("-"))
+        x_row.addWidget(QLabel("-"))
         self.spin_x_max = QDoubleSpinBox()
-        self.spin_x_max.setRange(0, 10000)
+        self.spin_x_max.setRange(0, 50000)
         self.spin_x_max.setValue(800)
-        self.spin_x_max.setSuffix(" nm")
         self.spin_x_max.setEnabled(False)
-        self.spin_x_max.setMaximumWidth(100)
+        self.spin_x_max.setFixedWidth(80)
         self.spin_x_max.valueChanged.connect(self.update_x_range)
-        ctrl_row2.addWidget(self.spin_x_max)
-        
-        ctrl_row2.addWidget(QLabel(" | "))
+        x_row.addWidget(self.spin_x_max)
+        x_row.addStretch()
+        axis_layout.addLayout(x_row)
         
         # Y-Range
-        self.chk_auto_y = QCheckBox("Auto Y")
+        y_row = QHBoxLayout()
+        self.chk_auto_y = QCheckBox("Auto Intensity Range  ")
         self.chk_auto_y.setChecked(True)
         self.chk_auto_y.stateChanged.connect(self.toggle_auto_y)
-        ctrl_row2.addWidget(self.chk_auto_y)
+        y_row.addWidget(self.chk_auto_y)
         
-        ctrl_row2.addWidget(QLabel("Y:"))
+        y_row.addWidget(QLabel("Range:"))
         self.spin_y_min = QDoubleSpinBox()
-        self.spin_y_min.setRange(-1000, 10000)
+        self.spin_y_min.setRange(-10000, 10000)
         self.spin_y_min.setValue(0)
         self.spin_y_min.setEnabled(False)
-        self.spin_y_min.setMaximumWidth(100)
+        self.spin_y_min.setFixedWidth(80)
         self.spin_y_min.valueChanged.connect(self.update_range)
-        ctrl_row2.addWidget(self.spin_y_min)
+        y_row.addWidget(self.spin_y_min)
         
-        ctrl_row2.addWidget(QLabel("-"))
+        y_row.addWidget(QLabel("-"))
         self.spin_y_max = QDoubleSpinBox()
-        self.spin_y_max.setRange(-1000, 10000)
+        self.spin_y_max.setRange(-10000, 10000)
         self.spin_y_max.setValue(1.0)
         self.spin_y_max.setEnabled(False)
-        self.spin_y_max.setMaximumWidth(100)
+        self.spin_y_max.setFixedWidth(80)
         self.spin_y_max.valueChanged.connect(self.update_range)
-        ctrl_row2.addWidget(self.spin_y_max)
+        y_row.addWidget(self.spin_y_max)
+        y_row.addStretch()
+        axis_layout.addLayout(y_row)
         
-        ctrl_row2.addStretch()
-        layout.addLayout(ctrl_row2)
+        main_layout.addWidget(axis_group)
         
-        # Row 3: Export Controls
-        ctrl_row3 = QHBoxLayout()
+        # 3. Actions Section
+        action_layout = QHBoxLayout()
         
-        btn_png = QPushButton("Save PNG")
-        btn_png.clicked.connect(self.save_png)
-        ctrl_row3.addWidget(btn_png)
+        self.btn_png = QPushButton("Export Image (PNG)")
+        self.btn_png.clicked.connect(self.save_png)
+        action_layout.addWidget(self.btn_png)
         
-        btn_csv = QPushButton("Save CSV")
-        btn_csv.clicked.connect(self.save_csv)
-        ctrl_row3.addWidget(btn_csv)
+        self.btn_csv = QPushButton("Export Data (CSV)")
+        self.btn_csv.clicked.connect(self.save_csv)
+        action_layout.addWidget(self.btn_csv)
         
-        ctrl_row3.addStretch()
+        action_layout.addStretch()
         
-        btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.accept)
-        ctrl_row3.addWidget(btn_close)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.setFixedWidth(100)
+        self.btn_close.clicked.connect(self.accept)
+        action_layout.addWidget(self.btn_close)
         
-        layout.addLayout(ctrl_row3)
+        main_layout.addLayout(action_layout)
 
     def toggle_auto_y(self):
         is_auto = self.chk_auto_y.isChecked()

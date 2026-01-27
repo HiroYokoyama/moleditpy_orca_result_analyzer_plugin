@@ -1,11 +1,12 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QHeaderView, QCheckBox, 
                              QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
-                             QSpinBox, QMessageBox, QApplication)
+                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox)
 from PyQt6.QtCore import Qt, QTimer
 import time
 import math
 import numpy as np
+import pyvista as pv
 
 try:
     from PIL import Image
@@ -253,100 +254,136 @@ class FrequencyDialog(QDialog):
         self.timer.timeout.connect(self.animate_frame)
         self.animation_step = 0
         self.current_mode_idx = -1
+        self.vector_color = "orange"
+        self.vector_res = 20
         
         self.spectrum_win = None
         
         self.setWindowTitle("Vibrational Frequencies")
-        self.resize(400, 600) # Smaller since spectrum is gone
+        self.resize(450, 650) 
         
         self.init_ui()
         
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        
+        # 1. Frequency List Section
+        list_group = QGroupBox("Frequency Modes")
+        list_layout = QVBoxLayout(list_group)
         
         # Scaling Factor
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(QLabel("Scaling Factor:"))
+        sf_layout = QHBoxLayout()
+        sf_layout.addWidget(QLabel("Frequency Scaling:"))
         self.spin_sf = QDoubleSpinBox()
         self.spin_sf.setRange(0.1, 2.0)
         self.spin_sf.setSingleStep(0.001)
         self.spin_sf.setDecimals(4)
         self.spin_sf.setValue(1.0)
         self.spin_sf.valueChanged.connect(self.update_data)
-        scale_layout.addWidget(self.spin_sf)
-        scale_layout.addStretch()
-        layout.addLayout(scale_layout)
+        sf_layout.addWidget(self.spin_sf)
+        sf_layout.addStretch()
+        list_layout.addLayout(sf_layout)
         
         # List
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Mode", "Freq (cm-1)", "IR", "Raman"])
+        self.tree.setHeaderLabels(["Mode", "Freq (cm⁻¹)", "IR", "Raman"])
         self.tree.currentItemChanged.connect(self.on_mode_selected)
-        layout.addWidget(self.tree)
+        list_layout.addWidget(self.tree)
         
         # Spectrum Button
-        btn_spectrum = QPushButton("Open Spectrum...")
-        btn_spectrum.setStyleSheet("font-weight: bold; padding: 8px;")
+        btn_spectrum = QPushButton("Open IR/Raman Spectrum...")
         btn_spectrum.clicked.connect(self.open_spectrum)
-        layout.addWidget(btn_spectrum)
+        list_layout.addWidget(btn_spectrum)
         
-        # Animation / Vector Controls
-        anim_layout = QHBoxLayout()
+        main_layout.addWidget(list_group)
         
-        self.chk_vector = QCheckBox("Vectors")
+        # 2. 3D Appearance (Vectors)
+        vec_group = QGroupBox("3D Vector Appearance")
+        vec_layout = QVBoxLayout(vec_group)
+        
+        vec_top_row = QHBoxLayout()
+        self.chk_vector = QCheckBox("Show Vectors")
         self.chk_vector.setChecked(True)
         self.chk_vector.stateChanged.connect(self.update_view)
-        anim_layout.addWidget(self.chk_vector)
+        vec_top_row.addWidget(self.chk_vector)
         
-        anim_layout.addWidget(QLabel("Vec Scale:"))
+        vec_top_row.addWidget(QLabel("Scale:"))
         self.spin_vec_scale = QDoubleSpinBox()
         self.spin_vec_scale.setRange(0.1, 50.0)
         self.spin_vec_scale.setValue(2.0)
         self.spin_vec_scale.valueChanged.connect(self.update_view)
-        anim_layout.addWidget(self.spin_vec_scale)
+        vec_top_row.addWidget(self.spin_vec_scale)
+        vec_layout.addLayout(vec_top_row)
         
-        anim_layout.addWidget(QLabel("| FPS:"))
-        self.spin_fps = QSpinBox()
-        self.spin_fps.setRange(1, 120)
-        self.spin_fps.setValue(30)
-        self.spin_fps.valueChanged.connect(self.update_fps)
-        anim_layout.addWidget(self.spin_fps)
+        vec_bot_row = QHBoxLayout()
+        vec_bot_row.addWidget(QLabel("Resolution:"))
+        self.spin_vec_res = QSpinBox()
+        self.spin_vec_res.setRange(3, 100)
+        self.spin_vec_res.setValue(20)
+        self.spin_vec_res.valueChanged.connect(self.on_res_changed)
+        vec_bot_row.addWidget(self.spin_vec_res)
         
-        anim_layout.addStretch()
-        layout.addLayout(anim_layout)
+        vec_bot_row.addWidget(QLabel(" Color:"))
+        self.btn_vec_color = QPushButton()
+        self.btn_vec_color.setFixedWidth(60)
+        self.btn_vec_color.setStyleSheet(f"background-color: {self.vector_color}; border: 1px solid gray; height: 20px;")
+        self.btn_vec_color.clicked.connect(self.pick_color)
+        vec_bot_row.addWidget(self.btn_vec_color)
+        vec_bot_row.addStretch()
+        vec_layout.addLayout(vec_bot_row)
         
-        anim_layout2 = QHBoxLayout()
-        anim_layout2.addWidget(QLabel("Disp. Scale:"))
+        main_layout.addWidget(vec_group)
+        
+        # 3. Animation Section
+        anim_group = QGroupBox("Animation Parameters")
+        anim_layout = QVBoxLayout(anim_group)
+        
+        anim_row1 = QHBoxLayout()
+        anim_row1.addWidget(QLabel("Displacement Scale:"))
         self.spin_amp = QDoubleSpinBox()
         self.spin_amp.setRange(0.1, 10.0)
         self.spin_amp.setSingleStep(0.1)
         self.spin_amp.setValue(1.0)
-        anim_layout2.addWidget(self.spin_amp)
+        anim_row1.addWidget(self.spin_amp)
         
+        anim_row1.addWidget(QLabel(" | FPS:"))
+        self.spin_fps = QSpinBox()
+        self.spin_fps.setRange(1, 120)
+        self.spin_fps.setValue(30)
+        self.spin_fps.valueChanged.connect(self.update_fps)
+        anim_row1.addWidget(self.spin_fps)
+        anim_layout.addLayout(anim_row1)
+        
+        # Playback row
+        action_row = QHBoxLayout()
         self.btn_play = QPushButton("Play")
         self.btn_play.clicked.connect(self.start_animation)
-        anim_layout2.addWidget(self.btn_play)
+        action_row.addWidget(self.btn_play)
         
         self.btn_pause = QPushButton("Pause")
         self.btn_pause.clicked.connect(self.pause_animation)
         self.btn_pause.setEnabled(False)
-        anim_layout2.addWidget(self.btn_pause)
+        action_row.addWidget(self.btn_pause)
         
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.clicked.connect(self.stop_animation)
         self.btn_stop.setEnabled(False)
-        anim_layout2.addWidget(self.btn_stop)
+        action_row.addWidget(self.btn_stop)
+        
+        action_row.addStretch()
         
         self.btn_gif = QPushButton("GIF")
         self.btn_gif.clicked.connect(self.save_gif)
         self.btn_gif.setEnabled(HAS_PIL)
-        anim_layout2.addWidget(self.btn_gif)
+        action_row.addWidget(self.btn_gif)
         
-        layout.addLayout(anim_layout2)
+        anim_layout.addLayout(action_row)
+        main_layout.addWidget(anim_group)
         
         # Close
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.close_clean)
-        layout.addWidget(btn_close)
+        main_layout.addWidget(btn_close)
         
         self.vector_actor = None
         self.populate_list()
@@ -419,7 +456,12 @@ class FrequencyDialog(QDialog):
             
             scale = self.spin_vec_scale.value()
             
-            self.vector_actor = self.mw.plotter.add_arrows(points, vectors, mag=scale, color='orange', name='vib_vectors')
+            # Use add_mesh with glyphs for robustness across plotter implementations
+            poly = pv.PolyData(points)
+            poly.vectors = vectors
+            geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
+            arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
+            self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
             self.mw.plotter.render()
         except: pass
 
@@ -565,7 +607,7 @@ class FrequencyDialog(QDialog):
                 cycle_pos = i / 20.0
                 phase = cycle_pos * 2 * np.pi
                 
-                amp = self.slider_amp.value() * 0.1
+                amp = self.spin_amp.value()
                 factor = math.sin(phase) * amp
                 
                 for j, (bx, by, bz) in enumerate(self.base_coords):
@@ -584,9 +626,9 @@ class FrequencyDialog(QDialog):
                 if img_array is not None:
                      img = Image.fromarray(img_array)
                      if transparent:
-                         img = img.convert("RGBA")
+                          img = img.convert("RGBA")
                      else:
-                         img = img.convert("RGB").quantize(colors=256)
+                          img = img.convert("RGB").quantize(colors=256)
                      images.append(img)
                      
             if images:
@@ -600,7 +642,22 @@ class FrequencyDialog(QDialog):
              self.setCursor(Qt.CursorShape.ArrowCursor)
              self.reset_geometry()
              if was_playing: self.start_animation()
-             
+
+    def pick_color(self):
+        from PyQt6.QtGui import QColor
+        color = QColorDialog.getColor(QColor(self.vector_color), self, "Select Vector Color")
+        if color.isValid():
+            self.vector_color = color.name()
+            self.btn_vec_color.setStyleSheet(f"background-color: {self.vector_color};")
+            self.update_view()
+
+    def on_res_changed(self, val):
+        self.vector_res = val
+        self.update_view()
+
+    def _dummy_import_pv(self):
+        import pyvista as pv # Ensure pv is available in local scope if needed, though usually global
+              
     def closeEvent(self, event):
         self.stop_animation()
         if self.vector_actor:

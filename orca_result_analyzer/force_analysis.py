@@ -2,41 +2,69 @@
 import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QDoubleSpinBox)
+                             QPushButton, QDoubleSpinBox, QGroupBox, QSpinBox, QColorDialog)
+from PyQt6.QtGui import QColor
 
 class ForceViewerDialog(QDialog):
     def __init__(self, parent_dlg, gradients):
         super().__init__(parent_dlg)
-        self.setWindowTitle("Gradient (Force) Viewer")
-        self.resize(300, 400)
+        self.setWindowTitle("Force Viewer")
+        self.resize(350, 450)
         self.parent_dlg = parent_dlg
         self.gradients = gradients # List of {atom_idx, atom_sym, vector}
         self.actors = []
+        self.force_color = "red"
+        self.force_res = 20
         
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        layout.addWidget(QLabel(f"Visualizing gradients for {len(gradients)} atoms."))
+        # 1. Info Section
+        info_group = QGroupBox("Gradient Info")
+        info_layout = QVBoxLayout(info_group)
+        info_layout.addWidget(QLabel(f"Visualizing forces for <b>{len(gradients)}</b> atoms."))
+        info_layout.addWidget(QLabel("<i>Note: Force = -Gradient</i>"))
+        main_layout.addWidget(info_group)
         
-        # Scale
-        scale_layout = QHBoxLayout()
-        scale_layout.addWidget(QLabel("Scale:"))
+        # 2. 3D Appearance Section
+        view_group = QGroupBox("3D Visualization")
+        view_layout = QVBoxLayout(view_group)
+        
+        # Scale row
+        scale_row = QHBoxLayout()
+        scale_row.addWidget(QLabel("Scale:"))
         self.spin_scale = QDoubleSpinBox()
         self.spin_scale.setRange(0.1, 100.0)
-        self.spin_scale.setValue(5.0) # Forces are small usually
+        self.spin_scale.setValue(5.0) 
         self.spin_scale.setSingleStep(0.5)
         self.spin_scale.valueChanged.connect(self.update_vectors)
-        scale_layout.addWidget(self.spin_scale)
-        layout.addLayout(scale_layout)
+        scale_row.addWidget(self.spin_scale)
         
-        # Color - Currently fixed to red
-        self.btn_color = QPushButton("Color: Red")
-        self.btn_color.setStyleSheet("background-color: red; color: white;")
-        layout.addWidget(self.btn_color) 
+        scale_row.addWidget(QLabel(" Res:"))
+        self.spin_res = QSpinBox()
+        self.spin_res.setRange(3, 100)
+        self.spin_res.setValue(20)
+        self.spin_res.valueChanged.connect(self.on_res_changed)
+        scale_row.addWidget(self.spin_res)
+        view_layout.addLayout(scale_row)
         
-        # Close
+        # Color row
+        color_row = QHBoxLayout()
+        color_row.addWidget(QLabel("Color:"))
+        self.btn_color = QPushButton()
+        self.btn_color.setFixedWidth(60)
+        self.btn_color.setStyleSheet(f"background-color: {self.force_color}; border: 1px solid gray; height: 20px;")
+        self.btn_color.clicked.connect(self.pick_color)
+        color_row.addWidget(self.btn_color)
+        color_row.addStretch()
+        view_layout.addLayout(color_row)
+        
+        main_layout.addWidget(view_group)
+        main_layout.addStretch()
+        
+        # 3. Actions
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.close)
-        layout.addWidget(btn_close)
+        main_layout.addWidget(btn_close)
         
         # Init
         self.update_vectors()
@@ -89,13 +117,27 @@ class ForceViewerDialog(QDialog):
                     
                     force_dir = force / force_mag
                     
-                    actor = mw.plotter.add_arrow(start, force_dir, mag=force_mag, color='red', resolution=10)
+                    # Use add_mesh with pv.Arrow for robustness
+                    arrow = pv.Arrow(start=start, direction=force_dir, scale=force_mag,
+                                     shaft_resolution=self.force_res, tip_resolution=self.force_res)
+                    actor = mw.plotter.add_mesh(arrow, color=self.force_color, name=f'force_{idx}')
                     self.actors.append(actor)
             
             mw.plotter.render()
             
         except Exception as e:
             print(f"Error drawing vectors: {e}")
+
+    def pick_color(self):
+        color = QColorDialog.getColor(QColor(self.force_color), self, "Select Force Vector Color")
+        if color.isValid():
+            self.force_color = color.name()
+            self.btn_color.setStyleSheet(f"background-color: {self.force_color}; border: 1px solid gray; height: 20px;")
+            self.update_vectors()
+
+    def on_res_changed(self, val):
+        self.force_res = val
+        self.update_vectors()
             
     def clear_vectors(self):
         mw = None
