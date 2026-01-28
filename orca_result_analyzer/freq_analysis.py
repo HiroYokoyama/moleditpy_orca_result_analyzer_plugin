@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
                              QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
-import time
 import math
 import numpy as np
 import pyvista as pv

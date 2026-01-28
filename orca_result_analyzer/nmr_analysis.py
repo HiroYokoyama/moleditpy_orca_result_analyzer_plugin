@@ -3,8 +3,20 @@ import json
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
                              QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QApplication, QGroupBox, QMessageBox,
-                             QFileDialog, QCheckBox, QButtonGroup)
-from PyQt6.QtCore import Qt
+                              QFileDialog, QCheckBox, QButtonGroup)
+from PyQt6.QtCore import Qt, QTimer
+import pyvista as pv
+import numpy as np
+
+# Import RDKit for VDW radii calculation
+try:
+    from rdkit import Chem
+    _pt = Chem.GetPeriodicTable()
+    # Base VDW radii (scaled by 0.3 as in moledit core)
+    VDW_RADII = {_pt.GetElementSymbol(i): _pt.GetRvdw(i) * 0.3 for i in range(1, 119)}
+except ImportError:
+    VDW_RADII = {'H': 1.2 * 0.3, 'C': 1.7 * 0.3, 'N': 1.55 * 0.3, 'O': 1.52 * 0.3}
+
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from .nmr_custom_ref_dialog import CustomReferenceDialog
@@ -96,6 +108,78 @@ class NMRDialog(QDialog):
         self.current_nucleus = "All"
         
         self.setup_ui()
+        
+        # Timer for polling main window selection (sync 3D -> NMR)
+        self.sel_timer = QTimer(self)
+        self.sel_timer.timeout.connect(self._check_external_selection)
+        self.sel_timer.start(200) # Check every 200ms
+        
+        # Custom 3D highlight actors and names
+        self._nmr_sphere_actors = []
+        self._nmr_label_names = [] # Explicitly track label names for removal
+
+    def _check_external_selection(self):
+        """Poll main window for 3D selection changes"""
+        if not hasattr(self.parent_dlg, 'mw'):
+            return
+            
+        mw = self.parent_dlg.mw
+        indices = set()
+        
+        # Check standard 3D selection
+        if hasattr(mw, 'selected_atoms_3d') and mw.selected_atoms_3d:
+            indices.update(mw.selected_atoms_3d)
+            
+        # Check measurement selection
+        if hasattr(mw, 'selected_atoms_for_measurement') and mw.selected_atoms_for_measurement:
+            for item in mw.selected_atoms_for_measurement:
+                if isinstance(item, int):
+                    indices.add(item)
+                    
+        # Calculate what the NMR selection SHOULD be based on the current 3D selection
+        # Note: We use the "Any Member" rule for selecting, but by not expanding the 3D set,
+        # unselection of the specific clicked atom correctly clears the indices.
+        new_peak_selection = self._calculate_peak_selection_from_atoms(indices)
+        
+        # Only update if the peak selection itself has changed
+        if new_peak_selection != self.selected_peak_indices:
+            # If 3D selection is empty, force clear
+            if not indices:
+                self.clear_peak_selection()
+            else:
+                self.selected_peak_indices = new_peak_selection
+                self.highlight_selected_peaks()
+                # Update visual labels and spheres (Yellow), 
+                # but tell it NOT to sync back to the main window's selection set (Green).
+                self.update_selected_labels(is_external_sync=True)
+
+    def _calculate_peak_selection_from_atoms(self, target_atoms):
+        """Helper to determine which peaks should be selected based on atom set"""
+        if not hasattr(self, 'peaks_metadata') or not self.peaks_metadata:
+            return set()
+            
+        new_selection = set()
+        target_atoms = {int(i) for i in target_atoms}
+        
+        for peak_idx, metadata in enumerate(self.peaks_metadata):
+            # metadata: (shift, intensity, is_merged, atom_indices)
+            _, _, _, peak_atoms = metadata
+            peak_atoms_set = {int(i) for i in peak_atoms}
+            
+            # Selection Rule: A peak is selected if ANY of its atoms are in the 3D selection set.
+            # This is stable and prevents the "flicker" caused by switching between ANY and SUBSET.
+            if not peak_atoms_set.isdisjoint(target_atoms):
+                new_selection.add(peak_idx)
+        return new_selection
+
+    def select_peaks_by_atom_indices(self, atom_indices):
+        """Deprecated/Legacy: Now uses _check_external_selection logic directly"""
+        # Kept for potential internal calls, but redirected to robust logic
+        new_peaks = self._calculate_peak_selection_from_atoms(atom_indices)
+        if new_peaks != self.selected_peak_indices:
+            self.selected_peak_indices = new_peaks
+            self.highlight_selected_peaks()
+            self.update_selected_labels()
     
     def get_nucleus_key(self, atom_sym):
         """Map atom symbol to nucleus key for reference standards"""
@@ -137,10 +221,23 @@ class NMRDialog(QDialog):
         
         # Get selected atom indices
         selected_indices = []
-        for peak_idx in sorted(self.selected_peak_indices):
-            if peak_idx < len(self.displayed_data):
-                atom_idx = self.displayed_data[peak_idx].get('atom_idx', peak_idx)
-                selected_indices.append(atom_idx)
+        
+        # Use peaks_metadata which maps plot indices to atoms/groups
+        if hasattr(self, 'peaks_metadata') and self.peaks_metadata:
+            for peak_idx in self.selected_peak_indices:
+                if peak_idx < len(self.peaks_metadata):
+                    # Metadata format: (shift, intensity, is_merged, atom_indices)
+                    _, _, _, atom_indices = self.peaks_metadata[peak_idx]
+                    selected_indices.extend(atom_indices)
+        else:
+            # Fallback (though this shouldn't happen if selection exists and spectrum plotted)
+            for peak_idx in sorted(self.selected_peak_indices):
+                if peak_idx < len(self.displayed_data):
+                    atom_idx = self.displayed_data[peak_idx].get('atom_idx', peak_idx)
+                    selected_indices.append(atom_idx)
+        
+        # Ensure unique indices
+        selected_indices = sorted(list(set(selected_indices)))
         
         # Calculate averages (for display/confirmation only - not saved)
         total_sigma = 0.0
@@ -185,6 +282,15 @@ class NMRDialog(QDialog):
         
         # Clear selection and refresh
         self.clear_peak_selection()
+        
+        # Also clear 3D selection in main window
+        if hasattr(self.parent_dlg, 'mw'):
+            mw = self.parent_dlg.mw
+            if hasattr(mw, 'selected_atoms_3d'):
+                mw.selected_atoms_3d.clear()
+            if hasattr(mw, 'update_3d_selection_display'):
+                mw.update_3d_selection_display()
+                
         self.recalc()
     
     def unmerge_selected_peaks(self):
@@ -916,6 +1022,13 @@ class NMRDialog(QDialog):
         # Disable selection when show all mode is active
         if self.show_all_mode:
             return
+
+        # Check for 3D Measurement Mode (treated as "3D Select Mode" by user)
+        # If enabled in main display, disable selection in graph per user request
+        if hasattr(self.parent_dlg, 'mw'):
+            mw = self.parent_dlg.mw
+            if getattr(mw, 'measurement_mode', False):
+                return
         
         # Get click position
         click_x = event.xdata
@@ -948,18 +1061,23 @@ class NMRDialog(QDialog):
                 else:
                     self.selected_peak_indices.add(peak_idx)
             
+            # Force a fresh draw on next poll if desired
+            self._last_highlight_atoms = set()
+            
             # Update highlights
             self.highlight_selected_peaks()
             
             # Update 3D labels for all selected peaks
             self.update_selected_labels()
     
-    def update_selected_labels(self):
-        """Update 3D labels for all selected peaks"""
-        # Clear existing labels
+    def update_selected_labels(self, is_external_sync=False):
+        """Update 3D labels and spheres for all selected peaks"""
+        # 1. Clear existing labels
         self.clear_atom_labels()
         
-        # Add labels for each selected peak
+        # 2. Add labels for each selected peak
+        all_peak_indices = set()
+        
         for peak_idx in sorted(self.selected_peak_indices):
             if peak_idx < len(self.peaks_metadata):
                 # Get metadata for this peak (shift, intensity, is_merged, atom_indices)
@@ -967,12 +1085,37 @@ class NMRDialog(QDialog):
                 
                 # Add label for each atom in this peak (handles both merged and individual)
                 for atom_idx in atom_indices:
+                    all_peak_indices.add(atom_idx)
                     # Find atom symbol from data
                     atom_item = next((d for d in self.data if d.get('atom_idx') == atom_idx), None)
                     if atom_item:
                         atom_sym = atom_item.get('atom_sym', '?')
                         self.add_atom_label(atom_idx, atom_sym)
         
+        # 3. Synchronize with Main Window
+        if hasattr(self.parent_dlg, 'mw'):
+             mw = self.parent_dlg.mw
+             
+             # Draw independent Yellow highlights for ALL atoms in the selected groups
+             # This satisfies "highlight all atoms related"
+             self.draw_custom_nmr_highlights_3d(all_peak_indices)
+
+             if hasattr(mw, 'selected_atoms_3d') and not is_external_sync:
+                  # ONLY "sync back" the selection set (Green) if we are initiating 
+                  # from the graph. If we are polling (3D -> Graph), we must NOT
+                  # expand the selection set or unselection will break.
+                  if isinstance(mw.selected_atoms_3d, set):
+                      mw.selected_atoms_3d.clear()
+                      mw.selected_atoms_3d.update(all_peak_indices)
+                  else:
+                      mw.selected_atoms_3d = set(all_peak_indices)
+                  
+                  # Trigger MW display update (Green highlights)
+                  if hasattr(mw, 'update_3d_selection_display'):
+                      mw.update_3d_selection_display()
+                  elif hasattr(mw, 'update_selection_visuals'):
+                      mw.update_selection_visuals()
+
         # Render once after all labels added
         if hasattr(self.parent_dlg, 'mw') and hasattr(self.parent_dlg.mw, 'plotter'):
             try:
@@ -995,6 +1138,7 @@ class NMRDialog(QDialog):
             pos = coords[atom_idx]
             label_pos = [pos[0], pos[1], pos[2] + 0.4]  # Offset above atom
             
+            label_name = f"nmr_label_{atom_idx}"
             actor = self.parent_dlg.mw.plotter.add_point_labels(
                 [label_pos],
                 [f"{atom_sym}{atom_idx}"],
@@ -1002,9 +1146,11 @@ class NMRDialog(QDialog):
                 text_color='cyan',
                 point_size=0,
                 always_visible=True,
-                bold=True
+                bold=True,
+                name=label_name
             )
             self._atom_labels.append(actor)
+            self._nmr_label_names.append(label_name)
         except Exception as e:
             print(f"Error adding atom label: {e}")
     
@@ -1028,6 +1174,18 @@ class NMRDialog(QDialog):
         
         # Clear 3D labels
         self.clear_atom_labels()
+        
+        # Also clear 3D selection in main window
+        if hasattr(self.parent_dlg, 'mw'):
+            mw = self.parent_dlg.mw
+            if hasattr(mw, 'selected_atoms_3d'):
+                mw.selected_atoms_3d.clear()
+            
+            # Re-enable MW visual update so its internal highlights are also cleared
+            if hasattr(mw, 'update_3d_selection_display'):
+                mw.update_3d_selection_display()
+            elif hasattr(mw, 'update_selection_visuals'):
+                mw.update_selection_visuals()
         
         # Redraw spectrum
         if hasattr(self, 'canvas'):
@@ -1055,22 +1213,116 @@ class NMRDialog(QDialog):
             self.clear_peak_selection()
     
     def clear_atom_labels(self):
-        """Remove all atom labels from 3D viewer"""
+        """Remove all atom labels and custom selection spheres from 3D viewer"""
         if not hasattr(self.parent_dlg, 'mw') or not hasattr(self.parent_dlg.mw, 'plotter'):
             return
+            
+        plotter = self.parent_dlg.mw.plotter
         
-        for actor in self._atom_labels:
-            try:
-                self.parent_dlg.mw.plotter.remove_actor(actor)
-            except:
-                pass
-        
-        self._atom_labels = []
-        
+        # 1. Clear custom NMR selection spheres by name (most reliable in PyVista)
         try:
-            self.parent_dlg.mw.plotter.render()
+            plotter.remove_actor('nmr_selection_highlights')
         except:
             pass
+            
+        # 2. Clear labels by tracked name
+        if hasattr(self, '_nmr_label_names'):
+            for name in self._nmr_label_names:
+                try:
+                    plotter.remove_actor(name)
+                except:
+                    pass
+            self._nmr_label_names = []
+            
+        # 3. Fallback: Clear labels by list reference
+        for actor in self._atom_labels:
+            try:
+                plotter.remove_actor(actor)
+            except:
+                pass
+        self._atom_labels = []
+        
+        # 4. Clean up private spheres actor list
+        if hasattr(self, '_nmr_sphere_actors'):
+            for actor in self._nmr_sphere_actors:
+                try:
+                    plotter.remove_actor(actor)
+                except:
+                    pass
+            self._nmr_sphere_actors = []
+        
+        try:
+            plotter.render()
+        except:
+            pass
+            
+    def draw_custom_nmr_highlights_3d(self, atom_indices):
+        """Draw yellow highlight spheres for selected atoms in 3D viewer"""
+        if not hasattr(self.parent_dlg, 'mw') or not hasattr(self.parent_dlg.mw, 'plotter'):
+            return
+            
+        plotter = self.parent_dlg.mw.plotter
+        mw = self.parent_dlg.mw
+        
+        # ALWAYS clear existing custom highlights first to prevent stacking/phantom spheres
+        try:
+            plotter.remove_actor('nmr_selection_highlights')
+        except:
+            pass
+            
+        # Clear tracker list to prevent stale references
+        self._nmr_sphere_actors = []
+        
+        # If no indices provided, just render the cleared state and return
+        if not atom_indices or not hasattr(mw, 'atom_positions_3d'):
+             try:
+                 plotter.render()
+             except:
+                 pass
+             return
+
+        indices = list(atom_indices)
+        valid_indices = [i for i in indices if i < len(mw.atom_positions_3d)]
+        
+        if not valid_indices:
+            return
+            
+        try:
+            # Get positions
+            selected_positions = mw.atom_positions_3d[valid_indices]
+            
+            # Highlight sphere size: 40% (1.4x) relative to VDW radii per user request
+            radii = []
+            for i in valid_indices:
+                # Find atom symbol from parser data
+                atom_item = next((d for d in self.data if i == d.get('atom_idx')), None)
+                sym = atom_item.get('atom_sym', 'C') if atom_item else 'C'
+                # Use 1.4x scaling factor (40% larger)
+                r = VDW_RADII.get(sym, 0.4) * 1.4
+                radii.append(r)
+
+            # Create glyphs for highlights
+            highlight_source = pv.PolyData(selected_positions)
+            highlight_source['radii'] = np.array(radii)
+            
+            highlight_glyphs = highlight_source.glyph(
+                scale='radii',
+                geom=pv.Sphere(radius=1.0, theta_resolution=16, phi_resolution=16),
+                orient=False
+            )
+            
+            # Add to plotter and track actor
+            actor = plotter.add_mesh(
+                highlight_glyphs,
+                color='yellow',
+                opacity=0.3,
+                name='nmr_selection_highlights' 
+            )
+            self._nmr_sphere_actors.append(actor)
+            plotter.render()
+            
+        except Exception as e:
+            print(f"Error drawing custom NMR highlights: {e}")
     
     def closeEvent(self, event):
         """Clean up labels when dialog closes"""

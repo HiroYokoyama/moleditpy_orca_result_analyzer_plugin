@@ -33,6 +33,7 @@ class OrcaParser:
 
     def parse_all(self):
         self.parse_basic()
+        self.parse_gradients() # Must come before trajectory to link gradients!
         self.parse_trajectory()
         self.parse_frequencies()
         self.parse_thermal()
@@ -42,7 +43,6 @@ class OrcaParser:
         self.parse_charges()
         self.parse_dipole()
         self.parse_tddft()
-        self.parse_gradients()
         self.parse_nmr()
         self.parse_basis_set()
         self.parse_scf_trace()

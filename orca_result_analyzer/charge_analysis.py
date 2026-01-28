@@ -287,7 +287,10 @@ class ChargeDialog(QDialog):
         
         # Add labels
         data = self.all_charges.get(self.current_type, [])
-        coords = self.parent_dlg.parser.data.get("coords", [])
+        
+        coords = []
+        if hasattr(self.parent_dlg, 'parser') and self.parent_dlg.parser:
+             coords = self.parent_dlg.parser.data.get("coords", [])
         
         if not coords or len(coords) != len(data):
             QMessageBox.warning(self, "Error", "No coordinates available for labels.")
@@ -419,7 +422,10 @@ class ChargeDialog(QDialog):
                 
             # Add charge labels if checkbox is enabled
             if self.chk_show_labels.isChecked():
-                coords = self.parent_dlg.parser.data.get("coords", [])
+                coords = []
+                if hasattr(self.parent_dlg, 'parser') and self.parent_dlg.parser:
+                    coords = self.parent_dlg.parser.data.get("coords", [])
+                    
                 if coords and len(coords) == len(data):
                     # Remove old labels if exist
                     if hasattr(self, '_charge_labels'):

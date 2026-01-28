@@ -29,7 +29,7 @@ class CustomReferenceDialog(QDialog):
         name_row = QHBoxLayout()
         name_row.addWidget(QLabel("Reference Name:"))
         self.edit_name = QLineEdit()
-        self.edit_name.setPlaceholderText("e.g., Benzene, Acetone, etc.")
+        self.edit_name.setPlaceholderText("e.g., Reference Compound Name")
         name_row.addWidget(self.edit_name)
         config_layout.addLayout(name_row)
         

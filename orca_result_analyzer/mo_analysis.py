@@ -2,7 +2,6 @@
 import os
 import tempfile
 import numpy as np
-import webbrowser
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMessageBox, 
                              QFileDialog, QProgressDialog, QTableWidget, QTableWidgetItem, 
@@ -34,12 +33,17 @@ class MODialog(QDialog):
         self.setup_ui()
 
     def get_cube_path(self, display_id):
+        if not hasattr(self.parent_dlg, 'parser') or not self.parent_dlg.parser:
+            return None
+            
         parser = self.parent_dlg.parser
         if hasattr(parser, 'filename') and parser.filename:
             fpath = parser.filename
             base_dir = os.path.dirname(fpath)
             filename_base = os.path.splitext(os.path.basename(fpath))[0]
             out_dir = os.path.join(base_dir, f"{filename_base}_cubes")
+            # Ensure dir exists? Logic doesn't seem to create it here, but usually caller handles or it's fine.
+            # Standardizing path return.
             return os.path.join(out_dir, f"{filename_base}_MO_{display_id}.cube")
         return None
 
@@ -251,9 +255,12 @@ class MODialog(QDialog):
                 internal_id = display_id - 1
                 
                 # Check coeffs in parser data
-                if self.parent_dlg.parser and "mo_coeffs" in self.parent_dlg.parser.data:
-                    if internal_id in self.parent_dlg.parser.data["mo_coeffs"]:
-                        has_coeffs = True
+                # Safety check for parser and data
+                if hasattr(self.parent_dlg, 'parser') and self.parent_dlg.parser:
+                    if hasattr(self.parent_dlg.parser, 'data') and self.parent_dlg.parser.data:
+                        if "mo_coeffs" in self.parent_dlg.parser.data:
+                            if internal_id in self.parent_dlg.parser.data["mo_coeffs"]:
+                                has_coeffs = True
             except: pass
             
         self.btn_vis.setEnabled(has_coeffs)
@@ -280,6 +287,12 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", "BasisSetEngine not available")
             return None
         try:
+            # Safety checks
+            if not hasattr(self.parent_dlg, 'parser') or not self.parent_dlg.parser:
+                return None
+            if not hasattr(self.parent_dlg.parser, 'data') or not self.parent_dlg.parser.data:
+                return None
+                
             shells = self.parent_dlg.parser.data.get("basis_set_shells", [])
             
             # Convert lists to numpy arrays for the engine AND map keys
@@ -316,6 +329,14 @@ class MODialog(QDialog):
         except: return
         
         # Check coefficients with INTERNAL ID
+        # Safety checks
+        if not hasattr(self.parent_dlg, 'parser') or not self.parent_dlg.parser:
+            QMessageBox.warning(self, "Error", "Parser not available")
+            return
+        if not hasattr(self.parent_dlg.parser, 'data') or not self.parent_dlg.parser.data:
+            QMessageBox.warning(self, "Error", "No parser data available")
+            return
+
         coeffs_map = self.parent_dlg.parser.data.get("mo_coeffs", {})
         mo_data = coeffs_map.get(internal_mo_id)
         if not mo_data:

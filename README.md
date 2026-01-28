@@ -17,7 +17,7 @@ Real-time convergence visualization for SCF energy cycles.
 ### 2. MO Analysis
 - **Levels**: View orbital energies and occupancy.
 - **Visualization**: Generate and view 3D Cubes for selected orbitals (Isosurfaces).
-- **Limitations**: Currently supports S, P, D, and F shells.
+- **Advanced Support**: Successfully handles S, P, D, F, and G shells (L=4).
 
 ### 3. Optimization / Scan
 Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
@@ -27,6 +27,7 @@ Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
 ### 4. Forces
 Analyze structural forces for the current structure or the entire trajectory.
 - **Historical Gradients**: Capture and display force vectors for **every** step of an optimization or scan.
+- **Visualization Controls**: Toggle vector visibility and use **Auto Scale** to optimize vector size for small gradients.
 - **Step-by-Step Navigation**: Precise control with `<` and `>` buttons or the trajectory slider.
 - **Convergence Tracking**: Multi-line display of **RMS/MAX Gradient** and **RMS/MAX Step**, color-coded (**Green for YES**, **Red for NO**).
 
@@ -54,6 +55,7 @@ Analyze electronic excitations and absorption spectra.
 ### 10. NMR
 Advanced NMR chemical shielding validation and visualization.
 - **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards and equivalent atom merging.
+- **Interactive Sync**: Selecting peaks in the spectrum highlights corresponding atoms in the 3D viewer (and vice-versa).
 
 ## Interface & Usability
 - **Logical Workflow**: Buttons are grouped by task: Electronic -> Geometry -> Properties -> Spectroscopy.

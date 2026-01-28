@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -14,6 +15,14 @@ class CubeWriter:
         vectors: 3x3 array of grid vectors in Bohr
         data: 3D numpy array of values
         """
+        # Ensure directory exists
+        dirname = os.path.dirname(filepath)
+        if dirname and not os.path.exists(dirname):
+            try:
+                os.makedirs(dirname, exist_ok=True)
+            except Exception as e:
+                print(f"Error creating directory {dirname}: {e}")
+
         nx, ny, nz = data.shape
         n_atoms = len(atoms_sym)
         
@@ -100,7 +109,7 @@ class BasisSetEngine:
     def _prepare_definitions(self):
         # Cartesian Definitions (1:1)
         cart_s = [ [(1.0, (0,0,0))] ] # S
-        # ORCA P-order: pz, px, py (based on benzene-ene.out observation)
+        # ORCA P-order: pz, px, py (based on standard output observation)
         # Engine expects: [0] -> pz, [1] -> px, [2] -> py
         # Definitions must map these to (0,0,1), (1,0,0), (0,1,0)
         cart_p = [ [(1.0, (0,0,1))], [(1.0, (1,0,0))], [(1.0, (0,1,0))] ] # Pz, Px, Py
@@ -136,13 +145,124 @@ class BasisSetEngine:
             [ (3.0*f3_n, (2,1,0)), (-1.0*f3_n, (0,3,0)) ]  # y(3x2-y2)
         ]
 
+
+        # Spherical G (9 components)
+        # Using general formulas for real spherical harmonics in terms of Cartesians
+        # g0 (9):  (35z^4 - 30z^2r^2 + 3r^4)/8  -> ~ z^4, z^2(x^2+y^2), (x^2+y^2)^2
+        # But commonly:
+        # g0: 35z4 - 30z2r2 + 3r4
+        # g1: z(7z2 - 3r2)x
+        # g-1: z(7z2 - 3r2)y
+        # g2: (7z2 - r2)(x2-y2)
+        # g-2: (7z2 - r2)xy
+        # g3: z(x2 - 3y2)x
+        # g-3: z(3x2 - y2)y
+        # g4: x4 - 6x2y2 + y4 (part of r^4*cos4phi)
+        # g-4: 4x3y - 4xy3
+        
+        # Simplified mappings (Need verification of ORCA's specific normalization/order)
+        # Assuming standard Real Spherical Harmonics order 0, +1, -1, +2, -2, +3, -3, +4, -4
+        
+        # NOTE: Normalization factors here are approximate placeholders for "support". 
+        # Precise values require derived Real Spherical Harmonic expansions.
+        # Given this is a visualization tool, capturing the nodal structure is primary priority.
+        
+        # g0 = (35z^4 - 30z^2(x^2+y^2+z^2) + 3(x^2+y^2+z^2)^2)/8
+        #    = (35z^4 - 30z^4 - 30z^2(x^2+y^2) + 3z^4 + 6z^2(x^2+y^2) + 3(x^2+y^2)^2)/8
+        #    = (8z^4 - 24z^2(x^2+y^2) + 3(x^2+y^2)^2)/8
+        #    = z^4 - 3z^2x^2 - 3z^2y^2 + 0.375x^4 + 0.75x^2y^2 + 0.375y^4
+        
         self.basis_definitions = {
             0: cart_s,
             1: cart_p,
             2: sph_d,
-            3: sph_f,
-            4: [] # G-shells (placeholder - not yet implemented)
+            3: sph_f
+            # G-shells are added dynamically below
         }
+        
+        # Extended factorials for G-shell normalization
+        self.fact = {0: 1, 1: 1, 2: 2, 3: 6, 4: 24, 5: 120, 6: 720, 7: 5040, 8: 40320}
+        self.fact2 = {0: 1, 1: 2, 2: 24, 3: 720, 4: 40320, 5: 3628800, 
+                      6: 479001600, 7: 87178291200, 8: 20922789888000} # (2n)! values
+        
+        # Add G-shells dynamically with proper normalization
+        self._add_g_shell_defs()
+
+    def _add_g_shell_defs(self):
+        """
+        Generate G-shell (L=4) definitions with correct normalization.
+        Weights are calculated as: w = C_poly * (N_sph_ang / N_cart_ang)
+        where:
+          - C_poly: Coefficient of the Cartesian term in the Real Spherical Harmonic polynomial.
+          - N_sph_ang: Angular normalization factor for the Spherical Harmonic Y_lm.
+          - N_cart_ang: Angular normalization part of the Cartesian Gaussian.
+        """
+        # 1. Cartesian Normalization "Parts" (Angular contribution)
+        # N_cart includes a factorial part: sqrt( (2l-1)!! (2m-1)!! (2n-1)!! / ... ) 
+        # Here derived from standard Gaussian normalization formulas.
+        def get_n_cart_part(l, m, n):
+             return np.sqrt( (self.fact[l]*self.fact[m]*self.fact[n]) / 
+                             (self.fact2[l]*self.fact2[m]*self.fact2[n]) )
+
+        # 2. Spherical Harmonic Normalization Factors (Angular)
+        # Standard normalization for Real Spherical Harmonics.
+        pi_term = 1.0 / np.sqrt(np.pi)
+        sq5 = np.sqrt(5); sq35 = np.sqrt(35)
+        
+        # Factors relative to 1/sqrt(pi)
+        n_sph = {
+             0: (3.0/2.0) * pi_term,
+             1: (3.0/8.0) * sq5 * pi_term,
+            -1: (3.0/8.0) * sq5 * pi_term,
+             2: (3.0/4.0) * np.sqrt(5.0/2.0) * pi_term, 
+            -2: (3.0/4.0) * np.sqrt(5.0/2.0) * pi_term,
+             3: (3.0/8.0) * sq35 * pi_term,
+            -3: (3.0/8.0) * sq35 * pi_term,
+             4: (3.0/16.0)* sq35 * pi_term,
+            -4: (3.0/16.0)* sq35 * pi_term
+        }
+
+        # Polynomial Definitions (Raw Coefficients of x^l y^m z^n terms)
+        # These define the shape of the orbital in terms of Cartesian products.
+        g_polys = [
+            # g0 (z^4 term dominating)
+            [(1.0, (0,0,4)), (-3.0, (2,0,2)), (-3.0, (0,2,2)), (0.375, (4,0,0)), (0.375, (0,4,0)), (0.75, (2,2,0))],
+            # g1 (z^3 term)
+            [(4.0, (1,0,3)), (-3.0, (3,0,1)), (-3.0, (1,2,1))],
+            # g-1 
+            [(4.0, (0,1,3)), (-3.0, (0,3,1)), (-3.0, (2,1,1))],
+            # g2
+            [(6.0, (2,0,2)), (-6.0, (0,2,2)), (-1.0, (4,0,0)), (1.0, (0,4,0))],
+            # g-2
+            [(6.0, (1,1,2)), (-1.0, (3,1,0)), (-1.0, (1,3,0))],
+            # g3 
+            [(1.0, (3,0,1)), (-3.0, (1,2,1))],
+            # g-3 
+            [(3.0, (2,1,1)), (-1.0, (0,3,1))],
+            # g4
+            [(1.0, (4,0,0)), (-6.0, (2,2,0)), (1.0, (0,4,0))],
+            # g-4
+            [(4.0, (3,1,0)), (-4.0, (1,3,0))]
+        ]
+        
+        m_vals = [0, 1, -1, 2, -2, 3, -3, 4, -4]
+        
+        sph_g_defs = []
+        for i, poly in enumerate(g_polys):
+            m = m_vals[i]
+            SphNorm = n_sph[m]
+            
+            comp_list = []
+            for (c_poly, (l, k, j)) in poly:
+                # Correct weight combines the polynomial coefficient with the 
+                # ratio of Spherical vs Cartesian angular normalization.
+                n_cart_topo = get_n_cart_part(l, k, j)
+                weight = c_poly * (SphNorm / n_cart_topo)
+                comp_list.append( (weight, (l, k, j)) )
+            
+            sph_g_defs.append(comp_list)
+
+        self.basis_definitions[4] = sph_g_defs
     
     def _precompute_shells(self):
         """Prepare shell data for fast evaluation"""

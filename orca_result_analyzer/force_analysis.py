@@ -4,7 +4,7 @@ import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                              QDoubleSpinBox, QGroupBox, QSlider, QTableWidget, 
                              QTableWidgetItem, QCheckBox)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 class ForceViewerDialog(QDialog):
     def __init__(self, parent_dlg, gradients, parser=None):
@@ -25,29 +25,36 @@ class ForceViewerDialog(QDialog):
         
         main_layout = QVBoxLayout(self)
         
-        # Trajectory Navigation (if available)
-        if self.traj_steps:
-            self._setup_trajectory_controls(main_layout)
-        
-        # Visualization Controls
+        # Visualization Controls (Restoring deleted code)
         view_group = QGroupBox("Visualization Settings")
         view_layout = QVBoxLayout(view_group)
         
-        # Row 1: Visibility and Scale
+        # Row 1: Visualize Button and Scale
         row1 = QHBoxLayout()
-        self.chk_vectors = QCheckBox("Show Force Vectors")
-        self.chk_vectors.setChecked(True)
-        self.chk_vectors.stateChanged.connect(self.update_vectors)
-        row1.addWidget(self.chk_vectors)
+        
+        self.btn_visualize = QPushButton("Visualize Forces")
+        self.btn_visualize.setCheckable(True) # Use checkable for toggle state
+        self.btn_visualize.clicked.connect(self.toggle_visualization)
+        row1.addWidget(self.btn_visualize)
         
         row1.addSpacing(20)
         row1.addWidget(QLabel("Vector Scale:"))
         self.spin_scale = QDoubleSpinBox()
-        self.spin_scale.setRange(0.01, 1000.0)
+        self.spin_scale.setRange(0.01, 100000.0) # Increased range for small gradients
         self.spin_scale.setValue(1.0)
         self.spin_scale.setSingleStep(0.1)
         self.spin_scale.valueChanged.connect(self.update_vectors)
         row1.addWidget(self.spin_scale)
+        
+        # Auto Scale Button
+        btn_autoscale = QPushButton("Auto Scale")
+        btn_autoscale.clicked.connect(self.auto_scale)
+        row1.addWidget(btn_autoscale)
+        
+        self.chk_auto_scale = QCheckBox("Auto Apply")
+        self.chk_auto_scale.setToolTip("Automatically auto-scale vectors when step changes")
+        row1.addWidget(self.chk_auto_scale)
+        
         row1.addStretch()
         
         view_layout.addLayout(row1)
@@ -65,6 +72,11 @@ class ForceViewerDialog(QDialog):
         header = self.force_table.horizontalHeader()
         header.setStretchLastSection(True)
         main_layout.addWidget(self.force_table)
+
+        # Trajectory Navigation (if available) - Moved AFTER table creation
+        # (becuase controls trigger update which updates table)
+        if self.traj_steps:
+            self._setup_trajectory_controls(main_layout)
         
         # Buttons row
         buttons_layout = QHBoxLayout()
@@ -84,7 +96,50 @@ class ForceViewerDialog(QDialog):
         
         # Initialize
         self.populate_force_table()
-        self.update_vectors()
+        # self.auto_scale() # Manual only per user request
+
+    def toggle_visualization(self):
+        """Toggle force vector visualization"""
+        if self.btn_visualize.isChecked():
+            self.btn_visualize.setText("Clear Forces")
+            self.update_vectors()
+        else:
+            self.btn_visualize.setText("Visualize Forces")
+            self.clear_vectors()
+
+    def auto_scale(self):
+        """Calculate and set an appropriate scale factor"""
+        if not self.gradients: 
+            return
+            
+        try:
+            # Find max magnitude
+            max_mag = 0.0
+            for g in self.gradients:
+                vec = g.get('grad', g.get('vector'))
+                if vec:
+                    mag = np.linalg.norm(vec)
+                    if mag > max_mag: max_mag = mag
+            
+            if max_mag > 1e-12:
+                # Target max vector length ~ 1.5 - 2.0 units (Angstrom)
+                target = 2.0
+                new_scale = target / max_mag
+                
+                # Round nicely
+                if new_scale > 100:
+                    new_scale = round(new_scale, -int(np.log10(new_scale))+1)
+                else:
+                    new_scale = round(new_scale, 2)
+                    
+                self.spin_scale.blockSignals(True)
+                self.spin_scale.setValue(new_scale)
+                self.spin_scale.blockSignals(False)
+                
+                # If currently visualizing, update
+                if self.btn_visualize.isChecked():
+                    self.update_vectors()
+        except: pass
     
     def _setup_trajectory_controls(self, layout):
         """Setup trajectory navigation controls"""
@@ -97,9 +152,15 @@ class ForceViewerDialog(QDialog):
         
         self.traj_slider = QSlider(Qt.Orientation.Horizontal)
         self.traj_slider.setRange(0, len(self.traj_steps)) # 0 to N-1 (traj), N = final
-        self.traj_slider.setValue(len(self.traj_steps)) # Default to final
-        self.traj_slider.valueChanged.connect(self.on_trajectory_change)
+
+        self.traj_label = QLabel("Current (Final)")
         
+        # Info labels (define early)
+        self.traj_info = QLabel("Showing final optimized structure")
+        self.traj_conv = QLabel("")
+        self.traj_conv.setStyleSheet("color: #444; font-size: 9pt;")
+        self.traj_conv.setWordWrap(True)
+
         # Navigation buttons
         btn_prev = QPushButton("<")
         btn_prev.setFixedWidth(30)
@@ -112,8 +173,6 @@ class ForceViewerDialog(QDialog):
         slider_layout.addWidget(btn_prev)
         slider_layout.addWidget(self.traj_slider)
         slider_layout.addWidget(btn_next)
-        
-        self.traj_label = QLabel("Current (Final)")
         slider_layout.addWidget(self.traj_label)
         
         # Jump to Final button
@@ -124,16 +183,22 @@ class ForceViewerDialog(QDialog):
         
         traj_layout.addLayout(slider_layout)
         
-        # Info labels
-        self.traj_info = QLabel("Showing final optimized structure")
         traj_layout.addWidget(self.traj_info)
-        
-        self.traj_conv = QLabel("")
-        self.traj_conv.setStyleSheet("color: #444; font-size: 9pt;")
-        self.traj_conv.setWordWrap(True)
         traj_layout.addWidget(self.traj_conv)
         
-        layout.addWidget(traj_group)
+        # Connect signals AFTER UI construction
+        self.traj_slider.valueChanged.connect(self.on_trajectory_change)
+        
+        # Set initial value (triggers signal)
+        self.traj_slider.setValue(len(self.traj_steps)) 
+        
+        # Initial trigger if value didn't change (e.g. if we started at 0 and desired is 0)
+        if self.traj_slider.value() == 0 and len(self.traj_steps) == 0:
+             self.on_trajectory_change(0)
+        
+        # Insert at the top (index 0) so it appears above other controls
+        # even though it is initialized last.
+        layout.insertWidget(0, traj_group)
     
     def on_trajectory_change(self, val):
         """Handle trajectory step change"""
@@ -158,12 +223,20 @@ class ForceViewerDialog(QDialog):
             
             # Use current gradients
             self.gradients = self.parser.data.get("gradients", []) if self.parser else []
-            self.populate_force_table()
-            self.update_vectors()
             
-            # Also update structure if it was changed
+            # Auto-Scale if requested
+            if hasattr(self, 'chk_auto_scale') and self.chk_auto_scale.isChecked():
+                self.auto_scale()
+                
+            # Populate table
+            self.populate_force_table()
+
+            # Update structure first
             if self.parser and "atoms" in self.parser.data and "coords" in self.parser.data:
                 self.update_structure(self.parser.data["atoms"], self.parser.data["coords"])
+            
+            # Then update vectors with a slight delay to ensure structure is drawn
+            QTimer.singleShot(100, self.update_vectors)
         else:
             # Historical step
             step = self.traj_steps[val]
@@ -173,18 +246,22 @@ class ForceViewerDialog(QDialog):
             
             # Update gradients for this step
             self.gradients = step.get('gradients', [])
-            self.populate_force_table()
-            self.update_vectors()
-
-            # Show convergence info if available
-            conv = step.get('convergence', {})
-            self._update_conv_label(conv)
             
-            # Update structure in 3D view
+            # Auto-Scale if requested
+            if hasattr(self, 'chk_auto_scale') and self.chk_auto_scale.isChecked():
+                self.auto_scale()
+                
+            # Populate table
+            self.populate_force_table()
+            
+            # Update structure first
             atoms = step.get('atoms', [])
             coords = step.get('coords', [])
             if atoms and coords:
                 self.update_structure(atoms, coords)
+
+            # Then update vectors with delay
+            QTimer.singleShot(100, self.update_vectors)
 
     def _update_conv_label(self, conv):
         """Helper to update the convergence info label with rich text and normalization"""
@@ -247,7 +324,9 @@ class ForceViewerDialog(QDialog):
             
             # Update force table and vectors
             self.populate_force_table()
-            self.update_vectors()
+            # self.auto_scale() # Use button only
+            if self.btn_visualize.isChecked():
+                self.update_vectors()
             
             # print(f"Force Viewer: Reloaded from {os.path.basename(self.parser.filename)}")
             
@@ -310,6 +389,12 @@ class ForceViewerDialog(QDialog):
             atoms = self.parser.data["atoms"]
         
         if not atoms or not self.gradients:
+            # Show "No Data" message if gradients are missing but we are supposed to show something
+            self.force_table.setRowCount(1)
+            msg_item = QTableWidgetItem("No gradient data available for this step in output file")
+            msg_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.force_table.setItem(0, 0, msg_item)
+            self.force_table.setSpan(0, 0, 1, 8)
             return
         
         # Populate with gradient data (force = -gradient)
@@ -359,8 +444,8 @@ class ForceViewerDialog(QDialog):
             # Clear old vectors
             self.clear_vectors()
             
-            # Only show vectors if checked
-            if not self.chk_vectors.isChecked():
+            # Only show vectors if checked (visualizing)
+            if not self.btn_visualize.isChecked():
                 return
             
             # Get coordinates for the current view
