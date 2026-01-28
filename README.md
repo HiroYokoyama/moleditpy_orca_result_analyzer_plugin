@@ -6,76 +6,63 @@ A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA 
 
 ## Features
 
-### 1. Molecular Orbitals (MO)
+### 1. SCF Trace
+Real-time convergence visualization for SCF energy cycles.
+- **Concatenated View**: View a single continuous plot of all SCF cycles throughout the calculation.
+- **Interactive Tools**: Full zoom, pan, and save support via an integrated Matplotlib toolbar.
+
+### 2. MO Analysis
 - **Levels**: View orbital energies and occupancy.
 - **Visualization**: Generate and view 3D Cubes for selected orbitals (Isosurfaces).
-- **Limitations**: Currently supports S, P, D, and F shells. **G-shells (and higher) are not yet supported** and will be skipped during visualization.
-- **Performance Note**: For large systems or higher resolution, using ORCA's `orca_plot` utility to generate `.cube` files and the **Cube File Viewer** plugin is recommended for better performance.
+- **Limitations**: Currently supports S, P, D, and F shells.
 
-### 2. Frequency Analysis (IR / Raman)
-Visualize vibrational modes and spectra.
-- **Spectra**:
-    - **IR Spectrum**: Transmittance-style plot (inverted Y-axis).
-    - **Raman Spectrum**: Normal intensity plot.
-- **Visualization**: Animated vibrational modes with vector arrows.
-- **GIF Export**: Save animations of specific vibrational modes as GIFs.
-- **Scaling**: Adjustable frequency scaling factors.
-
-### 3. Scan & Optimization Results (Trajectory)
+### 3. Optimization / Scan
 Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
 - **Interactive Graph**: Plot Energy vs. Step. Click points to update the 3D structure.
-- **Animation**: Play/Pause trajectory animations.
-- **Exports**:
-    - **GIF**: Save animated trajectories with transparency options.
-    - **CSV**: Export energy data.
-    - **Image**: Save the energy profile graph.
+- **Animation**: Play/Pause trajectory animations and export as GIFs.
 
-### 4. Geometry Stability & Forces
-Analyze cartesian gradients and structural stability.
-- **Forces (Gradients)**: 3D visualization of gradient vectors on atoms.
-- **Hessian Analysis**: Manually load ORCA `.hess` files to display force constants and perform stability analysis.
+### 4. Forces
+Analyze structural forces for the current structure or the entire trajectory.
+- **Historical Gradients**: Capture and display force vectors for **every** step of an optimization or scan.
+- **Step-by-Step Navigation**: Precise control with `<` and `>` buttons or the trajectory slider.
+- **Convergence Tracking**: Multi-line display of **RMS/MAX Gradient** and **RMS/MAX Step**, color-coded (**Green for YES**, **Red for NO**).
 
-### 5. Thermochemistry
-Detailed analysis of thermodynamic properties based on frequency calculations.
-- **Broad Summary**: Access Electronic Energy, ZPE, Enthalpy (H), Gibbs Free Energy (G), and Entropy (S) terms.
-- **Detailed Corrections**: Optional breakdown of vibrational, rotational, and translational contributions to thermal energy and entropy.
-- **Export**: Copy table data to clipboard or export to CSV.
-
-### 6. TDDFT Spectra
-Analyze electronic excitations and absorption spectra.
-- **Absorption Spectrum**: View interactive transitions with adjustable Gaussian broadening.
-- **Spectrum Types**: Support for Absorption (Oscillator Strength) and CD (Rotatory Strength).
-- **Peak List**: Detailed excitation energies, oscillator strengths, and state descriptions.
-
-### 7. Dipole Moment
-- **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
-- **Info**: Displays total magnitude and vector components.
-
-### 8. Atomic Charges
-- **Populations**: Support for Mulliken, Loewdin, and Hirshfeld charge analysis (if available).
+### 5. Atomic Charges
+- **Populations**: Mulliken, Loewdin, and Hirshfeld populations (if available).
 - **3D Coloring**: Color atoms in the 3D viewer based on charge value.
-- **Customization**: Customizable color schemes for positive/negative/neutral charges.
 
-### 9. NMR Shielding
+### 6. Dipole Moment
+- **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
+
+### 7. Frequencies
+Visualize vibrational modes and spectra.
+- **IR/Raman**: Stick and broadened spectra plots.
+- **Visualization**: Animated vibrational modes with vector arrows.
+
+### 8. Thermochemistry
+Detailed analysis of thermodynamic properties based on frequency calculations.
+- **Broad Summary**: Access Electronic Energy, ZPE, Enthalpy (H), Gibbs Free Energy (G).
+- **Detailed Corrections**: Optional breakdown of vibrational, rotational, and translational contributions.
+
+### 9. TDDFT
+Analyze electronic excitations and absorption spectra.
+- **Spectra**: Absorption and CD spectra with Gaussian broadening and transition analysis.
+
+### 10. NMR
 Advanced NMR chemical shielding validation and visualization.
-- **Interactive Spectrum**: Stick spectrum (Stem plot) with nucleus-specific filtering (e.g., 1H, 13C).
-- **Reference Standards**: Support for experimental reference shielding constants ($\sigma_{ref}$) and chemical shifts ($\delta_{ref}$).
-- **Peak Merging**: Group equivalent atoms for simplified spectrum analysis.
-- **Persistent Settings**: Manual reference values and merged peaks are saved automatically.
+- **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards and equivalent atom merging.
 
 ## Interface & Usability
-- **Modeless Design**: Analysis windows can stay open alongside the main editor, allowing for side-by-side comparison.
-- **Keyboard Shortcuts**: Common actions bound to keys (e.g., `Ctrl+O` to open, `Ctrl+R` to reload).
+- **Logical Workflow**: Buttons are grouped by task: Electronic -> Geometry -> Properties -> Spectroscopy.
+- **Concise UI**: Clean, professional labels and modeless windows for side-by-side editing.
+- **Keyboard Shortcuts**: `Ctrl+O` (Open), `Ctrl+R` (Reload).
 
 ## Installation
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
 ## Requirements
-- **ORCA Output**: The plugin reads the main output file (`.out` or `.log`) and retrieves Basis Set information directly for advanced 3D orbital visualization.
-- **Dependencies**: 
-    - `matplotlib`: For graphing.
-    - `Pillow` (PIL): For GIF generation.
-    - `rdkit` (Optional but recommended): For bond percepton and 3D structure generation.
+- **ORCA Output**: Reads `.out` or `.log` files. Basis set info (`Print[P_Basis] 2`) is required for MO Cube generation.
+- **Dependencies**: `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `rdkit` is recommended for high-quality structure generation.
 
 ## Required ORCA Keywords
 To ensure all features (especially **MO Cube Generation**) work correctly, include the following in your ORCA input:
