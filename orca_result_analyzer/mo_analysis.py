@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
                              QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMessageBox, 
                              QFileDialog, QProgressDialog, QTableWidget, QTableWidgetItem, 
                              QHeaderView, QGroupBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget,
-                             QFormLayout, QTreeWidgetItemIterator)
+                             QFormLayout, QTreeWidgetItemIterator, QApplication)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
 
@@ -86,6 +86,25 @@ class MODialog(QDialog):
         calc_layout.addRow("Calc Boundary Margin:", self.spin_margin)
         
         vis_layout.addWidget(calc_grp)
+        
+        
+        # Warning Layout (Label + Copy Button)
+        warn_layout = QHBoxLayout()
+        
+        self.lbl_warning = QLabel("")
+        self.lbl_warning.setStyleSheet("color: #e65100; font-weight: bold; font-size: 9pt;")
+        self.lbl_warning.setWordWrap(True)
+        self.lbl_warning.setVisible(False)
+        warn_layout.addWidget(self.lbl_warning)
+        
+        self.btn_copy_input = QPushButton("Copy Input")
+        self.btn_copy_input.setFixedWidth(80)
+        self.btn_copy_input.setVisible(False)
+        self.btn_copy_input.clicked.connect(self.copy_orca_input)
+        warn_layout.addWidget(self.btn_copy_input)
+        
+        vis_layout.addLayout(warn_layout)
+        
         layout.addWidget(vis_grp)
         
         # 2. MO List
@@ -240,8 +259,21 @@ class MODialog(QDialog):
         self.btn_vis.setEnabled(has_coeffs)
         if items and not has_coeffs:
             self.btn_vis.setToolTip(f"No coefficients available for MO {items[0].text(0)}")
+            self.lbl_warning.setText(
+                "<b>Coefficients Missing.</b> Required Input:"
+                "<pre style='margin-top:0; margin-bottom:0;'>%output<br>  Print[P_Basis] 2<br>  Print[P_Mos] 1<br>end</pre>"
+            )
+            self.lbl_warning.setVisible(True)
+            self.btn_copy_input.setVisible(True)
         else:
             self.btn_vis.setToolTip("")
+            self.lbl_warning.setVisible(False)
+            self.btn_copy_input.setVisible(False)
+
+    def copy_orca_input(self):
+        text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
+        QApplication.clipboard().setText(text)
+        QMessageBox.information(self, "Copied", "ORCA Input block copied to clipboard.")
 
     def get_engine(self):
         if not BasisSetEngine:

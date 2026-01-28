@@ -69,8 +69,72 @@ class ForceViewerDialog(QDialog):
             base, _ = os.path.splitext(self.parser.filename)
             hess_path = base + ".hess"
             if os.path.exists(hess_path):
-                 #print(f"Auto-loading Hessian: {hess_path}")
+                 # print(f"Auto-loading Hessian: {hess_path}")
                  self.load_hessian_from_path(hess_path)
+        
+        # If still no Hessian data, try to populate from parser (Output file)
+        if not self.hessian_data and self.parser:
+             # Create dummy hessian_data from parser info
+             # Gradients
+             grads = self.parser.data.get("gradients", [])
+             freqs = self.parser.data.get("frequencies", [])
+             
+             if grads or freqs:
+                 self.hessian_data = {}
+                 
+                 # Gradients
+                 if grads:
+                     try:
+                         flat_grads = []
+                         sorted_grads = sorted(grads, key=lambda x: x.get('atom_idx', 0))
+                         for g in sorted_grads:
+                             flat_grads.extend(g['vector'])
+                         self.hessian_data["gradient_vec"] = flat_grads
+                     except: pass
+                     
+                 # Frequencies
+                 if freqs:
+                     # Check format (list of dicts vs list of floats)
+                     try:
+                         if isinstance(freqs[0], dict):
+                             self.hessian_data["frequencies"] = [d['freq'] for d in freqs]
+                             # Extract normal modes if available
+                             # parser stores vectors in freq dicts
+                             if 'vector' in freqs[0]:
+                                 # hessian_data["normal_modes"] expects list of lists of values [x,y,z, x,y,z...]?
+                                 # OR list of lists of tuples?
+                                 # ForceViewerDialog.update_vectors expects:
+                                 # mode_vecs = self.hessian_data["normal_modes"][mode_idx]
+                                 # then iterates: for i, vec in enumerate(mode_vecs)
+                                 # So it expects a LIST OF VECTORS (tuples or lists [x,y,z])
+                                 
+                                 # Parser stores: "vector": [(x,y,z), (x,y,z)...]
+                                 # So we can just map it directly.
+                                 self.hessian_data["normal_modes"] = [d['vector'] for d in freqs]
+                         else:
+                             self.hessian_data["frequencies"] = freqs
+                     except: pass
+                 
+                 # Analyze and Update UI
+                 self.analyze_stability()
+                 if self.hessian_data.get("frequencies"):
+                     self.populate_frequency_table()
+                 self.update_vectors()
+
+    def closeEvent(self, event):
+        """Clean up vectors when dialog is closed"""
+        if self.parent_dlg and hasattr(self.parent_dlg, 'mw') and hasattr(self.parent_dlg.mw, 'plotter'):
+            plotter = self.parent_dlg.mw.plotter
+            if plotter:
+                for actor in self.actors:
+                    try:
+                        plotter.remove_actor(actor)
+                    except: pass
+                self.actors = []
+                try:
+                    plotter.render()
+                except: pass
+        super().closeEvent(event)
     
     def _setup_gradient_tab(self, layout):
         """Setup the gradient visualization tab"""
@@ -126,13 +190,27 @@ class ForceViewerDialog(QDialog):
     def _setup_hessian_tab(self, layout):
         """Setup the Hessian/Force Constants tab"""
         # Load button
+        # Hessian Load Buttons
         btn_load = QPushButton("Load Hessian File (.hess)")
         btn_load.clicked.connect(self.load_hessian_file)
         layout.addWidget(btn_load)
         
-        # Frequencies Table
+        # Frequencies Section
+        freq_layout = QHBoxLayout()
         self.freq_label = QLabel("Frequencies:")
-        layout.addWidget(self.freq_label)
+        freq_layout.addWidget(self.freq_label)
+        
+        freq_layout.addStretch()
+        
+        # Reset/Visualize Forces Button (Relocated here)
+        btn_reset = QPushButton("Reset View (Show Forces)")
+        btn_reset.setToolTip("Clear normal mode selection and show static force vectors")
+        btn_reset.clicked.connect(self.visualize_hessian_forces)
+        freq_layout.addWidget(btn_reset)
+        
+        layout.addLayout(freq_layout)
+        
+
         
         self.freq_table = QTableWidget()
         self.freq_table.setColumnCount(2)
@@ -147,14 +225,129 @@ class ForceViewerDialog(QDialog):
         layout.addWidget(self.freq_table)
         
         # Force Constants Table
-        layout.addWidget(QLabel("Force Constants (Diagonal):"))
+        layout.addWidget(QLabel("Force Constants (Diagonal of Hessian):"))
         self.hessian_table = QTableWidget()
         self.hessian_table.setColumnCount(3)
-        self.hessian_table.setHorizontalHeaderLabels(["Atom Pair", "Force Costant", "Unit"])
+        self.hessian_table.setHorizontalHeaderLabels(["Atom Pair", "Force Constant (k)", "Unit"])
         h2 = self.hessian_table.header() if hasattr(self.hessian_table, "header") else self.hessian_table.horizontalHeader()
         h2.setStretchLastSection(True)
         layout.addWidget(self.hessian_table)
+        
+        # Add hint label to Hessian tab too (so user can see status updates)
+        layout.addStretch()
+        self.hessian_hint_label = QLabel("")
+        self.hessian_hint_label.setWordWrap(True)
+        self.hessian_hint_label.setStyleSheet("color: #0066cc; font-style: italic;")
+        layout.addWidget(self.hessian_hint_label)
     
+        if self.hessian_data:
+             self.update_stability_summary()
+             self.populate_frequency_table()
+             self.populate_hessian_table()
+
+    def visualize_hessian_forces(self):
+         """Visualize forces (negated gradients)"""
+         try:
+             # Show hint immediately to confirm click
+             if self.hessian_data and self.hessian_data.get("gradient_vec"):
+                 count = len(self.hessian_data.get("gradient_vec"))
+                 msg = f"Displaying Forces from Hessian File ({count} values)"
+                 self.hint_label.setText(msg)
+                 self.hessian_hint_label.setText(msg)
+             elif self.gradients:
+                 count = len(self.gradients)
+                 msg = f"Displaying Forces from Output File ({count} atoms)"
+                 self.hint_label.setText(msg)
+                 self.hessian_hint_label.setText(msg)
+             else:
+                 msg = "No gradient data found (Structure likely optimized).\nSelect a frequency to see normal modes."
+                 self.hint_label.setText(msg)
+                 self.hessian_hint_label.setText(msg)
+                 QMessageBox.information(self, "No Gradient Data", "No gradient forces found.\nThis is normal for an optimized structure (Forces ≈ 0).\n\nPlease select a Frequency in the table to visualize vibrational modes.")
+                 return
+
+             # Clear any normal mode selection to force 'Force' mode in update_vectors
+             self.freq_table.blockSignals(True) # Prevent double update
+             self.freq_table.clearSelection()
+             self.freq_table.blockSignals(False)
+             
+             # Force update
+             self.update_vectors()
+             
+         except Exception as e:
+             import traceback
+             QMessageBox.critical(self, "Error", f"An error occurred in visualize_hessian_forces:\n{str(e)}\n\n{traceback.format_exc()}")
+ 
+         # Let's reuse update_vectors by adding a mode? 
+         # The existing update_vectors checks chk_vectors and tables.
+         
+         # BETTER: Just call render directly here since it's a specific action
+         scale = self.spin_scale.value()
+         
+         # Clear existing
+         for actor in self.actors:
+             try:
+                 self.parent_dlg.plotter.remove_actor(actor)
+             except: pass
+         self.actors.clear()
+         
+         # Draw
+         # Convert to pyvista vectors
+         # We need start positions (current geometry)
+         # If existing geometry is loaded in main window, use that.
+         if not hasattr(self.parent_dlg, "atom_coords") or not self.parent_dlg.atom_coords:
+             return
+             
+         coords = self.parent_dlg.atom_coords
+         
+         target_data = [] # (start, vec)
+         
+         if using_fallback:
+             # Use self.gradients
+             for item in self.gradients:
+                 atom_idx = item.get('atom_idx')
+                 if atom_idx is not None and atom_idx < len(coords):
+                     vec = item.get('grad', item.get('vector'))
+                     if vec:
+                         target_data.append((coords[atom_idx], vec))
+         else:
+             # Use Hessian gradients
+             # Reshape flat list to list of (x,y,z)
+             forces = gradients
+             n_atoms = len(coords)
+             for i in range(n_atoms):
+                 idx = i * 3
+                 if idx + 2 < len(forces):
+                     gx, gy, gz = forces[idx], forces[idx+1], forces[idx+2]
+                     target_data.append((coords[i], [gx, gy, gz]))
+
+         # Create vectors
+         for i, (start, raw_vec) in enumerate(target_data):
+             fx, fy, fz = raw_vec
+             # Force is NEGATIVE gradient
+             vector = np.array([-fx, -fy, -fz])
+             mag = np.linalg.norm(vector)
+             
+             if mag < 1e-6: continue
+             
+             # Scale
+             scaled_vec = vector * scale
+             
+             arrow = pv.Arrow(start=start, direction=scaled_vec, scale=np.linalg.norm(scaled_vec), 
+                              shaft_resolution=self.force_res, tip_resolution=self.force_res,
+                              tip_length=0.25, tip_radius=0.1, shaft_radius=0.05)
+             
+             actor = self.parent_dlg.plotter.add_mesh(arrow, color=self.force_color)
+             self.actors.append(actor)
+             
+         self.parent_dlg.plotter.render()
+         msg = f"Visualizing forces.\nScale: {scale}"
+         if using_fallback:
+             msg += "\n(Source: Output File Gradients)"
+         else:
+             msg += "\n(Source: Hessian $gradient block)"
+         QMessageBox.information(self, "Visualization", msg)
+
     def load_hessian_file(self):
         """Open dialog to load a Hessian file"""
         # Get directory from parent
@@ -196,6 +389,20 @@ class ForceViewerDialog(QDialog):
                      else:
                          self.hessian_data["frequencies"] = p_freqs
                  except: pass
+
+        # Fallback for Gradients (Crucial for Opt outputs)
+        if not self.hessian_data.get("gradient_vec") and self.gradients:
+             # self.gradients is list of dicts: [{'atom_idx': 0, 'vector': [x,y,z]}, ...]
+             # hessian gradient_vec is flat list [x0,y0,z0, x1,y1,z1...]
+             try:
+                 flat_grads = []
+                 # Sort by atom_idx just in case
+                 sorted_grads = sorted(self.gradients, key=lambda x: x.get('atom_idx', 0))
+                 for g in sorted_grads:
+                     flat_grads.extend(g['vector'])
+                 self.hessian_data["gradient_vec"] = flat_grads
+             except Exception as e:
+                 print(f"Error converting gradients fallback: {e}")
 
         # Analyze Stability
         self.analyze_stability()
@@ -256,20 +463,18 @@ class ForceViewerDialog(QDialog):
             self.lbl_rms_force.setText("-")
 
     def display_force_constants(self):
-        """Display force constants from Hessian matrix"""
+        """Display force constants and frequencies"""
+        self.populate_frequency_table()
+        self.populate_hessian_table()
+
+    def populate_frequency_table(self):
+        """Populate the frequency table"""
         if not self.hessian_data: return
         
-        matrix = self.hessian_data.get("matrix", [])
-        atoms = self.hessian_data.get("atoms", [])
-        
-        # Fallback: Use parser atoms if Hessian has none
-        if not atoms and self.parser and "atoms" in self.parser.data:
-            atoms = self.parser.data["atoms"]
-            
-        # Display frequencies
         freqs = self.hessian_data.get("frequencies", [])
         self.freq_table.setRowCount(0)
         self.freq_table.setRowCount(len(freqs))
+        
         if freqs:
             self.freq_label.setText(f"Frequencies ({len(freqs)} modes):")
             for i, freq in enumerate(freqs):
@@ -281,7 +486,18 @@ class ForceViewerDialog(QDialog):
                 self.freq_table.setItem(i, 1, item)
         else:
              self.freq_label.setText("Frequencies: None found")
+
+    def populate_hessian_table(self):
+        """Populate the hessian force constants table"""
+        if not self.hessian_data: return
+
+        matrix = self.hessian_data.get("matrix", [])
+        atoms = self.hessian_data.get("atoms", [])
         
+        # Fallback: Use parser atoms if Hessian has none
+        if not atoms and self.parser and "atoms" in self.parser.data:
+            atoms = self.parser.data["atoms"]
+            
         if not matrix or not atoms: return
         
         # Clear table
@@ -291,7 +507,12 @@ class ForceViewerDialog(QDialog):
         n_atoms = len(atoms)
         row = 0
         
+        # Limit rows to avoid freezing if massive
+        max_rows = 300 # arbitrary limit for display
+        
         for i in range(min(len(matrix), n_atoms * 3)):
+            if row >= max_rows: break
+            
             atom_idx = i // 3
             coord_idx = i % 3
             coord_name = ['X', 'Y', 'Z'][coord_idx]

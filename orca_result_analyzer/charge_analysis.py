@@ -66,7 +66,10 @@ class ChargeDialog(QDialog):
         if os.path.exists(settings_file):
             try:
                 with open(settings_file, 'r') as f:
-                    settings_data = json.load(f)
+                    all_settings = json.load(f)
+                    
+                # Load from "charge_settings" key
+                settings_data = all_settings.get("charge_settings", {})
                 
                 # Load custom schemes
                 if "custom_color_schemes" in settings_data:
@@ -231,31 +234,37 @@ class ChargeDialog(QDialog):
         settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         # Load existing settings or create new
-        settings_data = {}
+        all_settings = {}
         if os.path.exists(settings_file):
             try:
                 with open(settings_file, 'r') as f:
-                    settings_data = json.load(f)
+                    all_settings = json.load(f)
             except:
                 pass
         
-        # Get custom schemes only
+        # Prepare charge-specific data
+        charge_data = {}
+        
+        # Save custom schemes
         custom_schemes = []
         for name, colors in self.schemes.items():
             if name.startswith("Custom: "):
+                # Remove prefix
+                clean_name = name.replace("Custom: ", "")
                 custom_schemes.append({
-                    "name": name.replace("Custom: ", ""),
+                    "name": clean_name,
                     "colors": colors
                 })
         
-        # Update settings
-        settings_data["custom_color_schemes"] = custom_schemes
-        settings_data["last_charge_scheme"] = self.current_scheme
+        charge_data["custom_color_schemes"] = custom_schemes
+        charge_data["last_charge_scheme"] = self.current_scheme
         
-        # Save to file
+        # Update main settings dict
+        all_settings["charge_settings"] = charge_data
+        
         try:
             with open(settings_file, 'w') as f:
-                json.dump(settings_data, f, indent=2)
+                json.dump(all_settings, f, indent=2)
         except Exception as e:
             print(f"Error saving settings: {e}")
     

@@ -1,6 +1,8 @@
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from .logger import Logger
+
 class CubeWriter:
     @staticmethod
     def write(filepath, atoms_sym, atoms_coords, origin, vectors, data, comment=""):
@@ -80,6 +82,7 @@ class BasisSetEngine:
             'coeffs': np.array([...]) 
         }
         """
+        self.logger = Logger.get_logger("BasisSetEngine")
         self.shells = shells
         self.n_basis = 0
         self._prepare_definitions()
@@ -137,7 +140,8 @@ class BasisSetEngine:
             0: cart_s,
             1: cart_p,
             2: sph_d,
-            3: sph_f
+            3: sph_f,
+            4: [] # G-shells (placeholder - not yet implemented)
         }
     
     def _precompute_shells(self):
@@ -148,7 +152,7 @@ class BasisSetEngine:
             defs = self.basis_definitions.get(l_type)
             if not defs:
                 # Fallback or error?
-                print(f"Unsupported shell type {l_type}")
+                self.logger.warning(f"Unsupported shell type {l_type}")
                 sh['basis_data'] = []
                 continue
 
@@ -176,15 +180,10 @@ class BasisSetEngine:
 
     def evaluate_mo_on_grid(self, mo_idx, grid_coords, mo_coeffs_all):
         """
-        Evaluate MO on grid.
+        Evaluate MO on grid (Vectorized Implementation).
         mo_coeffs_all: 1D array of all MO coefficients (must match n_basis)
         grid_coords: (N, 3) array in BOHR
         """
-        # Slice logic if mo_coeffs_all contains multiple MOs?
-        # Usually we pass just the vector for ONE MO.
-        # But if passed full matrix, we need slicing.
-        # Here assuming mo_coeffs_all is the vector for ONE MO of size n_basis (or larger)
-        
         my_coeffs = mo_coeffs_all
         if len(my_coeffs) < self.n_basis:
              raise ValueError(f"Not enough coefficients. Needed {self.n_basis}, got {len(my_coeffs)}")
@@ -192,41 +191,57 @@ class BasisSetEngine:
         phi_mo = np.zeros(grid_coords.shape[0])
         
         for sh in self.shells:
-            if 'basis_data' not in sh: continue
+            if 'basis_data' not in sh or not sh['basis_data']: continue
             
-            # Vector from center
+            # 1. Calculate Radial Part for this Shell
             # grid_coords is (N,3), center is (3,)
             r_vec = grid_coords - sh['center']
             r2 = np.sum(r_vec**2, axis=1)
             
-            # Evaluate Exponents for all primitives: exp(-alpha * r2)
-            # sh['exps'] is (K,), r2 is (N,) -> Result (K, N)
-            # optimization: outer product
-            E = np.exp(-np.outer(sh['exps'], r2)) # Shape (n_prims, n_points)
+            # Evaluate Exponents: exp(-alpha * r2)
+            # sh['exps'] is (K,), r2 is (N,) -> E is (K, N)
+            E = np.exp(-np.outer(sh['exps'], r2)) 
             
+            # 2. Iterate Components (S, P, D...)
             start = sh['start_idx']
+            
+            # Optimization: Group calculations by unique angular momentum sets if possible,
+            # but current structure is Shell -> [BasisFunc1, BasisFunc2...]
+            # where BasisFunc1 -> [Component1, Component2...]
+            
             for b_i, basis_func_data in enumerate(sh['basis_data']):
                 c_mo = my_coeffs[start + b_i]
                 if abs(c_mo) < 1e-9: continue
+                
+                # Each basis function is a sum of components (e.g. contracted Gaussians with specific L, M, N)
+                # But typically for standard basis sets, one "basis function" (like Px) 
+                # has ONE component list (e.g. 3 primitives all with l=1,m=0,n=0).
+                # SP shells might be different but handled as separate shells in prep.
+                
+                # Vectorize over components if multiple?
+                # Usually basis_func_data has 1 component (e.g. Px) or few.
                 
                 val_accum = np.zeros(grid_coords.shape[0])
                 
                 for comp in basis_func_data:
                     l, m, n = comp['l'], comp['m'], comp['n']
-                    coeffs_prim = comp['coeffs'] # (n_prims,)
-                    
-                    # Angular part
-                    ang_val = np.ones(grid_coords.shape[0])
-                    if l > 0: ang_val *= r_vec[:, 0]**l
-                    if m > 0: ang_val *= r_vec[:, 1]**m
-                    if n > 0: ang_val *= r_vec[:, 2]**n
+                    coeffs_prim = comp['coeffs'] # (K,)
                     
                     # Radial contraction: sum( c_i * exp(-a_i * r2) )
-                    # coeffs_prim is (K,), E is (K, N) -> dot -> (N,)
+                    # This is dot product (K) . (K, N) -> (N,)
                     contracted_radial = np.dot(coeffs_prim, E)
                     
-                    val_accum += ang_val * contracted_radial
-                    
+                    # Angular part
+                    # Check if l,m,n form a trivial case (0,0,0) -> S-orbital -> ang_val = 1.0
+                    if l == 0 and m == 0 and n == 0:
+                         val_accum += contracted_radial
+                    else:
+                        ang_val = np.ones(grid_coords.shape[0])
+                        if l > 0: ang_val *= r_vec[:, 0]**l
+                        if m > 0: ang_val *= r_vec[:, 1]**m
+                        if n > 0: ang_val *= r_vec[:, 2]**n
+                        val_accum += ang_val * contracted_radial
+                
                 phi_mo += c_mo * val_accum
                 
         return phi_mo

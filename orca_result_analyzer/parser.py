@@ -1,8 +1,10 @@
 import re
+from .logger import Logger 
 
 class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
     def __init__(self):
+        self.logger = Logger.get_logger("OrcaParser")
         self.filename = ""
         self.raw_content = ""
         self.lines = []
@@ -387,27 +389,58 @@ class OrcaParser:
         # Find the last block
         last_start = -1
         for i, line in enumerate(self.lines):
-            if "CARTESIAN GRADIENTS" in line and "-------" not in line:
+            # Match "CARTESIAN GRADIENT" (singular/plural) at START of line
+            # "Norm of the Cartesian gradient" should NOT match.
+            stripped = line.strip().upper()
+            if stripped.startswith("CARTESIAN GRADIENT") and "-------" not in line:
                 last_start = i
         
         if last_start == -1: return
         
-        curr = last_start + 2
+        curr = last_start + 1
+        # Skip header separators or empty lines until data matches format
         while curr < len(self.lines):
             line = self.lines[curr].strip()
-            if "-------" in line or not line: break
+            # Check if it looks like a data line: Int Sym ...
+            parts = line.split()
+            if len(parts) >= 3 and parts[0].isdigit():
+                break # Found data start
+            curr += 1
+            if curr > last_start + 10: break # Safety limit
+
+        while curr < len(self.lines):
+            line = self.lines[curr].strip()
+            if "-------" in line or "Difference to" in line: break
+            if not line: break # Empty line usually ends block
+            
             parts = line.split()
             
             # Format: 0 C : X Y Z (len 6) or 0 C X Y Z (len 5)
+            # ORCA output usually 1-indexed for atoms in gradient block?
+            # Example:    1   C   :    0.002 ...
             if len(parts) >= 5:
                 try:
-                    idx = int(parts[0])
-                    sym = parts[1]
+                    # Valid data line
                     if parts[2] == ":":
                         if len(parts) >= 6:
+                            idx = int(parts[0]) - 1 # Convert 1-based to 0-based
+                            sym = parts[1]
                             vx, vy, vz = float(parts[3]), float(parts[4]), float(parts[5])
-                        else: break
+                        else: 
+                            curr += 1
+                            continue
                     else:
+                        idx = int(parts[0])
+                        # If index is 0-based in file? Usually 0 C : ... in some formats, 1 C : ... in others.
+                        # Benzene-opt.out uses 1-based.
+                        # Let's assume input matches atoms array.
+                        # If 1-based, index 0 won't exist usually.
+                        # Logic: if idx > 0 and len(atoms) matches, maybe -1 needed.
+                        # Safest is to append? But we need atom_idx for mapping.
+                        # Let's rely on order.
+                        if idx > 0: idx -= 1
+                        
+                        sym = parts[1]
                         vx, vy, vz = float(parts[2]), float(parts[3]), float(parts[4])
                         
                     self.data["gradients"].append({
@@ -415,7 +448,11 @@ class OrcaParser:
                         'atom_sym': sym, 
                         'vector': [vx, vy, vz]
                     })
-                except: break
+                except: pass
+            elif len(parts) > 0:
+                 # Non-empty line that doesn't match format? Could be end of block garbage or "Difference to..."
+                 if "Difference" in line: break
+            
             curr += 1
 
     def parse_dipole(self):
@@ -1338,7 +1375,8 @@ class OrcaParser:
             "frequencies": [],
             "normal_modes": [],
             "atoms": [],
-            "coords": []
+            "coords": [],
+            "gradient_vec": []
         }
         
         i = 0
@@ -1362,6 +1400,29 @@ class OrcaParser:
                         
                         parts = line.split()
                         if len(parts) > 1 and parts[0].isdigit():
+                            # Check if it's a header line (all integers)
+                            is_header = True
+                            try:
+                                for p in parts:
+                                    if "." in p: # Floats usually have decimal points in ORCA
+                                        is_header = False
+                                        break
+                                    # Attempt to parse as float? ORCA floats are 1.23E-01
+                                    # Integers don't have '.' usually
+                            except:
+                                pass
+                                
+                            if is_header:
+                                # Double check: try parsing all as ints
+                                try:
+                                    [int(x) for x in parts]
+                                    # It is a header, skip it
+                                    i += 1
+                                    continue
+                                except ValueError:
+                                    # Not all ints, so it's data
+                                    pass
+
                             row_idx = int(parts[0])
                             values = [float(x) for x in parts[1:]]
                             if row_idx < len(matrix):
@@ -1480,26 +1541,48 @@ class OrcaParser:
             elif line == "$gradient":
                 i += 1
                 if i < len(lines):
-                    n_grad = int(lines[i].strip())
-                    i += 1
-                    
-                    gradiants_vec = []
-                    for _ in range(n_grad):
-                        if i >= len(lines): break
-                        # Format: val
-                        # Sometimes it's blocked? No, typically just list of 3N lines or blocks
-                        # ORCA .hess gradient block:
-                        # y
-                        # index val
-                        parts = lines[i].strip().split()
-                        if len(parts) >= 2:
-                            gradiants_vec.append(float(parts[1]))
+                    try:
+                        n_grad = int(lines[i].strip())
                         i += 1
-                    
-                    # Convert 3N list to list of vectors
-                    # We need atoms to map them if we want to be safe, but typically ordered
-                    # Store as simple list for now
-                    hessian_data["gradient_vec"] = gradiants_vec
+                        
+                        gradients_vec = []
+                        for _ in range(n_grad):
+                            if i >= len(lines): break
+                            
+                            parts = lines[i].strip().split()
+                            if not parts:
+                                i += 1
+                                continue
+                                
+                            val = 0.0
+                            # Robust parsing: Check format "index value" vs "value"
+                            if len(parts) >= 2:
+                                # Assume "index value" format usually
+                                # Check if first part is int
+                                try:
+                                    # If parts[0] is int, parts[1] is value
+                                    idx = int(parts[0])
+                                    val = float(parts[1])
+                                except ValueError:
+                                    # Maybe format is "value value"? Unlikely for gradient (1D)
+                                    # Or parts[0] is actually the float value?
+                                    try:
+                                        val = float(parts[0])
+                                    except:
+                                        pass
+                            elif len(parts) == 1:
+                                # Just value
+                                try:
+                                    val = float(parts[0])
+                                except: pass
+                                
+                            gradients_vec.append(val)
+                            i += 1
+                        
+                        hessian_data["gradient_vec"] = gradients_vec
+                    except ValueError:
+                         print("Error parsing number of gradients")
+                         i += 1
             
             i += 1
         
@@ -1612,3 +1695,4 @@ class OrcaParser:
                 })
                 
         self.data["basis_set_shells"] = full_shells
+

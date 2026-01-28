@@ -25,6 +25,7 @@ from .tddft_analysis import TDDFTDialog
 from .thermal_analysis import ThermalTableDialog
 
 from . import PLUGIN_VERSION
+from .logger import Logger
 
 class OrcaResultAnalyzerDialog(QDialog):
     def __init__(self, parent, parser, file_path, context=None):
@@ -37,6 +38,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
         
+        self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
         self.init_ui()
 
     def init_ui(self):
@@ -389,7 +391,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.mw.splitter.setSizes([0, total])
                 except: pass
         except Exception as e:
-            print(f"Error loading 3D: {e}")
+            self.logger.error(f"Error loading 3D: {e}")
 
     def show_mo_analyzer(self):
         mo_coeffs = self.parser.data.get("mo_coeffs")

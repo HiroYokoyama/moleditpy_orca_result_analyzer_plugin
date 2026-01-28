@@ -84,7 +84,7 @@ class NMRDialog(QDialog):
             # Fallback if no file path provided
             self.merged_peaks_file = os.path.join(os.path.dirname(__file__), "nmr_merged_peaks.json")
         
-        self.settings_file = os.path.join(os.path.dirname(__file__), "nmr_settings.json")
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         # Track manually merged peaks: [{"indices": [0, 1, 2], "avg_delta": 7.5, ...}]
         self.merged_peaks = []

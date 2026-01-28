@@ -1,0 +1,9 @@
+{
+  "custom_color_schemes": [],
+  "last_charge_scheme": "Red(-) - Blue(+)",
+  "nmr_settings": {
+    "spectrum_linewidth": 0.1,
+    "peak_intensity": 0.1,
+    "custom_references": {}
+  }
+}
