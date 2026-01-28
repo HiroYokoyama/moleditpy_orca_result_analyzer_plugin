@@ -51,32 +51,35 @@ class NMRDialog(QDialog):
         # Chemical shift formula: δ_sample = δ_ref + (σ_ref - σ_sample)
         self.reference_standards = {
             "1H": {
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 31.8},
-                "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.5},
-                "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3},
-                "D2O": {"delta_ref": 4.79, "sigma_ref": 26.0},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
-            },
-            "13C": {
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 182.4},
-                "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.2},
-                "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.9},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
-            },
-            "15N": {
-                "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.8},
-                "NH3": {"delta_ref": -381.9, "sigma_ref": 244.4},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
-            },
-            "31P": {
-                "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
-            },
-            "19F": {
-                "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
-            }
-        }
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "TMS": {"delta_ref": 0.0, "sigma_ref": 31.8},
+        "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.5},
+        "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3},
+        "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
+    },
+    "13C": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "TMS": {"delta_ref": 0.0, "sigma_ref": 182.4},
+        "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.2},
+        "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.9},
+        "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
+    },
+    "15N": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.8},
+        "NH3": {"delta_ref": -381.9, "sigma_ref": 244.4},
+        "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
+    },
+    "31P": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4},
+        "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
+    },
+    "19F": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5},
+        "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}
+    }        }
         
         # Current reference values
         self.delta_ref = 0.0
@@ -124,6 +127,18 @@ class NMRDialog(QDialog):
             return
             
         mw = self.parent_dlg.mw
+        
+        # 0. Check if Selection Mode is active (Optimization: Don't hijack selection if user is doing something else)
+        # Assuming mw has a 'current_mode' or we check if 'SelectionTool' is active if that structure exists.
+        # Fallback: If mw has 'selection_enabled' flag.
+        # 0. Check if Selection Mode is active
+        # We removed the mw.scene.mode check because it refers to the 2D editor mode.
+        # 3D selection should be allowed unless we are in a specific conflicting mode like Measurement.
+
+        if getattr(mw, 'measurement_mode', False):
+            # Measurement mode uses a different selection list
+            pass
+
         indices = set()
         
         # Check standard 3D selection
@@ -136,6 +151,25 @@ class NMRDialog(QDialog):
                 if isinstance(item, int):
                     indices.add(item)
                     
+        # 1. State Tracking for Stability
+        # Compare current 3D selection with what we LAST knew about/set.
+        # If they are identical, NO CHANGE has happened, so we do nothing.
+        # This prevents the "Echo" loop where we clear the selection (setting it to empty)
+        # and then this poller sees "Empty" vs "My Internal Selection" and clears the graph.
+        
+        current_mw_selection_frozen = frozenset(indices)
+        
+        # Initialize tracker if missing
+        if not hasattr(self, '_last_synced_mw_selection'):
+            self._last_synced_mw_selection = frozenset()
+            
+        # If the 3D selection HAS NOT CHANGED from what we last saw/set, STOP.
+        if current_mw_selection_frozen == self._last_synced_mw_selection:
+            return
+
+        # Update our tracker to the new state
+        self._last_synced_mw_selection = current_mw_selection_frozen
+
         # Calculate what the NMR selection SHOULD be based on the current 3D selection
         # Note: We use the "Any Member" rule for selecting, but by not expanding the 3D set,
         # unselection of the specific clicked atom correctly clears the indices.
@@ -184,11 +218,17 @@ class NMRDialog(QDialog):
     def get_nucleus_key(self, atom_sym):
         """Map atom symbol to nucleus key for reference standards"""
         mapping = {
-            "H": "1H",
-            "C": "13C",
-            "N": "15N",
-            "P": "31P",
-            "F": "19F"
+            "H": "1H", "D": "2H", "T": "3H",
+            "Li": "7Li", "Be": "9Be", "B": "11B", "C": "13C", "N": "15N", "O": "17O", "F": "19F",
+            "Na": "23Na", "Mg": "25Mg", "Al": "27Al", "Si": "29Si", "P": "31P", "S": "33S",
+            "Cl": "35Cl", "K": "39K", "Ca": "43Ca", "Sc": "45Sc", "Ti": "47Ti", "V": "51V",
+            "Cr": "53Cr", "Mn": "55Mn", "Fe": "57Fe", "Co": "59Co", "Ni": "61Ni", "Cu": "63Cu",
+            "Zn": "67Zn", "Ga": "71Ga", "Ge": "73Ge", "As": "75As", "Se": "77Se", "Br": "81Br",
+            "Kr": "83Kr", "Rb": "87Rb", "Sr": "87Sr", "Y": "89Y", "Zr": "91Zr", "Nb": "93Nb",
+            "Mo": "95Mo", "Tc": "99Tc", "Ru": "99Ru", "Rh": "103Rh", "Pd": "105Pd", "Ag": "109Ag",
+            "Cd": "113Cd", "In": "115In", "Sn": "119Sn", "Sb": "121Sb", "Te": "125Te", "I": "127I",
+            "Xe": "129Xe", "Cs": "133Cs", "Ba": "137Ba", "La": "139La", "W": "183W", "Os": "187Os",
+            "Pt": "195Pt", "Au": "197Au", "Hg": "199Hg", "Tl": "205Tl", "Pb": "207Pb"
         }
         return mapping.get(atom_sym, atom_sym)
         
@@ -352,24 +392,33 @@ class NMRDialog(QDialog):
                 pass
         
         # Extract custom references only (non-default)
+        # Extract custom references only (non-default)
         default_standards = {
             "1H": {
+                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
                 "TMS": {"delta_ref": 0.0, "sigma_ref": 31.8},
                 "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.5},
-                "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3},
-                "D2O": {"delta_ref": 4.79, "sigma_ref": 26.0}
+                "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3}
             },
             "13C": {
+                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
                 "TMS": {"delta_ref": 0.0, "sigma_ref": 182.4},
                 "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.2},
                 "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.9}
             },
             "15N": {
+                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
                 "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.8},
                 "NH3": {"delta_ref": -381.9, "sigma_ref": 244.4}
             },
-            "31P": {"H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4}},
-            "19F": {"CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5}}
+            "31P": {
+                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+                "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4}
+            },
+            "19F": {
+                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+                "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5}
+            }
         }
         
         custom_refs = {}
@@ -459,6 +508,9 @@ class NMRDialog(QDialog):
         ref_sel_row = QHBoxLayout()
         ref_sel_row.addWidget(QLabel("Standard:"))
         self.combo_ref = QComboBox()
+        self.combo_ref.setMinimumWidth(250)
+        from PyQt6.QtWidgets import QSizePolicy
+        self.combo_ref.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.combo_ref.currentIndexChanged.connect(self.on_ref_change)
         ref_sel_row.addWidget(self.combo_ref)
         
@@ -466,6 +518,15 @@ class NMRDialog(QDialog):
         btn_add_ref.setFixedWidth(80)
         btn_add_ref.clicked.connect(self.add_custom_reference)
         ref_sel_row.addWidget(btn_add_ref)
+        
+        btn_del_ref = QPushButton("Delete")
+        btn_del_ref.setFixedWidth(60)
+        btn_del_ref.setToolTip("Delete selected custom reference")
+        btn_del_ref.clicked.connect(self.delete_custom_reference)
+        ref_sel_row.addWidget(btn_del_ref)
+        
+        # Duplicate combo_ref removed
+        
         ref_layout.addLayout(ref_sel_row)
         
         # Delta ref (reference peak position)
@@ -588,11 +649,33 @@ class NMRDialog(QDialog):
             
         current_nucleus = self.current_nucleus
         if current_nucleus == "All":
-            # Use first available or H
-            current_nucleus = "1H" if "1H" in self.reference_standards else list(self.reference_standards.keys())[0]
-        else:
-            # Map atom symbol to nucleus key (e.g., "H" -> "1H")
-            current_nucleus = self.get_nucleus_key(current_nucleus)
+            # Special case for "All": Only allow "No Reference"
+            # We want to visualize raw values (no shifting) across different nuclei
+            self.combo_ref.blockSignals(True)
+            self.combo_ref.clear()
+            self.combo_ref.addItems(["No Reference"])
+            self.combo_ref.setCurrentText("No Reference")
+            self.combo_ref.blockSignals(False)
+            
+            # Set values to 0,0
+            self.delta_ref = 0.0
+            self.sigma_ref = 0.0
+            
+            # Update spinboxes
+            self.spin_delta_ref.blockSignals(True)
+            self.spin_sigma_ref.blockSignals(True)
+            self.spin_delta_ref.setValue(0.0)
+            self.spin_sigma_ref.setValue(0.0)
+            self.spin_delta_ref.blockSignals(False)
+            self.spin_sigma_ref.blockSignals(False)
+            
+            # Disable inputs
+            self.spin_delta_ref.setEnabled(False)
+            self.spin_sigma_ref.setEnabled(False)
+            return
+
+        # Map atom symbol to nucleus key (e.g., "H" -> "1H")
+        current_nucleus = self.get_nucleus_key(current_nucleus)
         
         # Save current selection to preserve it if possible
         current_ref = self.combo_ref.currentText() if self.combo_ref.count() > 0 else None
@@ -604,16 +687,28 @@ class NMRDialog(QDialog):
         self.combo_ref.clear()
         refs = self.reference_standards.get(current_nucleus, {})
         
-        if not refs:
-            # No references for this nucleus, add custom placeholder
-            refs = {"Custom": {"delta_ref": 0.0, "sigma_ref": 0.0}}
+        # Create list of items
+        items = list(refs.keys())
         
-        self.combo_ref.addItems(list(refs.keys()))
+        # Always ensure "Custom" is in the list
+        if "Custom" not in items:
+            items.append("Custom")
+            # Ensure it exists in logic too (transiently if not in storage)
+            if "Custom" not in refs:
+                 # We don't save this to self.reference_standards to avoid polluting it with empty Customs,
+                 # but we need to handle its selection.
+                 pass
+
+        self.combo_ref.addItems(items)
         
         # Try to restore previous selection, otherwise set default to TMS or first item
         if current_ref and current_ref in refs:
             self.combo_ref.setCurrentText(current_ref)
             ref_data = refs[current_ref]
+        elif current_ref == "Custom":
+            # Transient custom selected
+            self.combo_ref.setCurrentText("Custom")
+            ref_data = {"delta_ref": 0.0, "sigma_ref": 0.0}
         elif "TMS" in refs:
             self.combo_ref.setCurrentText("TMS")
             ref_data = refs["TMS"]
@@ -622,11 +717,13 @@ class NMRDialog(QDialog):
             self.combo_ref.setCurrentText(first_ref)
             ref_data = refs[first_ref]
         else:
+            # Should be Custom default
+            self.combo_ref.setCurrentText("Custom")
             ref_data = {"delta_ref": 0.0, "sigma_ref": 0.0}
         
         # Update internal values
-        self.delta_ref = ref_data["delta_ref"]
-        self.sigma_ref = ref_data["sigma_ref"]
+        self.delta_ref = ref_data.get("delta_ref", 0.0)
+        self.sigma_ref = ref_data.get("sigma_ref", 0.0)
         
         # Update spinboxes (these updates won't trigger recalc since we blocked combo signals)
         self.spin_delta_ref.blockSignals(True)
@@ -635,6 +732,11 @@ class NMRDialog(QDialog):
         self.spin_sigma_ref.setValue(self.sigma_ref)
         self.spin_delta_ref.blockSignals(False)
         self.spin_sigma_ref.blockSignals(False)
+
+        # Only allow editing if "Custom" is selected
+        is_custom = (self.combo_ref.currentText() == "Custom")
+        self.spin_delta_ref.setEnabled(is_custom)
+        self.spin_sigma_ref.setEnabled(is_custom)
         
         # Re-enable combo signals
         self.combo_ref.blockSignals(False)
@@ -643,6 +745,10 @@ class NMRDialog(QDialog):
         """Handle reference standard change"""
         current_nucleus = self.current_nucleus
         if current_nucleus == "All":
+            # Force 0,0 for All view
+            self.delta_ref = 0.0
+            self.sigma_ref = 0.0
+            self.recalc()
             return
         
         # Map atom symbol to nucleus key
@@ -662,6 +768,11 @@ class NMRDialog(QDialog):
         self.spin_sigma_ref.setValue(self.sigma_ref)
         self.spin_delta_ref.blockSignals(False)
         self.spin_sigma_ref.blockSignals(False)
+        
+        # Only allow editing if "Custom" is selected
+        is_custom = (ref_name == "Custom")
+        self.spin_delta_ref.setEnabled(is_custom)
+        self.spin_sigma_ref.setEnabled(is_custom)
         
         self.recalc()
     
@@ -699,21 +810,98 @@ class NMRDialog(QDialog):
         ref_name, nucleus_data = dialog.get_reference_data()
         
         # Add to standards for each nucleus
-        for nucleus, values in nucleus_data.items():
+        for raw_nucleus, values in nucleus_data.items():
+            # Ensure we use the standardized key (e.g. "H" -> "1H")
+            nucleus = self.get_nucleus_key(raw_nucleus)
+            
             if nucleus not in self.reference_standards:
                 self.reference_standards[nucleus] = {}
             self.reference_standards[nucleus][ref_name] = values
         
-        # Update current UI if we added a reference for the current nucleus
-        current_nucleus = self.current_nucleus
-        if current_nucleus != "All" and current_nucleus in nucleus_data:
-            self.update_reference_combo()
-            self.combo_ref.setCurrentText(ref_name)
-        
         self.save_settings()
+        
+        # If we are in "All" mode, switch to the specific nucleus of the added reference
+        # This prevents the reference from being hidden by the "All" restriction ("No Reference" only)
+        if self.current_nucleus == "All" and nucleus_data:
+             # Pick the first nucleus added (e.g. "1H" or "H")
+             first_raw = list(nucleus_data.keys())[0]
+             # Get the key used for buttons (e.g. "H" or "1H") - keys in nucleus_buttons usually match atom symbols
+             # We should try to find the matching button.
+             target_btn_key = None
+             
+             # Try standardized key first
+             std_key = self.get_nucleus_key(first_raw) 
+             if std_key in self.nucleus_buttons:
+                 target_btn_key = std_key
+             elif first_raw in self.nucleus_buttons:
+                 target_btn_key = first_raw
+             
+             if target_btn_key:
+                 self.nucleus_buttons[target_btn_key].setChecked(True)
+                 # Manually trigger the mode change handler since setChecked might not if via code (depends on signal)
+                 # But usually the group handles it. Let's explicitly call the update to be safe.
+                 self.current_nucleus = target_btn_key
+        
+        # Force UI update
+        self.update_reference_combo()
+        
+        # Select the new reference
+        # Now that we switched inputs (if we were in All), this should work
+        self.combo_ref.setCurrentText(ref_name)
         
         QMessageBox.information(self, "Success", 
                               f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.")
+
+    def delete_custom_reference(self):
+        """Delete currently selected custom reference"""
+        if not hasattr(self, 'current_nucleus') or not self.current_nucleus:
+            return
+
+        current_nucleus = self.get_nucleus_key(self.current_nucleus) if self.current_nucleus != "All" else "1H"
+        current_ref = self.combo_ref.currentText()
+        
+        if not current_ref:
+            return
+
+        # Check if it is a built-in standard
+        default_standards = {
+            "1H": ["TMS", "CDCl3", "DMSO-d6"],
+            "13C": ["TMS", "CDCl3", "DMSO-d6"],
+            "15N": ["CH3NO2", "NH3"],
+            "31P": ["H3PO4 (85%)"],
+            "19F": ["CFCl3"]
+        }
+        
+        # Also check hardcoded defaults in save_settings to be safe
+        is_default = False
+        if current_nucleus in default_standards and current_ref in default_standards[current_nucleus]:
+            is_default = True
+        
+        # Prevent deletion of "Custom" placeholder AND "No Reference"
+        if current_ref in ["Custom", "No Reference"]:
+            is_default = True
+            
+        if is_default:
+            QMessageBox.warning(self, "Cannot Delete", 
+                              f"'{current_ref}' is a built-in standard and cannot be deleted.")
+            return
+
+        # Confirm deletion
+        reply = QMessageBox.question(self, "Confirm Deletion",
+                                   f"Are you sure you want to delete custom reference '{current_ref}'?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Remove from storage
+            if current_nucleus in self.reference_standards:
+                if current_ref in self.reference_standards[current_nucleus]:
+                    del self.reference_standards[current_nucleus][current_ref]
+                    self.save_settings()
+                    self.update_reference_combo()
+                    QMessageBox.information(self, "Deleted", f"Reference '{current_ref}' removed.")
+                else:
+                    # Should not happen if UI is consistent
+                    QMessageBox.warning(self, "Error", "Reference not found in storage.")
     
     def on_spectrum_settings_change(self):
         """Handle spectrum visualization parameter changes"""
@@ -1023,12 +1211,8 @@ class NMRDialog(QDialog):
         if self.show_all_mode:
             return
 
-        # Check for 3D Measurement Mode (treated as "3D Select Mode" by user)
-        # If enabled in main display, disable selection in graph per user request
-        if hasattr(self.parent_dlg, 'mw'):
-            mw = self.parent_dlg.mw
-            if getattr(mw, 'measurement_mode', False):
-                return
+        # Remove blocking check for measurement mode
+        # User confirmed graph should be clickable and syncing should work.
         
         # Get click position
         click_x = event.xdata
@@ -1052,8 +1236,13 @@ class NMRDialog(QDialog):
         
         if peak_idx < len(self.current_shifts):
             if not is_multi:
-                # Normal click: Select only this peak
-                self.selected_peak_indices = {peak_idx}
+                # Normal click
+                if len(self.selected_peak_indices) == 1 and peak_idx in self.selected_peak_indices:
+                    # User clicked the ONLY selected peak -> Toggle OFF (Deselect)
+                    self.selected_peak_indices = set()
+                else:
+                    # New peak, or switching from multi-selection -> Select ONLY this peak
+                    self.selected_peak_indices = {peak_idx}
             else:
                 # Shift or Ctrl + Click: Toggle selection
                 if peak_idx in self.selected_peak_indices:
@@ -1094,34 +1283,35 @@ class NMRDialog(QDialog):
         
         # 3. Synchronize with Main Window
         if hasattr(self.parent_dlg, 'mw'):
-             mw = self.parent_dlg.mw
-             
-             # Draw independent Yellow highlights for ALL atoms in the selected groups
-             # This satisfies "highlight all atoms related"
-             self.draw_custom_nmr_highlights_3d(all_peak_indices)
+            mw = self.parent_dlg.mw
+            
+            # If this is a sync FROM 3D (user clicked in viewer), we should NOT clear the 3D selection!
+            # We only clear it if the user clicked in the Graph (internal sync), to replace Green with Yellow.
+            if not is_external_sync:
+                # Ensure we don't have double spheres (Green + Yellow).
+                # We clear the global selection so ONLY our internal Yellow spheres are visible.
+                if hasattr(mw, 'selected_atoms_3d'):
+                    mw.selected_atoms_3d.clear()
+                
+                # CRITICAL: Update our sync tracker so the polling loop knows WE did this
+                # and doesn't interpret the empty set as a user unselection.
+                self._last_synced_mw_selection = frozenset()
 
-             if hasattr(mw, 'selected_atoms_3d') and not is_external_sync:
-                  # ONLY "sync back" the selection set (Green) if we are initiating 
-                  # from the graph. If we are polling (3D -> Graph), we must NOT
-                  # expand the selection set or unselection will break.
-                  if isinstance(mw.selected_atoms_3d, set):
-                      mw.selected_atoms_3d.clear()
-                      mw.selected_atoms_3d.update(all_peak_indices)
-                  else:
-                      mw.selected_atoms_3d = set(all_peak_indices)
-                  
-                  # Trigger MW display update (Green highlights)
-                  if hasattr(mw, 'update_3d_selection_display'):
-                      mw.update_3d_selection_display()
-                  elif hasattr(mw, 'update_selection_visuals'):
-                      mw.update_selection_visuals()
+                # Sync to MW if we are the originator (internal sync)
+                if hasattr(mw, 'update_3d_selection_display'):
+                    mw.update_3d_selection_display()
+                elif hasattr(mw, 'update_selection_visuals'):
+                    mw.update_selection_visuals()
 
-        # Render once after all labels added
-        if hasattr(self.parent_dlg, 'mw') and hasattr(self.parent_dlg.mw, 'plotter'):
-            try:
+            # Draw yellow highlights for NMR selection
+            self.draw_custom_nmr_highlights_3d(all_peak_indices)
+
+            # Debug print to confirming highlighting path is taken
+            # print(f"Highlighting {len(self.selected_peak_indices)} peaks with {len(atom_coords)} atoms")
+            
+            # Render once after all labels added
+            if hasattr(self.parent_dlg.mw, 'plotter'):
                 self.parent_dlg.mw.plotter.render()
-            except:
-                pass
     
     def add_atom_label(self, atom_idx, atom_sym):
         """Add a single atom label to 3D viewer"""
@@ -1175,9 +1365,11 @@ class NMRDialog(QDialog):
         # Clear 3D labels
         self.clear_atom_labels()
         
-        # Also clear 3D selection in main window
+        # [Commented out to avoid doubled spheres]
         if hasattr(self.parent_dlg, 'mw'):
             mw = self.parent_dlg.mw
+            # We clear mw.selected_atoms_3d to avoid greenish spheres from "polluting" the view
+            # The NMR dialog handles its own yellow highlights (internal logic)
             if hasattr(mw, 'selected_atoms_3d'):
                 mw.selected_atoms_3d.clear()
             
@@ -1201,15 +1393,22 @@ class NMRDialog(QDialog):
             self.selected_peak_indices.clear()
             
             # Select all peaks to show labels
-            for i in range(len(self.displayed_data)):
+            # Use peaks_metadata length if available, otherwise displayed_data as fallback
+            count = len(self.peaks_metadata) if hasattr(self, 'peaks_metadata') else len(self.displayed_data)
+            for i in range(count):
                 self.selected_peak_indices.add(i)
             
             # Update graph with labels only (no red highlights)
             self.highlight_selected_peaks()
+            
+            # For "Show All", we also want to update the 3D view to reflect "All"
+            # or at least clear the specific "red" selection we had.
+            # If we want to show labels for ALL atoms in 3D:
+            self.update_selected_labels()
         else:
             # Disable show all mode
             self.show_all_mode = False
-            # Clear all selections
+            # Clear all selections (graph and 3D)
             self.clear_peak_selection()
     
     def clear_atom_labels(self):

@@ -92,6 +92,7 @@ class CustomReferenceDialog(QDialog):
         
         # Nucleus selector
         combo_nucleus = QComboBox()
+        combo_nucleus.setEditable(True)
         combo_nucleus.addItems(self.existing_nuclei)
         combo_nucleus.setFixedWidth(80)
         row_layout.addWidget(QLabel("Nucleus:"))
