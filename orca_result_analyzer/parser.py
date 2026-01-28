@@ -1,14 +1,16 @@
 import re
-from .logger import Logger 
+# from .logger import Logger 
 
 class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
     def __init__(self):
-        self.logger = Logger.get_logger("OrcaParser")
+        # self.logger = Logger.get_logger("OrcaParser")
+        # print("OrcaParser initialized")
         self.filename = ""
         self.raw_content = ""
         self.lines = []
         self.data = {
+            "scf_traces": [], # List of SCF energy values per iteration
             "converged": False,
             "scf_energy": None,
             "atoms": [],
@@ -43,32 +45,34 @@ class OrcaParser:
         self.parse_gradients()
         self.parse_nmr()
         self.parse_basis_set()
+        self.parse_scf_trace()
         
     def parse_basic(self):
         """Parse basic info: SCF Energy, Convergence, Geometry."""
         for i, line in enumerate(self.lines):
             line = line.strip()
-            if "FINAL SINGLE POINT ENERGY" in line:
+            uu = line.upper()
+            if "FINAL SINGLE POINT ENERGY" in uu:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
                 except: pass
-            if "Total Charge" in line and "Multiplicity" in line:
+            if "TOTAL CHARGE" in uu and "MULTIPLICITY" in uu:
                 try:
                      parts = line.split()
                      self.data["charge"] = int(parts[-4])
                      self.data["mult"] = int(parts[-1])
                 except: pass
-            if "SCF CONVERGED AFTER" in line or "Optimization converged" in line or "HURRAY" in line:
+            if "SCF CONVERGED" in uu or "OPTIMIZATION CONVERGED" in uu or "HURRAY" in uu:
                 self.data["converged"] = True
                 
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+            if "CARTESIAN COORDINATES" in uu and "A.U." not in uu: # Prefer Angstrom
                 # Read geometry
                 self.data["atoms"] = []
                 self.data["coords"] = []
                 curr = i + 2
                 while curr < len(self.lines):
                     l_geo = self.lines[curr].strip()
-                    if not l_geo or "-------" in l_geo: break
+                    if not l_geo or "---" in l_geo: break
                     parts = l_geo.split()
                     if len(parts) >= 4:
                         self.data["atoms"].append(parts[0])
@@ -102,7 +106,7 @@ class OrcaParser:
             for k in range(limit):
                 if idx + k >= len(self.lines): break
                 line = self.lines[idx+k].strip()
-                if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
+                if "CARTESIAN COORDINATES" in line.upper():
                     c_idx = idx + k + 2
                     found_coords = True
                     while c_idx < len(self.lines):
@@ -117,58 +121,166 @@ class OrcaParser:
             return atoms, coords, found_coords
 
         for i, line in enumerate(self.lines):
+            uu_line = line.upper()
             # Scan Step Header
-            if "RELAXED SURFACE SCAN STEP" in line:
+            if "RELAXED SURFACE SCAN STEP" in uu_line:
                 step_idx = 0
                 try: step_idx = int(line.split()[-1])
                 except: pass
                 
-                # Now find Energy and Coords associated with this step
-                # Usually prints "FINAL SINGLE POINT ENERGY" shortly after
-                # But that might be reused by parse_basic (last one).
-                # We need the one IN this block.
+                # Find next step to bound search
+                next_marker = len(self.lines)
+                for m in range(i + 1, len(self.lines)):
+                    if "RELAXED SURFACE SCAN STEP" in self.lines[m].upper():
+                        next_marker = m
+                        break
                 
-                # Let's just grab the NEXT Energy and Coords
-                # Find energy
                 en = 0.0
-                for k in range(i, len(self.lines)):
-                    if "RELAXED SURFACE SCAN STEP" in self.lines[k] and k > i: break # Next step
-                    if "FINAL SINGLE POINT ENERGY" in self.lines[k]:
+                conv_info = {}
+                for k in range(i, next_marker):
+                    uu = self.lines[k].strip().upper()
+                    if "FINAL SINGLE POINT ENERGY" in uu:
                          try: en = float(self.lines[k].split()[-1])
                          except: pass
-                         break
+                    elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
+                        c_idx = k + 1
+                        found_any = False
+                        while c_idx < next_marker and c_idx < k + 20:
+                            cl = self.lines[c_idx].strip()
+                            # Only break on rule if we've already found some data lines
+                            if "---" in cl:
+                                if found_any: break
+                                else: 
+                                    c_idx += 1
+                                    continue
+                            
+                            p = cl.split()
+                            if len(p) >= 4:
+                                s = p[-1]
+                                t = p[-2]
+                                v = p[-3]
+                                n = " ".join(p[:-3]).strip().lower()
+                                if n and n != "item": # Skip header line
+                                    conv_info[n] = {
+                                        'value': v,
+                                        'tolerance': t,
+                                        'converged': s
+                                    }
+                                    found_any = True
+                            c_idx += 1
+
+                # Find matching gradients for this step
+                step_grads = []
+                candidates = []
+                for g_block in self.data.get("all_gradients", []):
+                    if g_block['line'] >= i and g_block['line'] < next_marker:
+                        candidates.append(g_block['grads'])
                 
+                if candidates:
+                    step_grads = candidates[-1]
+                # Fallback: if not found between markers, maybe it's slightly before the marker? 
+                # Or just use the one closest to the coordinate block.
+
                 atoms, coords, found = read_coords_from(i)
                 if found:
                     self.data["scan_steps"].append({
                         'step': step_idx,
                         'energy': en,
                         'atoms': atoms,
-                        'coords': coords
+                        'coords': coords,
+                        'convergence': conv_info,
+                        'gradients': step_grads
                     })
                     
-            elif "GEOMETRY OPTIMIZATION CYCLE" in line:
+            elif "OPTIMIZATION CYCLE" in uu_line:
                 cycle_idx = 0
-                try: cycle_idx = int(line.split()[-2]) # Cycle 1
+                try: 
+                    parts = line.strip().split()
+                    cycle_idx = int(parts[-1])
                 except: pass
                 
-                # Find Energy
+                # Find next cycle to bound search
+                next_marker = len(self.lines)
+                for m in range(i + 1, len(self.lines)):
+                    uu_m = self.lines[m].upper()
+                    # Termination markers
+                    if "OPTIMIZATION CYCLE" in uu_m:
+                        next_marker = m
+                        break
+                    if "OPTIMIZATION HAS CONVERGED" in uu_m or "OPTIMIZATION HAS RUN OUT OF CYCLES" in uu_m:
+                        next_marker = m
+                        break
+                    if "ORCA TERMINATED NORMALLY" in uu_m:
+                        next_marker = m
+                        break
+
                 en = 0.0
-                for k in range(i, len(self.lines)):
-                    if "GEOMETRY OPTIMIZATION CYCLE" in self.lines[k] and k > i: break
-                    if "FINAL SINGLE POINT ENERGY" in self.lines[k]:
+                conv_info = {}
+                
+                for k in range(i, next_marker):
+                    uu = self.lines[k].strip().upper()
+                    if "FINAL SINGLE POINT ENERGY" in uu:
                          try: en = float(self.lines[k].split()[-1])
                          except: pass
-                         break
-                         
+                    elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
+                        c_idx = k + 1
+                        found_any = False
+                        while c_idx < next_marker and c_idx < k + 25:
+                            cl = self.lines[c_idx].strip()
+                            if not cl:
+                                c_idx += 1
+                                continue
+                            if "---" in cl:
+                                if found_any: break
+                                else:
+                                    c_idx += 1
+                                    continue
+                            
+                            p = cl.split()
+                            if len(p) >= 4:
+                                s = p[-1]
+                                t = p[-2]
+                                v = p[-3]
+                                n = " ".join(p[:-3]).strip().lower()
+                                if n and n != "item":
+                                    conv_info[n] = {
+                                        'value': v,
+                                        'tolerance': t,
+                                        'converged': s
+                                    }
+                                    found_any = True
+                            c_idx += 1
+                
+                # Find matching gradients for this cycle
+                # Gradient block for cycle N is usually printed AFTER the convergence checks of cycle N
+                step_grads = []
+                # Strategy: 
+                # 1. Take the LAST gradient block that appeared before next_marker
+                # 2. But it MUST be at or after the current cycle index (i)
+                candidates = []
+                for g_block in self.data.get("all_gradients", []):
+                    if g_block['line'] >= i and g_block['line'] < next_marker:
+                        candidates.append(g_block['grads'])
+                
+                if candidates:
+                    step_grads = candidates[-1] # Usually only one, but take the last if multiple
+                
+                # Special case: if we are at cycle N, and the gradient was printed just BEFORE the header?
+                # This doesn't usually happen in ORCA, but for robustness we could check the previous few lines.
+                
+                # If we still don't have gradients, look slightly further back? 
+                # sometimes printed just before? No, usually after.
+
                 atoms, coords, found = read_coords_from(i)
                 if found:
                      self.data["scan_steps"].append({
                         'step': cycle_idx,
                         'energy': en,
                         'atoms': atoms,
-                        'coords': coords
-                    })
+                        'coords': coords,
+                        'convergence': conv_info,
+                        'gradients': step_grads
+                     })
         
     def parse_mo_coeffs(self):
         self.data["mo_coeffs"] = {} # mo_idx -> { 'coeffs': list, 'energy': float, 'occ': float, 'spin': 'alpha'/'beta' }
@@ -182,11 +294,12 @@ class OrcaParser:
         
         start_indices = []
         for i, line in enumerate(self.lines):
-            if "MOLECULAR ORBITALS" in line and "------------------" in self.lines[i+1]:
+            uu = line.upper()
+            if "MOLECULAR ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
                 start_indices.append((i, "alpha"))
-            elif "SPIN UP ORBITALS" in line and "----------------" in self.lines[i+1]:
+            elif "SPIN UP ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
                 start_indices.append((i, "alpha"))
-            elif "SPIN DOWN ORBITALS" in line and "------------------" in self.lines[i+1]:
+            elif "SPIN DOWN ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
                 start_indices.append((i, "beta"))
                 
         if not start_indices: return
@@ -288,8 +401,6 @@ class OrcaParser:
                                       # Filter small coeffs to save space/time? 
                                       # Maybe keep all for accuracy?
                                       # Original code had > 0.01 filter.
-                                      # Let's keep filter but maybe lower threshold if needed.
-                                      # Actually, user complained "nothing visualized". 
                                       # If filter is too high? 0.01 is reasonable for isosurface.
                                       # But let's lower to 1e-4 just in case.
                                       # Or remove filter. 
@@ -320,7 +431,7 @@ class OrcaParser:
         
         for name, header in blocks.items():
             for i, line in enumerate(self.lines):
-                if header in line:
+                if header.upper() in line.upper():
                     # Found block
                     # Skip until "-----------------"
                     # Then read
@@ -383,77 +494,75 @@ class OrcaParser:
         self.parse_gradients()
 
     def parse_gradients(self):
-        """Parse Cartesian Gradients (takes the last occurrence as the current forces)"""
-        self.data["gradients"] = []
+        """Parse all Cartesian Gradient blocks found in the file."""
+        self.data["gradients"] = [] # The last one (default)
+        self.data["all_gradients"] = [] # List of {line: int, grads: []}
         
-        # Find the last block
-        last_start = -1
+        gradient_starts = []
         for i, line in enumerate(self.lines):
-            # Match "CARTESIAN GRADIENT" (singular/plural) at START of line
-            # "Norm of the Cartesian gradient" should NOT match.
             stripped = line.strip().upper()
-            if stripped.startswith("CARTESIAN GRADIENT") and "-------" not in line:
-                last_start = i
+            if "CARTESIAN GRADIENT" in stripped and "NORM" not in stripped:
+                gradient_starts.append(i)
         
-        if last_start == -1: return
+        if not gradient_starts: return
         
-        curr = last_start + 1
-        # Skip header separators or empty lines until data matches format
-        while curr < len(self.lines):
-            line = self.lines[curr].strip()
-            # Check if it looks like a data line: Int Sym ...
-            parts = line.split()
-            if len(parts) >= 3 and parts[0].isdigit():
-                break # Found data start
-            curr += 1
-            if curr > last_start + 10: break # Safety limit
+        for start_idx in gradient_starts:
+            block_grads = []
+            curr = start_idx + 1
+            # Skip header separators or empty lines until data matches format
+            found_data = False
+            while curr < len(self.lines) and curr < start_idx + 15:
+                line = self.lines[curr].strip()
+                parts = line.split()
+                if len(parts) >= 3 and parts[0].isdigit():
+                    found_data = True
+                    break 
+                curr += 1
+            
+            if not found_data: continue
 
-        while curr < len(self.lines):
-            line = self.lines[curr].strip()
-            if "-------" in line or "Difference to" in line: break
-            if not line: break # Empty line usually ends block
-            
-            parts = line.split()
-            
-            # Format: 0 C : X Y Z (len 6) or 0 C X Y Z (len 5)
-            # ORCA output usually 1-indexed for atoms in gradient block?
-            # Example:    1   C   :    0.002 ...
-            if len(parts) >= 5:
-                try:
-                    # Valid data line
-                    if parts[2] == ":":
-                        if len(parts) >= 6:
-                            idx = int(parts[0]) - 1 # Convert 1-based to 0-based
+            while curr < len(self.lines):
+                line = self.lines[curr].strip()
+                if "-------" in line or "Difference to" in line: break
+                if not line: break 
+                
+                parts = line.split()
+                # Format: 0 C : X Y Z (6 parts) or 1 C X Y Z (5 parts)
+                if len(parts) >= 5:
+                    try:
+                        if parts[2] == ":":
+                            if len(parts) >= 6:
+                                idx_raw = int(parts[0])
+                                sym = parts[1]
+                                vx, vy, vz = float(parts[3]), float(parts[4]), float(parts[5])
+                                # Usually 1-indexed
+                                idx = idx_raw - 1 if idx_raw > 0 else 0
+                            else: 
+                                curr += 1
+                                continue
+                        else:
+                            idx_raw = int(parts[0])
                             sym = parts[1]
-                            vx, vy, vz = float(parts[3]), float(parts[4]), float(parts[5])
-                        else: 
-                            curr += 1
-                            continue
-                    else:
-                        idx = int(parts[0])
-                        # If index is 0-based in file? Usually 0 C : ... in some formats, 1 C : ... in others.
-                        # Benzene-opt.out uses 1-based.
-                        # Let's assume input matches atoms array.
-                        # If 1-based, index 0 won't exist usually.
-                        # Logic: if idx > 0 and len(atoms) matches, maybe -1 needed.
-                        # Safest is to append? But we need atom_idx for mapping.
-                        # Let's rely on order.
-                        if idx > 0: idx -= 1
-                        
-                        sym = parts[1]
-                        vx, vy, vz = float(parts[2]), float(parts[3]), float(parts[4])
-                        
-                    self.data["gradients"].append({
-                        'atom_idx': idx, 
-                        'atom_sym': sym, 
-                        'vector': [vx, vy, vz]
-                    })
-                except: pass
-            elif len(parts) > 0:
-                 # Non-empty line that doesn't match format? Could be end of block garbage or "Difference to..."
-                 if "Difference" in line: break
+                            vx, vy, vz = float(parts[2]), float(parts[3]), float(parts[4])
+                            idx = idx_raw - 1 if idx_raw > 0 else 0
+                            
+                        block_grads.append({
+                            'atom_idx': idx, 
+                            'atom_sym': sym, 
+                            'vector': [vx, vy, vz]
+                        })
+                    except: pass
+                curr += 1
             
-            curr += 1
+            if block_grads:
+                self.data["all_gradients"].append({
+                    'line': start_idx,
+                    'grads': block_grads
+                })
+        
+        if self.data["all_gradients"]:
+            # Set the last one as the default "gradients"
+            self.data["gradients"] = self.data["all_gradients"][-1]['grads']
 
     def parse_dipole(self):
         # Look for "Total Dipole Moment"
@@ -462,7 +571,8 @@ class OrcaParser:
         
         candidates = []
         for i, line in enumerate(self.lines):
-            if "Total Dipole Moment" in line and ":" in line:
+            uu = line.upper()
+            if "TOTAL DIPOLE MOMENT" in uu and ":" in line:
                  candidates.append(i)
                  
         if not candidates: return
@@ -495,275 +605,10 @@ class OrcaParser:
 
 
         
-    def parse_basis_set(self):
-        self.data["basis_set_shells"] = [] # List of {type, center, exps, coeffs}
-        
-        # 1. Parse GTO Definitions
-        # Look for "BASIS SET IN INPUT FORMAT"
-        start_idx = -1
-        for i, line in enumerate(self.lines):
-            if "BASIS SET IN INPUT FORMAT" in line:
-                start_idx = i
-                break
-        
-        if start_idx == -1: return
-        
-        gto_defs = {} # Sym -> List of shelldefs {type: 'S', exps: [], coeffs: []}
-        
-        curr = start_idx + 2
-        current_sym = None
-        current_shells = []
-        
-        # Helper to map type string to int
-        type_map = {"S": 0, "P": 1, "D": 2, "F": 3, "G": 4} 
-        
-        while curr < len(self.lines):
-            line = self.lines[curr].strip()
-            if "Basis set for element" in line:
-                 # "Basis set for element : C"
-                 pass # Just info, usually followed by NewGTO
-            
-            if line.startswith("NewGTO"):
-                parts = line.split()
-                if len(parts) >= 2:
-                    current_sym = parts[1]
-                    current_shells = []
-            
-            elif line.startswith("EndGTO"):
-                if current_sym:
-                    gto_defs[current_sym] = current_shells
-                    current_sym = None
-                    
-            elif line.startswith("-----"): # End of block
-                 break
-            
-            elif current_sym is not None:
-                # Inside a GTO block
-                # Format:
-                # S   3
-                #  1.23   0.45
-                #  ...
-                parts = line.split()
-                if len(parts) >= 2 and parts[0] in type_map:
-                    # New shell header: Type  NPrims
-                    stype_str = parts[0]
-                    n_prim = int(parts[1])
-                    
-                    stype = type_map[stype_str]
-                    exps = []
-                    coeffs = []
-                    
-                    # Read primitives
-                    for _ in range(n_prim):
-                        curr += 1
-                        if curr >= len(self.lines): break
-                        pline = self.lines[curr].strip()
-                        pparts = pline.split()
-                        # Often: Index Exp Coeff (ORCA sometimes adds index 1, 2...)
-                        # Or just: Exp Coeff
-                        # Check format.
-                        # ORCA input format: "  1   123.45   0.123"
-                        try:
-                            if len(pparts) == 3:
-                                exps.append(float(pparts[1]))
-                                coeffs.append(float(pparts[2]))
-                            elif len(pparts) == 2:
-                                exps.append(float(pparts[0]))
-                                coeffs.append(float(pparts[1]))
-                        except: pass
-                    
-                    current_shells.append({
-                        "type": stype,
-                        "exps": exps,
-                        "coeffs": coeffs
-                    })
-            
-            curr += 1
-
-        # 2. Expand to full molecule (Atom Centers)
-        # We need self.data["atoms"] and self.data["coords"]
-        if not self.data["atoms"] or not self.data["coords"]:
-             # Maybe geometry parsing failed or hasn't run? 
-             # It should have run in parse_basic -> parse_all sequence.
-             return
-
-        # Unit conversion: Parser stores coords in Angstrom.
-        # MO Engine expects Bohr (usually).
-        # Let's verify what `mo_engine` does. 
-        # `mo_engine` says "atoms_coords: list/array of (x,y,z) in Angstrom" for CalcWorker init,
-        # BUT `BasisSetEngine` expects "center: [x, y, z] (BOHR)".
-        # CalcWorker does conversion: coords_bohr = self.atoms_coords * ANG_TO_BOHR.
-        # But CalcWorker does NOT pass `shells` to Engine. It passes `mo_coeffs` and generic atoms.
-        # WAIT. `mo_engine` needs `shells` initialized in `BasisSetEngine`.
-        # `CalcWorker` takes `engine` as argument.
-        # So WE need to initialize `BasisSetEngine` with shelsl in BOHR.
-        
-        BOHR_TO_ANG = 0.529177249
-        ANG_TO_BOHR = 1.0 / BOHR_TO_ANG
-        
-        full_shells = []
-        
-        for idx, sym in enumerate(self.data["atoms"]):
-            # Look up def for this symbol
-            # ORCA might have specific basis for specific atoms "H:1"?
-            # For now assume mostly element based.
-            
-            defs = gto_defs.get(sym)
-            if not defs:
-                # Try checking if symbol has numbers? "0C"? 
-                # Parser usually cleans sym.
-                continue
-                
-            coord_ang = self.data["coords"][idx]
-            coord_bohr = [c * ANG_TO_BOHR for c in coord_ang]
-            
-            import numpy as np
-            
-            for sh_def in defs:
-                full_shells.append({
-                    "type": sh_def["type"],
-                    "center": np.array(coord_bohr),
-                    "exps": np.array(sh_def["exps"]),
-                    "coeffs": np.array(sh_def["coeffs"])
-                })
-        
-        self.data["basis_set_shells"] = full_shells
-
-
-
-        self.data["scan_steps"] = [] # List of {step: int, energy: float, atoms: [], coords: []}
-        
-        # Two cases: 
-        # 1. "Relaxed Surface Scan" where ORCA prints "The current geometry is:" after each step.
-        # 2. Sequential optimization steps (e.g. trajectory) where getting every "CARTESIAN COORDINATES" block helps.
-        
-        # Strategy:
-        # Find "Relaxed Surface Scan" header to confirm it IS a scan?
-        # Or just collect all Geometries + Energies if multiple exist?
-        
-        # Let's try to collect all "CARTESIAN COORDINATES (ANGSTROEM)" blocks.
-        # But we need corresponding Energy.
-        
-        # ORCA "Relaxed Surface Scan" often prints:
-        # "The current geometry is:" 
-        # followed by XYZ format.
-        
-        is_scan = False
-        for line in self.lines:
-            if "Relaxed Surface Scan" in line:
-                is_scan = True
-                break
-                
-        # Even if not explicit scan, maybe trajectory?
-        # Let's look for "CARTESIAN COORDINATES (ANGSTROEM)" and "FINAL SINGLE POINT ENERGY"
-        # The order matters. Usually Geometry then Energy or vice versa in output stream.
-        
-        # New approach:
-        # Iterate and collect blocks.
-        
-        steps = []
-        
-        current_coords = []
-        current_atoms = []
-        
-        # Regex or simple search?
-        # ORCA 5:
-        # ---------------------------------
-        # CARTESIAN COORDINATES (ANGSTROEM)
-        # ---------------------------------
-        # ... atoms ...
-        #
-        # ...
-        # FINAL SINGLE POINT ENERGY ...
-        
-        # But in a scan, there are multiple.
-        
-        coord_indices = []
-        for i, line in enumerate(self.lines):
-            if "CARTESIAN COORDINATES (ANGSTROEM)" in line:
-                coord_indices.append(i)
-                
-        # Parse each coordinate block
-        candidates = []
-        for start_idx in coord_indices:
-            atoms = []
-            coords = []
-            curr = start_idx + 2
-            while curr < len(self.lines):
-                line = self.lines[curr].strip()
-                if not line: 
-                    curr += 1
-                    continue
-                parts = line.split()
-                if len(parts) >= 4: # Sym X Y Z
-                    try:
-                        sym = parts[0]
-                        # Check if first part is valid atom or just text
-                        if not sym[0].isalpha(): break # Header or separator
-                        
-                        x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
-                        atoms.append(sym)
-                        coords.append((x, y, z))
-                    except: break
-                else:
-                    break
-                curr += 1
-            
-            if atoms:
-                 candidates.append({'atoms': atoms, 'coords': coords, 'line': start_idx, 'energy': None})
-                 
-        # Now try to attach energies.
-        # Usually Energy is printed lines AFTER coords or BEFORE?
-        # In optimization: Coords printed, then "FINAL SINGLE POINT ENERGY" follows.
-        
-        # For each candidate, search forward for Energy until next candidate or end.
-        
-        for k in range(len(candidates)):
-            cand = candidates[k]
-            start_search = cand['line']
-            end_search = candidates[k+1]['line'] if k + 1 < len(candidates) else len(self.lines)
-            
-            # Search for energy in [start_search, end_search]
-            best_energy = None
-            
-            # ORCA Scan often prints "FINAL SINGLE POINT ENERGY" at end of step.
-            # But there might be intermediate SCF energies.
-            # We want the "Converged" one usually? 
-            # "Optimization Converged" usually precedes the FINAL energy printout in that cycle.
-            
-            # Search logic: find last "FINAL SINGLE POINT ENERGY" in this block?
-            # Or "Total Energy       :"
-            
-            for r in range(start_search, end_search):
-                line = self.lines[r]
-                if "FINAL SINGLE POINT ENERGY" in line:
-                    try:
-                        val = float(line.split()[-1])
-                        best_energy = val
-                    except: pass
-            
-            cand['energy'] = best_energy
-            
-        # Filter valid steps (must have energy? or at least coords)
-        # If it's a scan, we expect changing energies.
-        
-        valid_steps = [c for c in candidates if c['energy'] is not None]
-        
-        # If too few (just 1), maybe just a single point calc?
-        # But user wants Scan Graph.
-        if len(valid_steps) > 1:
-            for i, s in enumerate(valid_steps):
-                self.data["scan_steps"].append({
-                    "step": i+1,
-                    "energy": s['energy'],
-                    "atoms": s['atoms'],
-                    "coords": s['coords']
-                })
-
+    def parse_charges(self):
         self.data["charges"] = {} # type -> list of {atom_idx, atom_sym, charge}
         
         # MULLIKEN ATOMIC CHARGES
-
         mulliken_start = -1
         # LOEWDIN ATOMIC CHARGES
         loewdin_start = -1
@@ -823,7 +668,7 @@ class OrcaParser:
         summary_start = -1
         # Try to find the summary table first
         for i, line in enumerate(self.lines):
-            if "CHEMICAL SHIELDING SUMMARY (ppm)" in line:
+            if "CHEMICAL SHIELDING SUMMARY (PPM)" in line.upper():
                 summary_start = i
                 
         if summary_start != -1:
@@ -878,12 +723,13 @@ class OrcaParser:
         start_idx = -1
         
         for i, line in enumerate(self.lines):
-            if "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
+            uu = line.upper()
+            if "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in uu:
                 start_idx = i
                 found_block = True
                 break
             # Fallback for simpler header
-            if "ABSORPTION SPECTRUM" in line and "ELECTRIC DIPOLE" in line and not found_block:
+            if "ABSORPTION SPECTRUM" in uu and "ELECTRIC DIPOLE" in uu and not found_block:
                 start_idx = i
                 found_block = True
                 break
@@ -1041,7 +887,7 @@ class OrcaParser:
         # Look for "ORBITAL ENERGIES"
         start_line = -1
         for i, line in enumerate(self.lines):
-            if "ORBITAL ENERGIES" in line:
+            if "ORBITAL ENERGIES" in line.upper():
                 start_line = i
         
         if start_line != -1:
@@ -1083,10 +929,10 @@ class OrcaParser:
         self.data["thermal"] = {}
         # ORCA Thermochem block
         # Look for "THERMOCHEMISTRY AT 298.15 K"
-        
+    
         start_line = -1
         for i, line in enumerate(self.lines):
-            if "THERMOCHEMISTRY AT" in line:
+            if "THERMOCHEMISTRY AT" in line.upper():
                 start_line = i
                 
         if start_line != -1:
@@ -1175,7 +1021,7 @@ class OrcaParser:
         # 1. Frequencies
         freq_start = -1
         for i, line in enumerate(self.lines):
-            if "VIBRATIONAL FREQUENCIES" in line:
+            if "VIBRATIONAL FREQUENCIES" in line.upper():
                 freq_start = i
                 # Don't break immediately, could be multiple? usually last one matters or first?
                 # In optimization + freq, it's at end.
@@ -1220,7 +1066,7 @@ class OrcaParser:
         # 2. IR Spectrum
         ir_start = -1
         for i, line in enumerate(self.lines):
-            if "IR SPECTRUM" in line:
+            if "IR SPECTRUM" in line.upper():
                 ir_start = i
         
         if ir_start != -1:
@@ -1244,7 +1090,7 @@ class OrcaParser:
         # 3. Raman
         raman_start = -1
         for i, line in enumerate(self.lines):
-            if "RAMAN SPECTRUM" in line:
+            if "RAMAN SPECTRUM" in line.upper():
                 raman_start = i
                 
         if raman_start != -1:
@@ -1269,7 +1115,8 @@ class OrcaParser:
         # 4. Normal Modes
         modes_start = -1
         for i, line in enumerate(self.lines):
-            if "NORMAL MODES" in line:
+            uu = line.upper()
+            if "NORMAL MODES" in uu:
                 modes_start = i
         
         if modes_start != -1 and self.data["atoms"]:
@@ -1323,7 +1170,7 @@ class OrcaParser:
         # Look for "ORBITAL ENERGIES" section
         start_idx = -1
         for i, line in enumerate(self.lines):
-            if "ORBITAL ENERGIES" in line and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            if "ORBITAL ENERGIES" in line.upper() and i+1 < len(self.lines) and "---" in self.lines[i+1]:
                 start_idx = i
                 break
         
@@ -1360,233 +1207,236 @@ class OrcaParser:
             
             curr += 1
     
-    def parse_hessian_file(self, filepath):
-        """Parse ORCA Hessian (.hess) file to extract force constants"""
-        try:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
-        except Exception as e:
-            print(f"Error reading Hessian file: {e}")
-            return None
+    # COMMENTED OUT: Hessian file parsing no longer needed
+    # Force analysis now uses only output file gradient data
+    # def parse_hessian_file(self, filepath):
+    #     """Parse ORCA Hessian (.hess) file to extract force constants"""
+    #     try:
+    #         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+    #             content = f.read()
+    #     except Exception as e:
+    #         print(f"Error reading Hessian file: {e}")
+    #         return None
+    #     
+    #     lines = content.splitlines()
+    #     hessian_data = {
+    #         "matrix": [],
+    #         "frequencies": [],
+    #         "normal_modes": [],
+    #         "atoms": [],
+    #         "coords": [],
+    #         "gradient_vec": []
+    #     }
+    #     
+    #     i = 0
+    #     while i < len(lines):
+    #         line = lines[i].strip()
+    #         
+    #         # Parse Hessian matrix
+    #         if line == "$hessian":
+    #             i += 1
+    #             if i < len(lines):
+    #                 n_coords = int(lines[i].strip())
+    #                 i += 1
+    #                 
+    #                 # Read matrix in blocks
+    #                 matrix = [[] for _ in range(n_coords)]
+    #                 
+    #                 while i < len(lines):
+    #                     line = lines[i].strip()
+    #                     if line.startswith("$"):
+    #                         break
+    #                     
+    #                     parts = line.split()
+    #                     if len(parts) > 1 and parts[0].isdigit():
+    #                         # Check if it's a header line (all integers)
+    #                         is_header = True
+    #                         try:
+    #                             for p in parts:
+    #                                 if "." in p: # Floats usually have decimal points in ORCA
+    #                                     is_header = False
+    #                                     break
+    #                                 # Attempt to parse as float? ORCA floats are 1.23E-01
+    #                                 # Integers don't have '.' usually
+    #                         except:
+    #                             pass
+    #                             
+    #                         if is_header:
+    #                             # Double check: try parsing all as ints
+    #                             try:
+    #                                 [int(x) for x in parts]
+    #                                 # It is a header, skip it
+    #                                 i += 1
+    #                                 continue
+    #                             except ValueError:
+    #                                 # Not all ints, so it's data
+    #                                 pass
+    #
+    #                         row_idx = int(parts[0])
+    #                         values = [float(x) for x in parts[1:]]
+    #                         if row_idx < len(matrix):
+    #                             matrix[row_idx].extend(values)
+    #                     
+    #                     i += 1
+    #                 
+    #                 hessian_data["matrix"] = matrix
+    #         
+    #         # Parse frequencies
+    #         elif line == "$vibrational_frequencies":
+    #             i += 1
+    #             if i < len(lines):
+    #                 n_freq = int(lines[i].strip())
+    #                 i += 1
+    #                 
+    #                 frequencies = []
+    #                 for _ in range(n_freq):
+    #                     if i >= len(lines):
+    #                         break
+    #                     parts = lines[i].strip().split()
+    #                     if len(parts) >= 2:
+    #                         frequencies.append(float(parts[1]))
+    #                     i += 1
+    #                 
+    #                 hessian_data["frequencies"] = frequencies
+    #         
+    #         # Parse normal modes
+    #         elif line == "$normal_modes":
+    #             i += 1
+    #             if i < len(lines):
+    #                 dims = lines[i].strip().split() # rows cols
+    #                 if len(dims) >= 2:
+    #                     n_rows = int(dims[0]) # 3 * n_atoms
+    #                     n_cols = int(dims[1]) # n_freq
+    #                     i += 1
+    #                     
+    #                     # Initialize normal modes matrix (n_rows x n_cols)
+    #                     # We want to store per mode, so list of n_cols vectors of length n_rows
+    #                     modes = [[] for _ in range(n_cols)]
+    #                     
+    #                     while i < len(lines):
+    #                         line = lines[i].strip()
+    #                         if line.startswith("$"):
+    #                             break
+    #                         
+    #                         # Block headers: 0 1 2 3 ...
+    #                         parts = line.split()
+    #                         if not parts:
+    #                             i += 1
+    #                             continue
+    #                             
+    #                         # Check if header line (likely integer indices)
+    #                         try:
+    #                             # If all are integers, it's a header line
+    #                             col_indices = [int(x) for x in parts]
+    #                             i += 1 # Move to data
+    #                             
+    #                             # Read data rows for this block
+    #                             for r in range(n_rows):
+    #                                 if i >= len(lines): break
+    #                                 line = lines[i].strip()
+    #                                 parts = line.split()
+    #                                 # First part is row index
+    #                                 if len(parts) > 1:
+    #                                     # row_idx = int(parts[0])
+    #                                     vals = [float(x) for x in parts[1:]]
+    #                                     for k, col_idx in enumerate(col_indices):
+    #                                         if col_idx < len(modes):
+    #                                             modes[col_idx].append(vals[k])
+    #                                 i += 1
+    #                         except ValueError:
+    #                             # Not a header line? Should not happen if format is strict
+    #                             i += 1
+    #                     
+    #                     # Reformat to list of vectors (tuples) for each mode
+    #                     # Each mode is list of 3N floats. Convert to list of (x,y,z)
+    #                     formatted_modes = []
+    #                     for m in modes:
+    #                         vecs = []
+    #                         for k in range(0, len(m), 3):
+    #                             if k+2 < len(m):
+    #                                 vecs.append((m[k], m[k+1], m[k+2]))
+    #                         formatted_modes.append(vecs)
+    #                         
+    #                     hessian_data["normal_modes"] = formatted_modes
+    #
+    #         # Parse atoms
+    #         elif line == "$atoms":
+    #             i += 1
+    #             if i < len(lines):
+    #                 n_atoms = int(lines[i].strip())
+    #                 i += 1
+    #                 
+    #                 atoms = []
+    #                 coords = []
+    #                 for _ in range(n_atoms):
+    #                     if i >= len(lines):
+    #                         break
+    #                     parts = lines[i].strip().split()
+    #                     if len(parts) >= 5:
+    #                         atoms.append(parts[0])
+    #                         # Convert Bohr to Angstrom
+    #                         BOHR_TO_ANG = 0.529177249
+    #                         coords.append([
+    #                             float(parts[2]) * BOHR_TO_ANG,
+    #                             float(parts[3]) * BOHR_TO_ANG,
+    #                             float(parts[4]) * BOHR_TO_ANG
+    #                         ])
+    #                     i += 1
+    #                 
+    #                 hessian_data["atoms"] = atoms
+    #                 hessian_data["coords"] = coords
+    #
+    #         # Parse Gradient (Forces)
+    #         elif line == "$gradient":
+    #             i += 1
+    #             if i < len(lines):
+    #                 try:
+    #                     n_grad = int(lines[i].strip())
+    #                     i += 1
+    #                     
+    #                     gradients_vec = []
+    #                     for _ in range(n_grad):
+    #                         if i >= len(lines): break
+    #                         
+    #                         parts = lines[i].strip().split()
+    #                         if not parts:
+    #                             i += 1
+    #                             continue
+    #                             
+    #                         val = 0.0
+    #                         # Robust parsing: Check format "index value" vs "value"
+    #                         if len(parts) >= 2:
+    #                             # Assume "index value" format usually
+    #                             # Check if first part is int
+    #                             try:
+    #                                 # If parts[0] is int, parts[1] is value
+    #                                 idx = int(parts[0])
+    #                                 val = float(parts[1])
+    #                             except ValueError:
+    #                                 # Maybe format is "value value"? Unlikely for gradient (1D)
+    #                                 # Or parts[0] is actually the float value?
+    #                                 try:
+    #                                     val = float(parts[0])
+    #                                 except:
+    #                                     pass
+    #                         elif len(parts) == 1:
+    #                             # Just value
+    #                             try:
+    #                                 val = float(parts[0])
+    #                             except: pass
+    #                             
+    #                         gradients_vec.append(val)
+    #                         i += 1
+    #                     
+    #                     hessian_data["gradient_vec"] = gradients_vec
+    #                 except ValueError:
+    #                      print("Error parsing number of gradients")
+    #                      i += 1
+    #         
+    #         i += 1
+    #     
+    #     return hessian_data
         
-        lines = content.splitlines()
-        hessian_data = {
-            "matrix": [],
-            "frequencies": [],
-            "normal_modes": [],
-            "atoms": [],
-            "coords": [],
-            "gradient_vec": []
-        }
-        
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Parse Hessian matrix
-            if line == "$hessian":
-                i += 1
-                if i < len(lines):
-                    n_coords = int(lines[i].strip())
-                    i += 1
-                    
-                    # Read matrix in blocks
-                    matrix = [[] for _ in range(n_coords)]
-                    
-                    while i < len(lines):
-                        line = lines[i].strip()
-                        if line.startswith("$"):
-                            break
-                        
-                        parts = line.split()
-                        if len(parts) > 1 and parts[0].isdigit():
-                            # Check if it's a header line (all integers)
-                            is_header = True
-                            try:
-                                for p in parts:
-                                    if "." in p: # Floats usually have decimal points in ORCA
-                                        is_header = False
-                                        break
-                                    # Attempt to parse as float? ORCA floats are 1.23E-01
-                                    # Integers don't have '.' usually
-                            except:
-                                pass
-                                
-                            if is_header:
-                                # Double check: try parsing all as ints
-                                try:
-                                    [int(x) for x in parts]
-                                    # It is a header, skip it
-                                    i += 1
-                                    continue
-                                except ValueError:
-                                    # Not all ints, so it's data
-                                    pass
-
-                            row_idx = int(parts[0])
-                            values = [float(x) for x in parts[1:]]
-                            if row_idx < len(matrix):
-                                matrix[row_idx].extend(values)
-                        
-                        i += 1
-                    
-                    hessian_data["matrix"] = matrix
-            
-            # Parse frequencies
-            elif line == "$vibrational_frequencies":
-                i += 1
-                if i < len(lines):
-                    n_freq = int(lines[i].strip())
-                    i += 1
-                    
-                    frequencies = []
-                    for _ in range(n_freq):
-                        if i >= len(lines):
-                            break
-                        parts = lines[i].strip().split()
-                        if len(parts) >= 2:
-                            frequencies.append(float(parts[1]))
-                        i += 1
-                    
-                    hessian_data["frequencies"] = frequencies
-            
-            # Parse normal modes
-            elif line == "$normal_modes":
-                i += 1
-                if i < len(lines):
-                    dims = lines[i].strip().split() # rows cols
-                    if len(dims) >= 2:
-                        n_rows = int(dims[0]) # 3 * n_atoms
-                        n_cols = int(dims[1]) # n_freq
-                        i += 1
-                        
-                        # Initialize normal modes matrix (n_rows x n_cols)
-                        # We want to store per mode, so list of n_cols vectors of length n_rows
-                        modes = [[] for _ in range(n_cols)]
-                        
-                        while i < len(lines):
-                            line = lines[i].strip()
-                            if line.startswith("$"):
-                                break
-                            
-                            # Block headers: 0 1 2 3 ...
-                            parts = line.split()
-                            if not parts:
-                                i += 1
-                                continue
-                                
-                            # Check if header line (likely integer indices)
-                            try:
-                                # If all are integers, it's a header line
-                                col_indices = [int(x) for x in parts]
-                                i += 1 # Move to data
-                                
-                                # Read data rows for this block
-                                for r in range(n_rows):
-                                    if i >= len(lines): break
-                                    line = lines[i].strip()
-                                    parts = line.split()
-                                    # First part is row index
-                                    if len(parts) > 1:
-                                        # row_idx = int(parts[0])
-                                        vals = [float(x) for x in parts[1:]]
-                                        for k, col_idx in enumerate(col_indices):
-                                            if col_idx < len(modes):
-                                                modes[col_idx].append(vals[k])
-                                    i += 1
-                            except ValueError:
-                                # Not a header line? Should not happen if format is strict
-                                i += 1
-                        
-                        # Reformat to list of vectors (tuples) for each mode
-                        # Each mode is list of 3N floats. Convert to list of (x,y,z)
-                        formatted_modes = []
-                        for m in modes:
-                            vecs = []
-                            for k in range(0, len(m), 3):
-                                if k+2 < len(m):
-                                    vecs.append((m[k], m[k+1], m[k+2]))
-                            formatted_modes.append(vecs)
-                            
-                        hessian_data["normal_modes"] = formatted_modes
-
-            # Parse atoms
-            elif line == "$atoms":
-                i += 1
-                if i < len(lines):
-                    n_atoms = int(lines[i].strip())
-                    i += 1
-                    
-                    atoms = []
-                    coords = []
-                    for _ in range(n_atoms):
-                        if i >= len(lines):
-                            break
-                        parts = lines[i].strip().split()
-                        if len(parts) >= 5:
-                            atoms.append(parts[0])
-                            # Convert Bohr to Angstrom
-                            BOHR_TO_ANG = 0.529177249
-                            coords.append([
-                                float(parts[2]) * BOHR_TO_ANG,
-                                float(parts[3]) * BOHR_TO_ANG,
-                                float(parts[4]) * BOHR_TO_ANG
-                            ])
-                        i += 1
-                    
-                    hessian_data["atoms"] = atoms
-                    hessian_data["coords"] = coords
-
-            # Parse Gradient (Forces)
-            elif line == "$gradient":
-                i += 1
-                if i < len(lines):
-                    try:
-                        n_grad = int(lines[i].strip())
-                        i += 1
-                        
-                        gradients_vec = []
-                        for _ in range(n_grad):
-                            if i >= len(lines): break
-                            
-                            parts = lines[i].strip().split()
-                            if not parts:
-                                i += 1
-                                continue
-                                
-                            val = 0.0
-                            # Robust parsing: Check format "index value" vs "value"
-                            if len(parts) >= 2:
-                                # Assume "index value" format usually
-                                # Check if first part is int
-                                try:
-                                    # If parts[0] is int, parts[1] is value
-                                    idx = int(parts[0])
-                                    val = float(parts[1])
-                                except ValueError:
-                                    # Maybe format is "value value"? Unlikely for gradient (1D)
-                                    # Or parts[0] is actually the float value?
-                                    try:
-                                        val = float(parts[0])
-                                    except:
-                                        pass
-                            elif len(parts) == 1:
-                                # Just value
-                                try:
-                                    val = float(parts[0])
-                                except: pass
-                                
-                            gradients_vec.append(val)
-                            i += 1
-                        
-                        hessian_data["gradient_vec"] = gradients_vec
-                    except ValueError:
-                         print("Error parsing number of gradients")
-                         i += 1
-            
-            i += 1
-        
-        return hessian_data
         
     def parse_basis_set(self):
         """Parse Basis Set information needed for MO visualization"""
@@ -1696,3 +1546,80 @@ class OrcaParser:
                 
         self.data["basis_set_shells"] = full_shells
 
+    def parse_scf_trace(self):
+        """Extract SCF iteration energies for each block found."""
+        self.data["scf_traces"] = []
+        
+        # We search for blocks starting with D-I-I-S or S-O-S-C-F or SCF ITERATIONS
+        current_step_label = "Initial"
+        
+        i = 0
+        while i < len(self.lines):
+            line = self.lines[i]
+            uu = line.upper()
+        
+            if "OPTIMIZATION CYCLE" in uu:
+                try: 
+                    parts = line.split()
+                    # Find the index of CYCLE and take the next part
+                    cycle_part = parts[parts.index("CYCLE") + 1] if "CYCLE" in parts else parts[-2]
+                    current_step_label = f"Cycle {cycle_part}"
+                except: current_step_label = "Opt Cycle"
+            elif "SCAN STEP" in uu:
+                try: current_step_label = f"Scan Step {line.split()[-1]}"
+                except: current_step_label = "Scan Step"
+            elif "ORCA PROPERTIES" in uu or "ORCA PROPERTY" in uu:
+                current_step_label = "Property/Final"
+            elif "OPTIMIZATION HAS CONVERGED" in uu:
+                current_step_label = "Post-Opt/Final"
+                
+            if "SCF ITERATIONS" in uu or "ORCA LEAN-SCF" in uu or "INCREMENTAL FOCK MATRIX" in uu:
+                header_idx = -1
+                for k in range(1, 15):
+                    if i + k >= len(self.lines): break
+                    uu_k = self.lines[i+k].upper()
+                    if "ITERATION" in uu_k and "ENERGY" in uu_k:
+                        header_idx = i + k
+                        break
+                
+                if header_idx != -1:
+                    trace = []
+                    idx = header_idx + 2
+                    while idx < len(self.lines):
+                        l_scf = self.lines[idx].strip()
+                        if not l_scf or "---" in l_scf or "SUCCESS" in l_scf or "Energy Check" in l_scf:
+                            break
+                        
+                        parts = l_scf.split()
+                        if len(parts) >= 2:
+                            try:
+                                it_no = int(parts[0])
+                                it_en = float(parts[1])
+                                trace.append({'iter': it_no, 'energy': it_en})
+                            except: pass
+                        idx += 1
+                    
+                    if trace:
+                        # Check if we should append or start new
+                        # If it's a new "SCF ITERATIONS" block, we want a new entry in the traces list
+                        # unless it's genuinely part of the same convergence process (rare in ORCA output stream)
+                        
+                        # Heuristic: if last trace in self.data["scf_traces"] has same label, 
+                        # suffix the new one if they are distinct blocks.
+                        same_label_count = 0
+                        for t in self.data["scf_traces"]:
+                            if t['step'].startswith(current_step_label):
+                                same_label_count += 1
+                        
+                        label = current_step_label
+                        if same_label_count > 0:
+                            label = f"{current_step_label} ({same_label_count + 1})"
+                            
+                        self.data["scf_traces"].append({
+                            'step': label,
+                            'iterations': trace
+                        })
+                        i = idx
+                        continue
+            i += 1
+        # print(f"OrcaParser: Parsed {len(self.data['scf_traces'])} SCF trace blocks.")

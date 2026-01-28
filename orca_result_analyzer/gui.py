@@ -23,9 +23,10 @@ from .dipole_analysis import DipoleDialog
 from .nmr_analysis import NMRDialog
 from .tddft_analysis import TDDFTDialog
 from .thermal_analysis import ThermalTableDialog
+from .scf_analysis import SCFTraceDialog
 
 from . import PLUGIN_VERSION
-from .logger import Logger
+# from .logger import Logger
 
 class OrcaResultAnalyzerDialog(QDialog):
     def __init__(self, parent, parser, file_path, context=None):
@@ -38,7 +39,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
         
-        self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
+        # self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
         self.init_ui()
 
     def init_ui(self):
@@ -177,59 +178,60 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """
         
-        # MO Analysis
-        self.btn_mo = QPushButton("MO Diagram & Cube Gen")
+        # Row 0: Electronic Structure
+        self.btn_scf = QPushButton("SCF Trace")
+        self.btn_scf.setStyleSheet(button_style)
+        self.btn_scf.clicked.connect(self.show_scf_trace)
+        grid.addWidget(self.btn_scf, 0, 0)
+        
+        self.btn_mo = QPushButton("MO Analysis")
         self.btn_mo.setStyleSheet(button_style)
         self.btn_mo.clicked.connect(self.show_mo_analyzer)
-        grid.addWidget(self.btn_mo, 0, 0)
-        
-        # Frequencies
-        self.btn_freq = QPushButton("Frequency Analysis")
-        self.btn_freq.setStyleSheet(button_style)
-        self.btn_freq.clicked.connect(self.show_freq)
-        grid.addWidget(self.btn_freq, 0, 1)
-        
-        # Scan / Optimization
-        self.btn_traj = QPushButton("Scan / Optimization Results")
+        grid.addWidget(self.btn_mo, 0, 1)
+
+        # Row 1: Geometry Trajectory
+        self.btn_traj = QPushButton("Optimization / Scan")
         self.btn_traj.setStyleSheet(button_style)
         self.btn_traj.clicked.connect(self.show_trajectory)
         grid.addWidget(self.btn_traj, 1, 0)
-        
-        # Forces
-        self.btn_forces = QPushButton("Forces (Gradients)")
+
+        self.btn_forces = QPushButton("Forces")
         self.btn_forces.setStyleSheet(button_style)
         self.btn_forces.clicked.connect(self.show_forces)
         grid.addWidget(self.btn_forces, 1, 1)
         
-        # Thermochemistry
-        self.btn_therm = QPushButton("Thermochemistry")
-        self.btn_therm.setStyleSheet(button_style)
-        self.btn_therm.clicked.connect(self.show_thermal)
-        grid.addWidget(self.btn_therm, 2, 0)
-
-        # TDDFT
-        self.btn_tddft = QPushButton("TDDFT Spectra")
-        self.btn_tddft.setStyleSheet(button_style)
-        self.btn_tddft.clicked.connect(self.show_tddft)
-        grid.addWidget(self.btn_tddft, 2, 1)
-
-        # Dipole
-        self.btn_dipole = QPushButton("Dipole Moment")
-        self.btn_dipole.setStyleSheet(button_style)
-        self.btn_dipole.clicked.connect(self.show_dipole)
-        grid.addWidget(self.btn_dipole, 3, 0)
-        
-        # Charges
+        # Row 2: Atomic Properties
         self.btn_charge = QPushButton("Atomic Charges")
         self.btn_charge.setStyleSheet(button_style)
         self.btn_charge.clicked.connect(self.show_charges)
-        grid.addWidget(self.btn_charge, 3, 1)
+        grid.addWidget(self.btn_charge, 2, 0)
         
-        # NMR
-        self.btn_nmr = QPushButton("NMR Shielding")
+        self.btn_dipole = QPushButton("Dipole Moment")
+        self.btn_dipole.setStyleSheet(button_style)
+        self.btn_dipole.clicked.connect(self.show_dipole)
+        grid.addWidget(self.btn_dipole, 2, 1)
+
+        # Row 3: Vibrations & Thermodynamics
+        self.btn_freq = QPushButton("Frequencies")
+        self.btn_freq.setStyleSheet(button_style)
+        self.btn_freq.clicked.connect(self.show_freq)
+        grid.addWidget(self.btn_freq, 3, 0)
+
+        self.btn_therm = QPushButton("Thermochemistry")
+        self.btn_therm.setStyleSheet(button_style)
+        self.btn_therm.clicked.connect(self.show_thermal)
+        grid.addWidget(self.btn_therm, 3, 1)
+        
+        # Row 4: Advanced Spectroscopy
+        self.btn_tddft = QPushButton("TDDFT")
+        self.btn_tddft.setStyleSheet(button_style)
+        self.btn_tddft.clicked.connect(self.show_tddft)
+        grid.addWidget(self.btn_tddft, 4, 0)
+
+        self.btn_nmr = QPushButton("NMR")
         self.btn_nmr.setStyleSheet(button_style)
         self.btn_nmr.clicked.connect(self.show_nmr)
-        grid.addWidget(self.btn_nmr, 4, 0)
+        grid.addWidget(self.btn_nmr, 4, 1)
         
         layout.addStretch()
         
@@ -310,23 +312,24 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.btn_freq.setEnabled(has_freq)
         self.btn_freq.setToolTip("" if has_freq else "No frequency data found")
         
-        has_traj = bool(data.get("scan_steps") or data.get("opt_steps")) 
-        has_scan = bool(data.get("scan_steps"))
+        # Scan / Optimization
+        scan_steps = data.get("scan_steps", [])
+        has_scan = bool(scan_steps and len(scan_steps) > 0)
         self.btn_traj.setEnabled(has_scan)
         self.btn_traj.setToolTip("" if has_scan else "No trajectory/scan steps found")
        
-        # Enable Forces button if gradients OR frequencies exist (can load Hessian)
+        # Enable Forces button if gradients exist or scan exists
         grads = data.get("gradients", [])
-        has_gradients = bool(grads and len(grads) > 0)
-        has_forces = has_gradients or has_freq
+        scan_steps = data.get("scan_steps", [])
+        has_forces = bool(grads) or bool(scan_steps)
         self.btn_forces.setEnabled(has_forces)
         tooltip = ""
         if not has_forces:
-             tooltip = "No gradients or frequency data found"
-        elif has_freq and not has_gradients:
-             tooltip = "Load Hessian file for force constants"
-        elif has_gradients:
+             tooltip = "No gradients or optimization trajectory found"
+        elif grads:
              tooltip = "View Forces (Gradients)"
+        elif scan_steps:
+             tooltip = "View trajectory steps"
         self.btn_forces.setToolTip(tooltip)
         
         has_thermal = bool(data.get("thermal") or (data.get("frequencies") and "thermo" in str(data))) 
@@ -343,6 +346,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         has_nmr = bool(data.get("nmr_shielding"))
         self.btn_nmr.setEnabled(has_nmr)
+
+        # SCF Trace
+        has_scf = bool(data.get("scf_traces"))
+        self.btn_scf.setEnabled(has_scf)
+        self.btn_scf.setToolTip("" if has_scf else "No SCF iteration data found")
         
     def load_structure_3d(self):
         # Helper to ensure 3D structure is loaded
@@ -391,7 +399,10 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.mw.splitter.setSizes([0, total])
                 except: pass
         except Exception as e:
-            self.logger.error(f"Error loading 3D: {e}")
+            # self.logger.error(f"Error loading 3D: {e}")
+            print(f"Error loading 3D: {e}")
+            import traceback
+            traceback.print_exc()
 
     def show_mo_analyzer(self):
         mo_coeffs = self.parser.data.get("mo_coeffs")
@@ -427,26 +438,25 @@ class OrcaResultAnalyzerDialog(QDialog):
     def show_trajectory(self):
         data = self.parser.data.get("scan_steps", [])
         if not data:
-             QMessageBox.warning(self, "No Info", "No trajectory steps (Scan/Optimization) found.")
+             QMessageBox.warning(self, "No Info", "No trajectory steps (Optimization / Scan) found.")
              return
         if hasattr(self, 'traj_dlg') and self.traj_dlg is not None:
              self.traj_dlg.close()
         charge = self.parser.data.get("charge", 0)
-        self.traj_dlg = TrajectoryResultDialog(self.mw, data, charge=charge, title="Trajectory / Scan Analysis")
+        self.traj_dlg = TrajectoryResultDialog(self.mw, data, charge=charge, title="Optimization / Scan Analysis")
         self.traj_dlg.show()
         
     def show_forces(self):
         grads = self.parser.data.get("gradients", [])
-        has_freq = bool(self.parser.data.get("frequencies"))
+        has_scan = bool(self.parser.data.get("scan_steps"))
         
-        # If no gradients but has frequency data, allow opening for Hessian loading
-        if not grads and not has_freq:
-             QMessageBox.warning(self, "No Info", "No cartesian gradients or frequency data found.")
+        if not grads and not has_scan:
+             QMessageBox.warning(self, "No Info", "No cartesian gradients or optimization steps found.")
              return
         
         if hasattr(self, 'force_dlg') and self.force_dlg is not None:
              self.force_dlg.close()
-        # Pass parser to enable Hessian file loading
+        # Open Force Viewer with trajectory support
         self.force_dlg = ForceViewerDialog(self, grads, parser=self.parser)
         self.force_dlg.show()
         
@@ -493,3 +503,13 @@ class OrcaResultAnalyzerDialog(QDialog):
             return
         dlg = NMRDialog(self, data, file_path=self.file_path)
         dlg.show()
+
+    def show_scf_trace(self):
+        data = self.parser.data.get("scf_traces", [])
+        if not data:
+            QMessageBox.warning(self, "No Info", "No SCF energy trace data found.")
+            return
+        if hasattr(self, 'scf_dlg') and self.scf_dlg is not None:
+             self.scf_dlg.close()
+        self.scf_dlg = SCFTraceDialog(self, data)
+        self.scf_dlg.show()
