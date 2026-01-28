@@ -19,10 +19,14 @@ Real-time convergence visualization for SCF energy cycles.
 - **Visualization**: Generate and view 3D Cubes for selected orbitals (Isosurfaces).
 - **Advanced Support**: Successfully handles S, P, D, F, and G shells (L=4).
 
+![MO Analysis](img/mo.png)
+
 ### 3. Optimization / Scan
 Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
 - **Interactive Graph**: Plot Energy vs. Step. Click points to update the 3D structure.
 - **Animation**: Play/Pause trajectory animations and export as GIFs.
+
+![Optimization](img/opt.png)
 
 ### 4. Forces
 Analyze structural forces for the current structure or the entire trajectory.
@@ -35,6 +39,8 @@ Analyze structural forces for the current structure or the entire trajectory.
 - **Populations**: Mulliken, Loewdin, and Hirshfeld populations (if available).
 - **3D Coloring**: Color atoms in the 3D viewer based on charge value.
 
+![Atomic Charges](img/charge.png)
+
 ### 6. Dipole Moment
 - **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
 
@@ -42,6 +48,8 @@ Analyze structural forces for the current structure or the entire trajectory.
 Visualize vibrational modes and spectra.
 - **IR/Raman**: Stick and broadened spectra plots.
 - **Visualization**: Animated vibrational modes with vector arrows.
+
+![Frequencies](img/freq.png)
 
 ### 8. Thermochemistry
 Detailed analysis of thermodynamic properties based on frequency calculations.
