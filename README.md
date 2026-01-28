@@ -2,6 +2,9 @@
 
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
+> [!WARNING]
+> This plugin is still under active development and might have bugs. Some features may be incomplete or subject to change.
+
 ![Main UI](img/main.png)
 
 ## Features
