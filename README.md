@@ -73,7 +73,7 @@ Advanced NMR chemical shielding validation and visualization.
 - **Keyboard Shortcuts**: `Ctrl+O` (Open), `Ctrl+R` (Reload).
 
 ## Installation
-Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins/explorer/?q=ORCA+Result+Analyzer)  
+Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins/explorer/?q=ORCA+Result+Analyzer).  
 
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
@@ -90,4 +90,5 @@ To ensure all features (especially **MO Cube Generation**) work correctly, inclu
 end
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
 
