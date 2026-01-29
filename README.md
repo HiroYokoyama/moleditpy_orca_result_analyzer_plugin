@@ -2,6 +2,8 @@
 
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
+Repo: [https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
+
 > [!WARNING]
 > This plugin is still under active development and might have bugs. Some features may be incomplete or subject to change.
 
