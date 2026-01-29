@@ -73,7 +73,7 @@ Analyze electronic excitations and absorption spectra.
 Advanced NMR chemical shielding validation and visualization.
 - **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards (TMS, CDCl3, DMSO-d6, etc.).
 - **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
-- **Equivalent Atom Merging**: Manually or automatically merge equivalent atoms into single peaks with persistent storage.
+- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks with persistent storage.
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa).
 
 ![NMR](img/nmr.png)
@@ -102,3 +102,4 @@ To ensure all features (especially **MO Cube Generation**) work correctly, inclu
 end
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
