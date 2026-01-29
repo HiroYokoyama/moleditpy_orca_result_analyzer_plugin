@@ -1,6 +1,5 @@
 
 import csv
-import numpy as np
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -43,6 +42,10 @@ class TrajectoryResultDialog(QDialog):
         self.steps = steps # List of {step, energy, atoms, coords}
         self.charge = charge
         self.show_relative = False
+        self.use_log_scale = False
+        self.is_playing = False
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.next_frame)
         
         # Extract energies
         self.energies = [s['energy'] for s in self.steps]
@@ -95,7 +98,10 @@ class TrajectoryResultDialog(QDialog):
         self.radio_abs = QRadioButton("Absolute")
         self.radio_abs.setChecked(True)
         self.radio_rel = QRadioButton("Relative")
-        self.radio_abs.toggled.connect(self.on_toggle_mode)
+        self.radio_rel.toggled.connect(self.on_toggle_mode)
+        
+        self.chk_log = QCheckBox("Log Scale")
+        self.chk_log.toggled.connect(self.on_log_changed)
         
         self.combo_unit = QComboBox()
         self.combo_unit.addItems(["kJ/mol", "kcal/mol", "eV", "Eh"])
@@ -104,10 +110,14 @@ class TrajectoryResultDialog(QDialog):
         toggle_layout.addWidget(QLabel("Display Mode:"))
         toggle_layout.addWidget(self.radio_abs)
         toggle_layout.addWidget(self.radio_rel)
+        toggle_layout.addWidget(self.chk_log)
         toggle_layout.addWidget(QLabel("Unit:"))
         toggle_layout.addWidget(self.combo_unit)
         toggle_layout.addStretch()
         self.layout().addLayout(toggle_layout)
+        
+        # Disable Log Scale by default (Absolute mode)
+        self.chk_log.setEnabled(False)
         
         # 3. Buttons (Playback & Export)
         btn_layout = QHBoxLayout()
@@ -116,49 +126,52 @@ class TrajectoryResultDialog(QDialog):
         self.btn_play.clicked.connect(self.toggle_play)
         btn_layout.addWidget(self.btn_play)
         
-        btn_layout.addWidget(QLabel("FPS:"))
+        self.btn_next = QPushButton(">")
+        self.btn_next.setFixedWidth(30)
+        self.btn_next.clicked.connect(self.next_frame)
+        btn_layout.addWidget(self.btn_next)
+        
+        btn_layout.addWidget(QLabel(" | FPS:"))
         self.spin_fps = QSpinBox()
         self.spin_fps.setRange(1, 60)
-        self.spin_fps.setValue(5)
+        self.spin_fps.setValue(10)
         self.spin_fps.valueChanged.connect(self.on_fps_changed)
         btn_layout.addWidget(self.spin_fps)
         
         btn_layout.addStretch()
         
-        self.btn_save_img = QPushButton("Save Graph")
-        self.btn_save_img.clicked.connect(self.save_graph)
-        btn_layout.addWidget(self.btn_save_img)
+        btn_save_graph = QPushButton("Save Graph")
+        btn_save_graph.clicked.connect(self.save_graph)
+        btn_layout.addWidget(btn_save_graph)
         
-        self.btn_save_csv = QPushButton("Save CSV")
-        self.btn_save_csv.clicked.connect(self.save_csv)
-        btn_layout.addWidget(self.btn_save_csv)
+        btn_save_csv = QPushButton("Save CSV")
+        btn_save_csv.clicked.connect(self.save_csv)
+        btn_layout.addWidget(btn_save_csv)
         
-        self.btn_save_gif = QPushButton("Save GIF")
-        self.btn_save_gif.clicked.connect(self.save_gif)
-        self.btn_save_gif.setEnabled(HAS_PIL)
-        btn_layout.addWidget(self.btn_save_gif)
-        
-        btn_clear_sel = QPushButton("Clear Selection")
-        # User might mean clear the highlight in graph.
-        btn_clear_sel.clicked.connect(self.clear_selection)
-        btn_layout.addWidget(btn_clear_sel)
-        
-        btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.close)
-        btn_layout.addWidget(btn_close)
+        btn_save_gif = QPushButton("Save GIF")
+        btn_save_gif.clicked.connect(self.save_gif)
+        btn_save_gif.setEnabled(HAS_PIL)
+        btn_layout.addWidget(btn_save_gif)
         
         self.layout().addLayout(btn_layout)
         
-        # Timer
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.next_frame)
-        self.is_playing = False
-        
     def on_toggle_mode(self):
         self.show_relative = self.radio_rel.isChecked()
+        
+        # Disable Log Scale for Absolute Mode (usually negative energies)
+        if not self.show_relative:
+            self.chk_log.setChecked(False)
+            self.chk_log.setEnabled(False)
+        else:
+            self.chk_log.setEnabled(True)
+            
         self.update_display_values()
         self.plot_data()
         self.on_step_changed(self.slider.value())
+        
+    def on_log_changed(self):
+        self.use_log_scale = self.chk_log.isChecked()
+        self.plot_data()
         
     def on_unit_changed(self, unit):
         self.current_unit = unit
@@ -193,13 +206,25 @@ class TrajectoryResultDialog(QDialog):
             ylabel = f"Absolute Energy ({self.current_unit})"
         
         # Draw Line and Scatter
-        self.canvas.axes.plot(x, y, 'b-', label='Energy', picker=5)
-        self.scatter = self.canvas.axes.scatter(x, y, c='red', s=40, picker=5, zorder=5)
+        if self.use_log_scale:
+             # Filter non-positive values for log scale if necessary? 
+             # semilogy handles positive y. If y <= 0, it might warn or mask.
+             # Relative energy can be 0. Add small epsilon?
+             # Or just allow matplotlib to handle/mask. 
+             # Usually relative energy starts at 0. log(0) is -inf.
+             # We should probably shift or mask 0.
+             plot_y = [v if v > 1e-6 else 1e-6 for v in y] if self.show_relative else y
+             
+             self.canvas.axes.semilogy(x, plot_y, 'b-', label='Energy', picker=5)
+             self.scatter = self.canvas.axes.scatter(x, plot_y, c='red', s=40, picker=5, zorder=5)
+        else:
+             self.canvas.axes.plot(x, y, 'b-', label='Energy', picker=5)
+             self.scatter = self.canvas.axes.scatter(x, y, c='red', s=40, picker=5, zorder=5)
         
         self.canvas.axes.set_xlabel("Step")
         self.canvas.axes.set_ylabel(ylabel)
         self.canvas.axes.set_title("Energy Profile")
-        self.canvas.axes.grid(True)
+        self.canvas.axes.grid(True, which="both", ls="-", alpha=0.3)
         
         # Re-add tooltip annotation to cleared axis
         self.annot = self.canvas.axes.annotate("", xy=(0,0), xytext=(20,20),
@@ -224,6 +249,10 @@ class TrajectoryResultDialog(QDialog):
             y = self.display_energies[idx]
         else:
             y = self.display_energies[idx]
+            
+        # Log Scale Safety
+        if self.use_log_scale and y <= 1e-6:
+             y = 1e-6
             
         x_val = idx # Use idx for x-coordinate
         # Red circle

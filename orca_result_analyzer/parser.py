@@ -654,9 +654,62 @@ class OrcaParser:
 
         self.data["charges"]["Mulliken"] = parse_block(mulliken_start)
         self.data["charges"]["Loewdin"] = parse_block(loewdin_start)
-        # Hirshfeld usually has a different format, verify if needed. 
-        # Usually: "  Atom     Charge  Spin" loop
-        # For now, let's stick to Mulliken/Loewdin as they are most common.
+        
+        # NBO Parsing
+        nbo_start = -1
+        # Look for the header "NATURAL ATOMIC ORBITAL AND NATURAL BOND ORBITAL ANALYSIS"
+        # Or simpler "Summary of Natural Population Analysis:" or "NATURAL POPULATIONS:"
+        # In ORCA 5 or NBO6 output through ORCA.
+        
+        # Common header in ORCA NBO output
+        for i, line in enumerate(self.lines):
+            if "NATURAL POPULATIONS" in line.upper() and "Summary of Natural" in self.lines[i-2 if i>2 else 0]:
+                nbo_start = i
+            elif "NATURAL POPULATIONS" in line.upper(): 
+                 # Fallback
+                 nbo_start = i
+
+        if nbo_start != -1:
+             # Parsing NBO table
+             #                                     Natural Population 
+             #              Natural    ---------------------------------------------
+             #   Atom No    Charge        Core      Valence    Rydberg      Total 
+             # ---------------------------------------------------------------------
+             #     C  1    -0.12345      1.9999     4.1235     0.0100      6.1235
+             # ...
+             # ===============================
+            
+            nbo_charges = []
+            curr = nbo_start + 1
+            while curr < len(self.lines):
+                line = self.lines[curr].strip()
+                if "----------------" in line:
+                    curr += 1
+                    continue
+                if "================" in line: break
+                if not line:
+                     curr += 1
+                     continue
+                
+                parts = line.split()
+                # Expected format: Atom No Charge ...
+                # C 1 -0.12345 ...
+                if len(parts) >= 3:
+                     # Check if parst[1] is int
+                     try:
+                         sym = parts[0]
+                         idx = int(parts[1])
+                         chg = float(parts[2])
+                         nbo_charges.append({
+                             "atom_idx": idx - 1, # 1-based in NBO table usually
+                             "atom_sym": sym,
+                             "charge": chg
+                         })
+                     except: pass
+                curr += 1
+            
+            if nbo_charges:
+                self.data["charges"]["NBO"] = nbo_charges
 
         
     def parse_nmr(self):

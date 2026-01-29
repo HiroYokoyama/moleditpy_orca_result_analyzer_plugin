@@ -6,9 +6,10 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
                              QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMessageBox, 
                              QFileDialog, QProgressDialog, QTableWidget, QTableWidgetItem, 
                              QHeaderView, QGroupBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget,
-                             QFormLayout, QTreeWidgetItemIterator, QApplication)
+                             QFormLayout, QTreeWidgetItemIterator, QApplication, QColorDialog, QInputDialog, QComboBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
+import json
 
 try:
     from .mo_engine import BasisSetEngine, CalcWorker
@@ -55,6 +56,44 @@ class MODialog(QDialog):
         vis_grp = QGroupBox("Visualization Controls")
         vis_layout = QVBoxLayout(vis_grp)
         
+        # --- Presets ---
+        h_preset = QHBoxLayout()
+        h_preset.addWidget(QLabel("Preset:"))
+        self.combo_presets = QComboBox()
+        self.combo_presets.addItem("Default")
+        h_preset.addWidget(self.combo_presets)
+        
+        btn_save_preset = QPushButton("Save")
+        btn_save_preset.setFixedWidth(50)
+        btn_save_preset.clicked.connect(self.save_preset)
+        h_preset.addWidget(btn_save_preset)
+        
+        btn_del_preset = QPushButton("Del")
+        btn_del_preset.setFixedWidth(40)
+        btn_del_preset.clicked.connect(self.delete_preset)
+        h_preset.addWidget(btn_del_preset)
+        vis_layout.addLayout(h_preset)
+        
+        # --- Style & Colors ---
+        h_style = QHBoxLayout()
+        h_style.addWidget(QLabel("Style:"))
+        self.combo_style = QComboBox()
+        self.combo_style.addItems(["Surface", "Wireframe", "Points"])
+        h_style.addWidget(self.combo_style)
+        vis_layout.addLayout(h_style)
+        
+        h_colors = QHBoxLayout()
+        self.btn_color_p = QPushButton("Pos (+)")
+        self.btn_color_p.setStyleSheet("background-color: red; color: white; font-weight: bold;")
+        self.btn_color_p.clicked.connect(lambda: self.pick_color('p'))
+        h_colors.addWidget(self.btn_color_p)
+        
+        self.btn_color_n = QPushButton("Neg (-)")
+        self.btn_color_n.setStyleSheet("background-color: blue; color: white; font-weight: bold;")
+        self.btn_color_n.clicked.connect(lambda: self.pick_color('n'))
+        h_colors.addWidget(self.btn_color_n)
+        vis_layout.addLayout(h_colors)
+        
         # Isovalue / Opacity
         h_iso = QHBoxLayout()
         h_iso.addWidget(QLabel("Isovalue:"))
@@ -72,6 +111,15 @@ class MODialog(QDialog):
         self.spin_opacity.setValue(0.5)
         h_iso.addWidget(self.spin_opacity)
         vis_layout.addLayout(h_iso)
+        
+        # Connect changes to update view immediately if exists
+        self.combo_style.currentTextChanged.connect(self.update_vis_only)
+        self.spin_iso.valueChanged.connect(self.update_vis_only)
+        self.spin_opacity.valueChanged.connect(self.update_vis_only)
+        
+        # Load Settings must be called after UI init
+        self.load_settings()
+        self.combo_presets.currentTextChanged.connect(self.apply_preset)
         
         # Calculation Settings
         calc_grp = QGroupBox("Calculation Parameters")
@@ -406,6 +454,169 @@ class MODialog(QDialog):
         self.worker.start()
         dialog.exec()
 
+    def pick_color(self, which):
+        current_col = QColor("red") if which == 'p' else QColor("blue")
+        # Try to parse from button style
+        try:
+            style = self.btn_color_p.styleSheet() if which == 'p' else self.btn_color_n.styleSheet()
+            if "background-color:" in style:
+                c_str = style.split("background-color:")[1].split(";")[0].strip()
+                current_col = QColor(c_str)
+        except: pass
+        
+        col = QColorDialog.getColor(current_col, self, "Select Color")
+        if col.isValid():
+            hex_c = col.name()
+            # Determine contrasting text color
+            # Simple brightness check
+            brightness = (col.red() * 299 + col.green() * 587 + col.blue() * 114) / 1000
+            text_c = "black" if brightness > 128 else "white"
+            
+            style_sheet = f"background-color: {hex_c}; color: {text_c}; font-weight: bold;"
+            if which == 'p':
+                self.btn_color_p.setStyleSheet(style_sheet)
+            else:
+                self.btn_color_n.setStyleSheet(style_sheet)
+            self.update_vis_only()
+
+    def load_settings(self):
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+        self.presets = {"Default": {
+            "iso": 0.02, "opacity": 0.5, "style": "Surface", "color_p": "#ff0000", "color_n": "#0000ff"
+        }}
+        
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                    mo_settings = all_settings.get("mo_settings", {})
+                    
+                    # Load presets
+                    saved_presets = mo_settings.get("presets", {})
+                    for name, data in saved_presets.items():
+                        self.presets[name] = data
+                    
+                    # Last used
+                    last_preset = mo_settings.get("last_preset", "Default")
+                    
+                    # Populate combo
+                    self.combo_presets.blockSignals(True)
+                    self.combo_presets.clear()
+                    self.combo_presets.addItems(list(self.presets.keys()))
+                    
+                    if last_preset in self.presets:
+                        self.combo_presets.setCurrentText(last_preset)
+                        self.apply_preset(last_preset)
+                    else:
+                        self.combo_presets.setCurrentText("Default")
+                        self.apply_preset("Default")
+                        
+                    self.combo_presets.blockSignals(False)
+            except Exception as e:
+                print(f"Error loading settings: {e}")
+
+    def save_settings(self):
+        # Save current presets and selection
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        mo_settings = {
+            "presets": {k:v for k,v in self.presets.items() if k != "Default"},
+            "last_preset": self.combo_presets.currentText()
+        }
+        all_settings["mo_settings"] = mo_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+
+    def save_preset(self):
+        name, ok = QInputDialog.getText(self, "Save Preset", "Preset Name:")
+        if not ok or not name: return
+        
+        # Get current state
+        data = {
+            "iso": self.spin_iso.value(),
+            "opacity": self.spin_opacity.value(),
+            "style": self.combo_style.currentText(),
+            "color_p": self.get_color_hex('p'),
+            "color_n": self.get_color_hex('n')
+        }
+        
+        self.presets[name] = data
+        
+        # Update combo
+        curr = self.combo_presets.currentText()
+        self.combo_presets.blockSignals(True)
+        self.combo_presets.clear()
+        self.combo_presets.addItems(list(self.presets.keys()))
+        self.combo_presets.setCurrentText(name) # switch to new
+        self.combo_presets.blockSignals(False)
+        
+        self.save_settings()
+
+    def delete_preset(self):
+        curr = self.combo_presets.currentText()
+        if curr == "Default":
+            QMessageBox.warning(self, "Error", "Cannot delete Default preset.")
+            return
+            
+        if curr in self.presets:
+            del self.presets[curr]
+            
+        self.combo_presets.blockSignals(True)
+        self.combo_presets.clear()
+        self.combo_presets.addItems(list(self.presets.keys()))
+        self.combo_presets.setCurrentText("Default")
+        self.apply_preset("Default")
+        self.combo_presets.blockSignals(False)
+        
+        self.save_settings()
+
+    def apply_preset(self, name):
+        if name not in self.presets: return
+        data = self.presets[name]
+        
+        # Block signals to avoid partial updates? No, updates are fine.
+        self.spin_iso.setValue(data.get("iso", 0.02))
+        self.spin_opacity.setValue(data.get("opacity", 0.5))
+        
+        style = data.get("style", "Surface")
+        idx = self.combo_style.findText(style)
+        if idx >= 0: self.combo_style.setCurrentIndex(idx)
+        
+        cp = data.get("color_p", "#ff0000")
+        cn = data.get("color_n", "#0000ff")
+        self.set_btn_color(self.btn_color_p, cp)
+        self.set_btn_color(self.btn_color_n, cn)
+        
+        self.update_vis_only()
+        self.save_settings() # Save last used
+
+    def get_color_hex(self, which):
+        # Extract from stylesheet
+        btn = self.btn_color_p if which == 'p' else self.btn_color_n
+        style = btn.styleSheet()
+        if "background-color:" in style:
+            return style.split("background-color:")[1].split(";")[0].strip()
+        return "#ff0000" if which == 'p' else "#0000ff"
+
+    def set_btn_color(self, btn, hex_c):
+        col = QColor(hex_c)
+        brightness = (col.red() * 299 + col.green() * 587 + col.blue() * 114) / 1000
+        text_c = "black" if brightness > 128 else "white"
+        btn.setStyleSheet(f"background-color: {hex_c}; color: {text_c}; font-weight: bold;")
+
+    def update_vis_only(self):
+        if self.last_cube_path and os.path.exists(self.last_cube_path):
+            self.show_cube(self.last_cube_path)
+
     def show_cube(self, path):
         if not CubeVisualizer: return
         
@@ -416,46 +627,12 @@ class MODialog(QDialog):
         
         if not mw: return
         
+        cp = self.get_color_hex('p')
+        cn = self.get_color_hex('n')
+        style = self.combo_style.currentText().lower() # surface, wireframe, points
+        
         vis = CubeVisualizer(mw)
         if vis.load_file(path):
-            vis.show_iso(self.spin_iso.value(), opacity=self.spin_opacity.value())
+            vis.show_iso(self.spin_iso.value(), opacity=self.spin_opacity.value(), 
+                         color_p=cp, color_n=cn, style=style)
             mw.plotter.render()
-            # self.lbl_info.setText(f"Visualizing MO {path} \nIso={self.spin_iso.value()}")
-            # Bring main window to focus? No, dialog is modal.
-            # Ideally dialog should be modeless.
-        
-    def update_vis_only(self):
-        if self.last_cube_path and os.path.exists(self.last_cube_path):
-            self.show_cube(self.last_cube_path)
-
-    def generate_cubes_batch(self):
-        # (Reuse previous batch logic but simplified or just call it)
-        # For brevity, implementing a simpler version or reusing logic if methods existed.
-        QMessageBox.information(self, "TODO", "Batch export not fully refactored yet. Use individual visualize for now.")
-
-    def view_coeffs(self):
-        # Disabled
-        pass
-        
-    def closeEvent(self, event):
-        self.cleanup_vis()
-        super().closeEvent(event)
-        
-    def cleanup_vis(self):
-        if not CubeVisualizer: return
-        
-        # Access Main Window
-        mw = None
-        if hasattr(self.parent_dlg, 'mw'): mw = self.parent_dlg.mw
-        elif hasattr(self.parent_dlg, 'context'): mw = self.parent_dlg.context.get_main_window()
-        
-        if mw:
-            vis = CubeVisualizer(mw)
-            if hasattr(vis, 'clear'):
-                vis.clear()
-            else:
-                # Fallback if logic mismatch
-                if hasattr(mw.plotter, 'remove_actor'):
-                    mw.plotter.remove_actor("mo_iso_p")
-                    mw.plotter.remove_actor("mo_iso_n")
-                    mw.plotter.render()

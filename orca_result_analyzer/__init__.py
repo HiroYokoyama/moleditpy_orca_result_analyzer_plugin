@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "0.5.0"
+PLUGIN_VERSION = "0.6.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 

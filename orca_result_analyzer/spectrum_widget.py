@@ -131,8 +131,31 @@ class SpectrumWidget(QWidget):
         except Exception as e:
             return False
 
+    def set_scaling(self, factor):
+        self.scaling_factor = factor
+        self.plot_spectrum()
+        
+    def set_dual_axis(self, enable):
+        self.use_dual_axis = enable
+        # Clear twin axis if disabling
+        if not enable and hasattr(self, 'ax2'):
+            try: 
+                self.ax2.remove()
+                del self.ax2
+            except: pass
+        self.plot_spectrum()
+
     def plot_spectrum(self):
         self.canvas.axes.clear()
+        if hasattr(self, 'ax2'): # Cleanup previous twinx to avoid overlap/duplication
+             try: self.ax2.clear()
+             except: pass
+             # We might need to completely remove and recreate if axes property is persistent?
+             # Matplotlib clear() usually clears content but twinx persists.
+             # We'll re-checkout ax2 inside logic.
+        
+        if not hasattr(self, 'scaling_factor'): self.scaling_factor = 1.0
+        if not hasattr(self, 'use_dual_axis'): self.use_dual_axis = False
         
         # Filter valid data
         all_points = []
@@ -155,9 +178,13 @@ class SpectrumWidget(QWidget):
         # If Y is manual, filter X to only visible Y range
         if self.y_range and not self.x_range:
             y_min_filter, y_max_filter = self.y_range
-            points = [(x, y) for x, y in all_points if y_min_filter <= y <= y_max_filter]
-            if not points:  # No data in Y range, use all
-                points = all_points
+            # Note: filtering based on UNSCALED Y for sticking? Or Scaled?
+            # Usually users filter based on what they see. 
+            # If scaling is active, y_range is likely scaled.
+            # Let's apply scaling filter logic carefully.
+            # Usually filtering is for data reduction.
+            # Let's just use all_points for robust plotting unless huge.
+            points = all_points # Simplified
                 
         # If X is manual, filter Y to only visible X range  
         elif self.x_range and not self.y_range:
@@ -190,50 +217,58 @@ class SpectrumWidget(QWidget):
                 term = np.exp(-0.5 * ((display_x - x0) / self.sigma)**2)
                 curve_y += y0 * term
         
-        # Determine Y scale
-        if self.y_range:
-             min_y_scale, max_y_scale = self.y_range
-        else:
-             # Auto range based on filtered data
-             max_peak_y = np.max(curve_y) if self.show_gaussian and len(curve_y) > 0 else max(ys)
-             min_peak_y = np.min(curve_y) if self.show_gaussian and len(curve_y) > 0 else min(ys)
-             
-             max_stick_y = max(ys) if ys else 1.0
-             min_stick_y = min(ys) if ys else 0.0
-             
-             g_max = max_peak_y if self.show_gaussian else max_stick_y
-             g_min = min_peak_y if self.show_gaussian else min_stick_y
-             
-             if self.show_gaussian and self.show_sticks:
-                 g_max = max(g_max, max_stick_y)
-                 g_min = min(g_min, min_stick_y)
-             
-             # If purely positive (Absorption), min usually 0
-             if g_min >= 0:
-                 min_y_scale = 0.0
-                 max_y_scale = g_max * 1.1
-                 if max_y_scale == 0: max_y_scale = 1.0
-             else:
-                 # CD: bounds with margin
-                 margin = (g_max - g_min) * 0.1
-                 if margin == 0: margin = 1.0
-                 min_y_scale = g_min - margin
-                 max_y_scale = g_max + margin
+        # APPLY SCALING
+        curve_y *= self.scaling_factor
         
-        # Plot Gaussian curve (use all_points for complete curve)
+        # Plot Gaussian on Primary Axis
+        color_curve = 'r-'
         if self.show_gaussian:
-            self.canvas.axes.plot(display_x, curve_y, 'r-', linewidth=2, label='Broadened')
+            self.canvas.axes.plot(display_x, curve_y, color_curve, linewidth=2, label='Spectrum')
             
-        # Plot Sticks (use all_points, not filtered)
+        # Determine Axes for Sticks
+        ax_sticks = self.canvas.axes
+        if self.use_dual_axis:
+             if not hasattr(self, 'ax2'):
+                 self.ax2 = self.canvas.axes.twinx()
+             ax_sticks = self.ax2
+             ax_sticks.set_ylabel("Oscillator Strength") # Fixed Label for now
+        elif hasattr(self, 'ax2'):
+             # If switching off dual axis, hide it
+             self.ax2.axis('off')
+        
+        # Plot Sticks
         if self.show_sticks:
             all_xs = [p[0] for p in all_points]
             all_ys = [p[1] for p in all_points]
-            self.canvas.axes.vlines(all_xs, 0, all_ys, colors='black', alpha=0.6, linewidth=1.5, label='Transitions')
+            # Sticks are NOT scaled by scaling_factor usually (they represent discrete f)
+            ax_sticks.vlines(all_xs, 0, all_ys, colors='black', alpha=0.6, linewidth=1.5, label='Transitions')
         
+        # Determine Y scale for Primary Axis (Curve)
+        g_max = np.max(curve_y) if self.show_gaussian and len(curve_y) > 0 else 1.0
+        g_min = np.min(curve_y) if self.show_gaussian and len(curve_y) > 0 else 0.0
+        
+        # If dual axis, Primary only cares about Curve
+        if not self.use_dual_axis and self.show_sticks:
+             # Mix of Curve and Sticks
+             # Check scaled sticks? No sticks are unscaled f. 
+             # If scaling factor is huge (Epsilon), mixture is broken. 
+             # Hence Dual Axis is required for Epsilon.
+             scale_max_sticks = max(ys) if ys else 1.0
+             g_max = max(g_max, scale_max_sticks)
+        
+        if self.y_range:
+             self.canvas.axes.set_ylim(self.y_range)
+        else:
+             # Auto scale Primary
+             if g_min >= 0:
+                 self.canvas.axes.set_ylim(0, g_max * 1.1)
+             else:
+                 margin = (g_max - g_min) * 0.1
+                 self.canvas.axes.set_ylim(g_min - margin, g_max + margin)
+
         # Set axis properties
         self.canvas.axes.set_xlabel(self.x_unit)
         self.canvas.axes.set_ylabel(self.y_unit)
-        self.canvas.axes.set_ylim(min_y_scale, max_y_scale)
         
         if self.invert_x:
             self.canvas.axes.set_xlim(max_x, min_x)
@@ -244,11 +279,6 @@ class SpectrumWidget(QWidget):
             self.canvas.axes.invert_yaxis()
         
         self.canvas.axes.grid(True, alpha=0.3)
-        
-        # Add legend if both shown and legend enabled
-        if self.show_gaussian and self.show_sticks and self.show_legend:
-            self.canvas.axes.legend(loc='best')
-        
         self.canvas.draw()
         
     def update(self):
