@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
                              QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMessageBox, 
                              QFileDialog, QProgressDialog, QTableWidget, QTableWidgetItem, 
                              QHeaderView, QGroupBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget,
-                             QFormLayout, QTreeWidgetItemIterator, QApplication, QColorDialog, QInputDialog, QComboBox)
+                             QFormLayout, QTreeWidgetItemIterator, QApplication, QColorDialog, QInputDialog, QComboBox, QCheckBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
 import json
@@ -80,6 +80,10 @@ class MODialog(QDialog):
         self.combo_style = QComboBox()
         self.combo_style.addItems(["Surface", "Wireframe", "Points"])
         h_style.addWidget(self.combo_style)
+        
+        self.check_smooth = QCheckBox("Smooth Shading")
+        self.check_smooth.setChecked(True)
+        h_style.addWidget(self.check_smooth)
         vis_layout.addLayout(h_style)
         
         h_colors = QHBoxLayout()
@@ -114,6 +118,7 @@ class MODialog(QDialog):
         
         # Connect changes to update view immediately if exists
         self.combo_style.currentTextChanged.connect(self.update_vis_only)
+        self.check_smooth.toggled.connect(self.update_vis_only)
         self.spin_iso.valueChanged.connect(self.update_vis_only)
         self.spin_opacity.valueChanged.connect(self.update_vis_only)
         
@@ -482,7 +487,7 @@ class MODialog(QDialog):
     def load_settings(self):
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.presets = {"Default": {
-            "iso": 0.02, "opacity": 0.5, "style": "Surface", "color_p": "#ff0000", "color_n": "#0000ff"
+            "iso": 0.02, "opacity": 0.5, "style": "Surface", "color_p": "#ff0000", "color_n": "#0000ff", "smooth_shading": True
         }}
         
         if os.path.exists(self.settings_file):
@@ -526,7 +531,8 @@ class MODialog(QDialog):
             
         mo_settings = {
             "presets": {k:v for k,v in self.presets.items() if k != "Default"},
-            "last_preset": self.combo_presets.currentText()
+            "last_preset": self.combo_presets.currentText(),
+            "smooth_shading": self.check_smooth.isChecked()
         }
         all_settings["mo_settings"] = mo_settings
         
@@ -546,7 +552,8 @@ class MODialog(QDialog):
             "opacity": self.spin_opacity.value(),
             "style": self.combo_style.currentText(),
             "color_p": self.get_color_hex('p'),
-            "color_n": self.get_color_hex('n')
+            "color_n": self.get_color_hex('n'),
+            "smooth_shading": self.check_smooth.isChecked()
         }
         
         self.presets[name] = data
@@ -596,6 +603,8 @@ class MODialog(QDialog):
         self.set_btn_color(self.btn_color_p, cp)
         self.set_btn_color(self.btn_color_n, cn)
         
+        self.check_smooth.setChecked(data.get("smooth_shading", True))
+        
         self.update_vis_only()
         self.save_settings() # Save last used
 
@@ -634,5 +643,5 @@ class MODialog(QDialog):
         vis = CubeVisualizer(mw)
         if vis.load_file(path):
             vis.show_iso(self.spin_iso.value(), opacity=self.spin_opacity.value(), 
-                         color_p=cp, color_n=cn, style=style)
+                         color_p=cp, color_n=cn, style=style, smooth_shading=self.check_smooth.isChecked())
             mw.plotter.render()
