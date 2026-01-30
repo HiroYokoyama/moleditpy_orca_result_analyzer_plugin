@@ -19,6 +19,7 @@ except ImportError:
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
+from matplotlib.ticker import MaxNLocator
 from .nmr_custom_ref_dialog import CustomReferenceDialog
 
 
@@ -46,6 +47,8 @@ class NMRDialog(QDialog):
         self.selected_peak_indices = set()
         self.highlight_artists = []
         self.show_all_mode = False  # Track if showing all labels without highlights
+
+        self.last_ref_name = None
         
         # Reference standards database (delta = reference position, sigma = isotropic shielding)
         # Chemical shift formula: δ_sample = δ_ref + (σ_ref - σ_sample)
@@ -242,6 +245,8 @@ class NMRDialog(QDialog):
                 nmr_settings = settings.get("nmr_settings", {})
                 self.linewidth = nmr_settings.get("spectrum_linewidth", 1.0)
                 self.peak_intensity = nmr_settings.get("peak_intensity", 1.0)
+
+                self.last_ref_name = nmr_settings.get("last_reference", None)
                 
                 # Load custom references
                 custom_refs = nmr_settings.get("custom_references", {})
@@ -383,11 +388,12 @@ class NMRDialog(QDialog):
     
     def save_settings(self):
         """Save NMR settings to JSON"""
-        settings = {}
+        all_settings = {}
+        # 既存の設定を読み込む（MO設定などを消さないため）
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, 'r') as f:
-                    settings = json.load(f)
+                    all_settings = json.load(f)
             except:
                 pass
         
@@ -438,13 +444,19 @@ class NMRDialog(QDialog):
                         custom_refs[nucleus] = {}
                     custom_refs[nucleus][ref_name] = ref_val
         
-        settings["nmr_settings"] = {
-            "custom_references": custom_refs
+        current_nmr_settings = {
+            "spectrum_linewidth": self.linewidth,
+            "peak_intensity": self.peak_intensity,
+            "last_reference": self.last_ref_name,
+            "custom_references": custom_refs # 既存の変数
         }
+        
+        # 全体設定の 'nmr_settings' キーだけを更新
+        all_settings["nmr_settings"] = current_nmr_settings
         
         try:
             with open(self.settings_file, 'w') as f:
-                json.dump(settings, f, indent=2)
+                json.dump(all_settings, f, indent=2)
         except Exception as e:
             print(f"Error saving NMR settings: {e}")
     
@@ -701,24 +713,26 @@ class NMRDialog(QDialog):
 
         self.combo_ref.addItems(items)
         
-        # Try to restore previous selection, otherwise set default to TMS or first item
-        if current_ref and current_ref in refs:
-            self.combo_ref.setCurrentText(current_ref)
-            ref_data = refs[current_ref]
-        elif current_ref == "Custom":
-            # Transient custom selected
-            self.combo_ref.setCurrentText("Custom")
-            ref_data = {"delta_ref": 0.0, "sigma_ref": 0.0}
-        elif "TMS" in refs:
-            self.combo_ref.setCurrentText("TMS")
-            ref_data = refs["TMS"]
-        elif refs:
-            first_ref = list(refs.keys())[0]
-            self.combo_ref.setCurrentText(first_ref)
-            ref_data = refs[first_ref]
+        target_ref = None
+        
+        # 直前の選択がある、かつ "No Reference" ではない（Allモード由来ではない）場合
+        if current_ref and current_ref in items and current_ref != "No Reference":
+            target_ref = current_ref
+        # 記憶していたリファレンスがある場合
+        elif self.last_ref_name and self.last_ref_name in items:
+            target_ref = self.last_ref_name
+        # デフォルト(TMS)
+        elif "TMS" in items:
+            target_ref = "TMS"
+        # それ以外
+        elif items:
+            target_ref = items[0]
+            
+        if target_ref:
+            self.combo_ref.setCurrentText(target_ref)
+            ref_data = refs.get(target_ref, {"delta_ref": 0.0, "sigma_ref": 0.0})
         else:
-            # Should be Custom default
-            self.combo_ref.setCurrentText("Custom")
+            self.combo_ref.setCurrentText("Custom") # または No Reference
             ref_data = {"delta_ref": 0.0, "sigma_ref": 0.0}
         
         # Update internal values
@@ -744,6 +758,8 @@ class NMRDialog(QDialog):
     def on_ref_change(self):
         """Handle reference standard change"""
         current_nucleus = self.current_nucleus
+        if current_nucleus != "All":
+            self.last_ref_name = self.combo_ref.currentText()
         if current_nucleus == "All":
             # Force 0,0 for All view
             self.delta_ref = 0.0
@@ -755,6 +771,7 @@ class NMRDialog(QDialog):
         nucleus_key = self.get_nucleus_key(current_nucleus)
         
         ref_name = self.combo_ref.currentText()
+        self.last_ref_name = ref_name
         refs = self.reference_standards.get(nucleus_key, {})
         ref_data = refs.get(ref_name, {"delta_ref": 0.0, "sigma_ref": 0.0})
         
@@ -1096,7 +1113,8 @@ class NMRDialog(QDialog):
         # Formatting
         ax.set_xlabel('Chemical Shift δ (ppm)', fontsize=11, fontweight='bold')
         ax.set_ylabel('Intensity (normalized)', fontsize=11, fontweight='bold')
-        ax.set_yticks([0, 0.5, 1.0])
+        #ax.set_yticks([0, 0.5, 1.0])
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax.grid(True, alpha=0.25, linestyle='--', axis='x', linewidth=0.8)
         ax.grid(True, alpha=0.15, linestyle=':', axis='y', linewidth=0.5)
         
@@ -1525,5 +1543,7 @@ class NMRDialog(QDialog):
     
     def closeEvent(self, event):
         """Clean up labels when dialog closes"""
+        self.save_settings()
         self.clear_atom_labels()
         super().closeEvent(event)
+

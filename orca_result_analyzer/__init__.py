@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "0.6.1"
+PLUGIN_VERSION = "0.6.2"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -80,5 +80,5 @@ def initialize(context):
         if path:
              open_orca_file(path)
 
-    context.add_menu_action("Analysis/ORCA Result Analyzer", menu_action) 
+    #context.add_menu_action("Analysis/ORCA Result Analyzer", menu_action) 
 
