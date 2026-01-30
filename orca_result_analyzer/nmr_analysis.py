@@ -3,7 +3,7 @@ import json
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
                              QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QApplication, QGroupBox, QMessageBox,
-                              QFileDialog, QCheckBox, QButtonGroup)
+                              QFileDialog, QCheckBox, QButtonGroup, QAbstractItemView)
 from PyQt6.QtCore import Qt, QTimer
 import pyvista as pv
 import numpy as np
@@ -627,6 +627,7 @@ class NMRDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["Idx", "Nucleus", "σ (ppm)", "δ (ppm)"])
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setMinimumHeight(100)  # Half size for compact layout

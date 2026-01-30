@@ -131,6 +131,35 @@ class SpectrumWidget(QWidget):
         except Exception as e:
             return False
 
+    def save_sticks_csv(self, path):
+        import csv
+        
+        # Filter valid data
+        points = []
+        for item in self.data_list:
+            x = item.get(self.x_key, 0.0)
+            y = item.get(self.y_key, 0.0)
+            if abs(y) > 1e-12: 
+                points.append((x, y))
+            
+        if not points: return False
+        
+        # Sort by X
+        points.sort(key=lambda p: p[0])
+            
+        try:
+            with open(path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Header
+                x_head = self.x_unit if self.x_unit else "X"
+                y_head = self.y_unit if self.y_unit else "Y"
+                writer.writerow([x_head, y_head])
+                for x, y in points:
+                    writer.writerow([x, y])
+            return True
+        except Exception as e:
+            return False
+
     def set_scaling(self, factor):
         self.scaling_factor = factor
         self.plot_spectrum()

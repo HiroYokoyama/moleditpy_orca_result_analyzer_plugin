@@ -1,12 +1,12 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, 
-                             QHeaderView, QPushButton, QApplication, QCheckBox)
+                             QHeaderView, QPushButton, QApplication, QCheckBox, QAbstractItemView)
 
 class ThermalTableDialog(QDialog):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Thermochemistry")
-        self.resize(550, 450)
+        self.resize(550, 460)
         self.data = data
         
         layout = QVBoxLayout(self)
@@ -20,6 +20,7 @@ class ThermalTableDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(["Property", "Value"])
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
         
@@ -82,6 +83,11 @@ class ThermalTableDialog(QDialog):
             ("Gibbs Free Energy (G)", g),
             ("Gibbs Correction (G - E_el)", g_corr)
         ])
+        
+        # Imaginary Frequencies
+        imag_count = data.get("imaginary_freq_count")
+        if imag_count is not None:
+             items.append(("Imaginary Frequencies", str(imag_count)))
         
         if show_details:
             # Add Separator and Detailed Items

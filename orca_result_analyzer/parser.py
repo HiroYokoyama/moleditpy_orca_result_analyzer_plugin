@@ -984,74 +984,93 @@ class OrcaParser:
         # Look for "THERMOCHEMISTRY AT 298.15 K"
     
         start_line = -1
+        # Scan for the start of thermochemistry section
         for i, line in enumerate(self.lines):
-            if "THERMOCHEMISTRY AT" in line.upper():
+            line_upper = line.upper()
+            if "THERMOCHEMISTRY AT" in line_upper:
                 start_line = i
                 
         if start_line != -1:
             curr = start_line
-            # Scan down for specific keywords
-            # "Total thermal energy                  ..."
-            # "Total Enthalpy                        ..."
-            # "Final Entropy                         ..."
-            # "Final Gibbs free energy               ..."
             
+            # Mapping of ORCA labels to JSON keys
+            # Using uppercase for case-insensitive matching
             thermal_keys = {
-                # Electronic Energy (usually first in summary)
-                "Electronic energy": "electronic_energy",
-                
-                # Inner Energy Terms
-                "Zero point energy": "zpe",
-                "Thermal vibrational correction": "corr_vib",
-                "Thermal rotational correction": "corr_rot",
-                "Thermal translational correction": "corr_trans",
-                "Total thermal energy": "thermal_energy",
-                
-                # Corrections Summary
-                "Total thermal correction": "corr_thermal_total",
-                "Non-thermal (ZPE) correction": "corr_zpe",
-                "Total correction": "corr_total",
-                
-                # Enthalpy
-                "Total Enthalpy": "enthalpy",
-                "Thermal Enthalpy correction": "enthalpy_corr",
-                
-                # Entropy Components
-                "Electronic entropy": "s_el",
-                "Vibrational entropy": "s_vib",
-                "Rotational entropy": "s_rot",
-                "Translational entropy": "s_trans",
-                "Final entropy term": "entropy", 
-                
-                # Gibbs Free Energy
-                "Final Gibbs free energy": "gibbs",
-                "G-E(el)": "gibbs_corr"
+                "ELECTRONIC ENERGY": "electronic_energy",
+                "ZERO POINT ENERGY": "zpe",
+                "THERMAL VIBRATIONAL CORRECTION": "corr_vib",
+                "THERMAL ROTATIONAL CORRECTION": "corr_rot",
+                "THERMAL TRANSLATIONAL CORRECTION": "corr_trans",
+                "TOTAL THERMAL ENERGY": "thermal_energy",
+                "TOTAL THERMAL CORRECTION": "corr_thermal_total",
+                "NON-THERMAL (ZPE) CORRECTION": "corr_zpe",
+                "TOTAL CORRECTION": "corr_total",
+                "TOTAL ENTHALPY": "enthalpy",
+                "THERMAL ENTHALPY CORRECTION": "thermal_enthalpy_corr", # Just RT
+                "ELECTRONIC ENTROPY": "s_el",
+                "VIBRATIONAL ENTROPY": "s_vib",
+                "ROTATIONAL ENTROPY": "s_rot",
+                "TRANSLATIONAL ENTROPY": "s_trans",
+                "FINAL ENTROPY TERM": "entropy", 
+                "FINAL GIBBS FREE ENERGY": "gibbs",
+                "G-E(EL)": "gibbs_corr"
             }
             
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if "Timings for individual modules" in line: break
+                line_upper = line.upper()
                 
-                # specific check for temperature
-                if "Temperature" in line and "K" in line and "..." in line:
+                if "TIMINGS FOR INDIVIDUAL MODULES" in line_upper: break
+                
+                # Temperature check
+                if "TEMPERATURE" in line_upper and "K" in line_upper and "..." in line_upper:
                     match = re.search(r"(\d+\.\d+)\s*K", line)
                     if match:
                          self.data["thermal"]["temperature"] = float(match.group(1))
 
-                for key, val_key in thermal_keys.items():
-                    if key in line:
-                        matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
-                        if matches:
-                            if "Eh" in line:
-                                pre_eh = line.split("Eh")[0]
-                                val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
-                                if val_matches:
+                # Iterate through expected keys
+                for key_upper, val_key in thermal_keys.items():
+                    if key_upper in line_upper:
+                        # Extract the numeric value, prioritizing heartrees (Eh)
+                        if "Eh" in line:
+                            # Split by "Eh" and take the part before it
+                            pre_eh = line.split("Eh")[0]
+                            # Find the last float-like number in the pre-Eh part
+                            val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
+                            if val_matches:
+                                try:
                                     val = float(val_matches[-1])
                                     self.data["thermal"][val_key] = val
-                            else:
-                                val = float(matches[-1])
-                                self.data["thermal"][val_key] = val
+                                except ValueError: pass
+                        else:
+                            # Fallback: take the last numeric match
+                            matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
+                            if matches:
+                                try:
+                                    val = float(matches[-1])
+                                    self.data["thermal"][val_key] = val
+                                except ValueError: pass
                 curr += 1
+            
+            # Post-processing: Calculate H correction (H - E_el) more accurately
+            # ORCA's "Thermal Enthalpy correction" is often just RT.
+            # We want the total correction including ZPE and Thermal effects.
+            t_data = self.data["thermal"]
+            if "enthalpy" in t_data and "electronic_energy" in t_data:
+                t_data["enthalpy_corr"] = t_data["enthalpy"] - t_data["electronic_energy"]
+            elif "corr_total" in t_data and "thermal_enthalpy_corr" in t_data:
+                # Fallback: H_corr = Total_corr (U-E_el) + RT_corr
+                t_data["enthalpy_corr"] = t_data["corr_total"] + t_data["thermal_enthalpy_corr"]
+            
+            # Similarly for Gibbs if not directly found
+            if "gibbs" in t_data and "electronic_energy" in t_data:
+                 t_data["gibbs_corr"] = t_data["gibbs"] - t_data["electronic_energy"]
+            
+            # Count imaginary frequencies
+            freqs = self.data.get("frequencies", [])
+            imaginary_count = sum(1 for f in freqs if f.get("freq", 0) < 0)
+            t_data["imaginary_freq_count"] = imaginary_count
+            
             return 
 
             

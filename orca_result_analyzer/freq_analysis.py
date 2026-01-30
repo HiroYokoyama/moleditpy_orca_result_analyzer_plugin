@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QHeaderView, QCheckBox, 
                              QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
-                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox)
+                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import math
@@ -140,6 +140,10 @@ class FreqSpectrumWindow(QWidget):
         btn_csv.clicked.connect(self.save_csv)
         graph_layout.addWidget(btn_csv)
         
+        btn_sticks = QPushButton("Export Sticks")
+        btn_sticks.clicked.connect(self.save_sticks)
+        graph_layout.addWidget(btn_sticks)
+        
         layout.addLayout(graph_layout)
         
         # Initial Update
@@ -228,6 +232,15 @@ class FreqSpectrumWindow(QWidget):
                 QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
+                
+    def save_sticks(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Sticks", "", "CSV Files (*.csv)")
+        if path:
+            success = self.spectrum.save_sticks_csv(path)
+            if success:
+                QMessageBox.information(self, "Exported", f"Stick data saved to:\n{path}")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to export stick data.")
     
     def closeEvent(self, event):
         # Notify parent that we are closing (optional, effectively done by parent checking .isVisible())
@@ -287,6 +300,7 @@ class FrequencyDialog(QDialog):
         # List
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Mode", "Freq (cm⁻¹)", "IR", "Raman"])
+        self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.currentItemChanged.connect(self.on_mode_selected)
         list_layout.addWidget(self.tree)
         

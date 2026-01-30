@@ -132,6 +132,10 @@ class TDDFTDialog(QDialog):
         self.btn_csv.clicked.connect(self.save_csv)
         action_layout.addWidget(self.btn_csv)
         
+        self.btn_sticks = QPushButton("Export Sticks (CSV)")
+        self.btn_sticks.clicked.connect(self.save_sticks)
+        action_layout.addWidget(self.btn_sticks)
+        
         action_layout.addStretch()
         
         self.btn_close = QPushButton("Close")
@@ -186,6 +190,16 @@ class TDDFTDialog(QDialog):
                 QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
+                
+    def save_sticks(self):
+        if not self.spectrum: return
+        path, _ = QFileDialog.getSaveFileName(self, "Export Sticks", "", "CSV Files (*.csv)")
+        if path:
+            success = self.spectrum.save_sticks_csv(path)
+            if success:
+                QMessageBox.information(self, "Exported", f"Stick data saved to:\n{path}")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to export stick data.")
                 
     def switch_spectrum_type(self):
         if not self.spectrum: return

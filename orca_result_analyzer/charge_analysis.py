@@ -5,7 +5,7 @@ import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox, QGroupBox)
+                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox, QGroupBox, QAbstractItemView)
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
@@ -103,6 +103,7 @@ class ChargeDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(3)
         self.table.setHorizontalHeaderLabels(["Idx", "Atom", "Charge (e)"])
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         table_layout.addWidget(self.table)

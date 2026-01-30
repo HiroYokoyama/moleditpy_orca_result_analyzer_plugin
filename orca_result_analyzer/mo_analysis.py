@@ -178,6 +178,7 @@ class MODialog(QDialog):
             
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
+        self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(self.tree)
         
         # 3. Action Buttons

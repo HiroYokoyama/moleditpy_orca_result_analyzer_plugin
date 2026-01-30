@@ -3,7 +3,7 @@ import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                              QDoubleSpinBox, QGroupBox, QSlider, QTableWidget, 
-                             QTableWidgetItem, QCheckBox)
+                             QTableWidgetItem, QCheckBox, QAbstractItemView)
 from PyQt6.QtCore import Qt, QTimer
 
 class ForceViewerDialog(QDialog):
@@ -69,6 +69,7 @@ class ForceViewerDialog(QDialog):
         self.force_table.setHorizontalHeaderLabels([
             "Atom", "Grad X", "Grad Y", "Grad Z", "Force X", "Force Y", "Force Z", "Force Mag"
         ])
+        self.force_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         header = self.force_table.horizontalHeader()
         header.setStretchLastSection(True)
         main_layout.addWidget(self.force_table)
