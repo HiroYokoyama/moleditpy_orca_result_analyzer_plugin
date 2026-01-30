@@ -4,9 +4,6 @@ A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA 
 
 Repo: [https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
 
-> [!WARNING]
-> This plugin is still under active development and might have bugs. Some features may be incomplete or subject to change.
-
 ![Main UI](img/main.png)
 
 ## Features
@@ -102,4 +99,5 @@ To ensure all features (especially **MO Cube Generation**) work correctly, inclu
 end
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
 
