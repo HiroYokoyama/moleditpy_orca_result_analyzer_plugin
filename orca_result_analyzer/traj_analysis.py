@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, 
                              QRadioButton, QComboBox, QPushButton, QSpinBox, 
                              QFormLayout, QDialogButtonBox, QCheckBox, QFileDialog, 
-                             QMessageBox, QApplication)
+                             QMessageBox, QApplication, QButtonGroup)
 from PyQt6.QtCore import Qt, QTimer
 
 try:
@@ -40,22 +40,33 @@ class TrajectoryResultDialog(QDialog):
         self.setWindowTitle(title)
         self.resize(800, 600)
         self.gl_widget = gl_widget
-        self.steps = steps # List of {step, energy, atoms, coords}
+        self.steps = steps # Current steps to display
         self.charge = charge
-        self.show_relative = False
+        
+        # Filtering setup
+        self.all_steps = steps
+        self.scan_points = self.compute_scan_points(steps)
+        self.showing_scan_points = False
+        
+        # Default logic: prefer scan points if available
+        if len(self.scan_points) < len(self.all_steps) and len(self.scan_points) > 0:
+            self.steps = self.scan_points
+            self.showing_scan_points = True
+            self.show_relative = True # Default to relative for scan
+        else:
+            self.steps = self.all_steps
+            self.show_relative = False # Default to absolute for full trajectory
         self.use_log_scale = False
         self.is_playing = False
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
         
-        # Extract energies
-        self.energies = [s['energy'] for s in self.steps]
-        # Absolute and Relative energies in current unit
-        self.min_e = min(self.energies) if self.energies else 0
-        self.current_unit = "kJ/mol" 
-        self.display_energies = []
-        self.update_display_values()        
+        self.current_unit = "kJ/mol"
+        self.global_min_e = min([s['energy'] for s in self.all_steps]) if self.all_steps else 0
+        
+        self.recalc_energies()     
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
         # 1. Matplotlib Canvas
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
@@ -89,26 +100,63 @@ class TrajectoryResultDialog(QDialog):
         ctrl_layout.addWidget(QLabel("Step:"))
         ctrl_layout.addWidget(self.slider)
         
-        self.lbl_info = QLabel("Step 0")
+        self.lbl_info = QLabel(f"Step 1/{len(self.steps)}")
         ctrl_layout.addWidget(self.lbl_info)
         
         self.layout().addLayout(ctrl_layout)
         
-        # Toggle Layout
+        # Toggle Layout (Combined)
         toggle_layout = QHBoxLayout()
+        
+        # 1. View Group
+        self.view_grp = QButtonGroup(self)
+        self.radio_scan = QRadioButton("Scan Points")
+        self.radio_full = QRadioButton("All Trajectory")
+        self.view_grp.addButton(self.radio_scan)
+        self.view_grp.addButton(self.radio_full)
+        
+        if self.showing_scan_points:
+            self.radio_scan.setChecked(True)
+        else:
+            self.radio_full.setChecked(True)
+            
+        # Only enable if distinction exists
+        if len(self.scan_points) == len(self.all_steps):
+            self.radio_full.setEnabled(False)
+            self.radio_scan.setEnabled(False)
+        else:
+            self.radio_full.toggled.connect(self.on_traj_mode_changed)
+            self.radio_scan.toggled.connect(self.on_traj_mode_changed)
+
+        # 2. Energy Group
+        self.energy_grp = QButtonGroup(self)
         self.radio_abs = QRadioButton("Absolute")
-        self.radio_abs.setChecked(True)
         self.radio_rel = QRadioButton("Relative")
+        self.energy_grp.addButton(self.radio_abs)
+        self.energy_grp.addButton(self.radio_rel)
+        
+        self.radio_abs.setChecked(not self.show_relative)
+        self.radio_rel.setChecked(self.show_relative)
         self.radio_rel.toggled.connect(self.on_toggle_mode)
         
         self.chk_log = QCheckBox("Log Scale")
         self.chk_log.toggled.connect(self.on_log_changed)
+        self.chk_log.setChecked(self.use_log_scale)
         
         self.combo_unit = QComboBox()
         self.combo_unit.addItems(["kJ/mol", "kcal/mol", "eV", "Eh"])
         self.combo_unit.currentTextChanged.connect(self.on_unit_changed)
         
-        toggle_layout.addWidget(QLabel("Display Mode:"))
+        # Add to layout
+        toggle_layout.addWidget(QLabel("View:"))
+        toggle_layout.addWidget(self.radio_full)
+        toggle_layout.addWidget(self.radio_scan)
+        
+        line = QLabel(" | ")
+        line.setStyleSheet("color: gray;")
+        toggle_layout.addWidget(line)
+        
+        toggle_layout.addWidget(QLabel("Mode:"))
         toggle_layout.addWidget(self.radio_abs)
         toggle_layout.addWidget(self.radio_rel)
         toggle_layout.addWidget(self.chk_log)
@@ -117,8 +165,8 @@ class TrajectoryResultDialog(QDialog):
         toggle_layout.addStretch()
         self.layout().addLayout(toggle_layout)
         
-        # Disable Log Scale by default (Absolute mode)
-        self.chk_log.setEnabled(False)
+        # Disable Log Scale by default (if not relative)
+        self.chk_log.setEnabled(self.radio_rel.isChecked())
         
         # 3. Buttons (Playback & Export)
         btn_layout = QHBoxLayout()
@@ -168,6 +216,66 @@ class TrajectoryResultDialog(QDialog):
         btn_layout.addWidget(btn_close)
         
         self.layout().addLayout(btn_layout)
+
+    def recalc_energies(self):
+        # Extract energies
+        self.energies = [s['energy'] for s in self.steps]
+        # Absolute and Relative energies in current unit
+        # Use context-aware baseline: minimum of currently displayed steps
+        # This ensures perfect zero alignment in Scan Points view
+        self.min_e = min(self.energies) if self.energies else 0
+            
+        self.display_energies = []
+        self.update_display_values()
+
+    def compute_scan_points(self, steps):
+        """Filter steps to find key scan points (converged geometries)."""
+        groups = {}
+        has_scan_ids = False
+        
+        for s in steps:
+            sid = s.get('scan_step_id')
+            if sid is not None:
+                has_scan_ids = True
+                if sid not in groups: groups[sid] = []
+                groups[sid].append(s)
+        
+        if not has_scan_ids:
+            return steps 
+            
+        final_points = []
+        sorted_ids = sorted(groups.keys())
+        for sid in sorted_ids:
+            g_steps = groups[sid]
+            # Filter for opt_cycle if exists, pick last
+            opt_cycles = [x for x in g_steps if x.get('type') == 'opt_cycle']
+            if opt_cycles:
+                final_points.append(opt_cycles[-1])
+            else:
+                final_points.append(g_steps[-1])
+                
+        return final_points
+
+    def on_traj_mode_changed(self):
+        # Radio button toggles both ways, only trigger on selection
+        if not self.sender().isChecked(): return
+        
+        self.showing_scan_points = self.radio_scan.isChecked()
+        
+        if self.is_playing:
+            self.toggle_play()
+            
+        if self.showing_scan_points:
+            self.steps = self.scan_points
+            self.radio_rel.setChecked(True) # This triggers on_toggle_mode
+        else:
+            self.steps = self.all_steps
+            self.radio_abs.setChecked(True) # This triggers on_toggle_mode
+            
+        self.slider.setRange(0, len(self.steps) - 1)
+        self.recalc_energies()
+        self.plot_data()
+        self.on_step_changed(0)
         
     def on_toggle_mode(self):
         self.show_relative = self.radio_rel.isChecked()
@@ -176,8 +284,10 @@ class TrajectoryResultDialog(QDialog):
         if not self.show_relative:
             self.chk_log.setChecked(False)
             self.chk_log.setEnabled(False)
+            self.use_log_scale = False
         else:
             self.chk_log.setEnabled(True)
+            self.use_log_scale = self.chk_log.isChecked()
             
         self.update_display_values()
         self.plot_data()
@@ -194,14 +304,11 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(self.slider.value())
 
     def update_display_values(self):
-        if self.current_unit == "kcal/mol":
-            factor = 627.509
-        elif self.current_unit == "kJ/mol":
-            factor = 2625.50
-        elif self.current_unit == "eV":
-            factor = 27.2114
-        else: # Eh
-            factor = 1.0
+        factor = 1.0 # default Eh
+        # High precision factors (CODATA 2018 / ORCA consistency)
+        if self.current_unit == "kJ/mol": factor = 2625.4996395
+        elif self.current_unit == "kcal/mol": factor = 627.50947406
+        elif self.current_unit == "eV": factor = 27.211386246
             
         if self.show_relative:
             self.display_energies = [(e - self.min_e) * factor for e in self.energies]
@@ -221,13 +328,8 @@ class TrajectoryResultDialog(QDialog):
         
         # Draw Line and Scatter
         if self.use_log_scale:
-             # Filter non-positive values for log scale if necessary? 
-             # semilogy handles positive y. If y <= 0, it might warn or mask.
-             # Relative energy can be 0. Add small epsilon?
-             # Or just allow matplotlib to handle/mask. 
-             # Usually relative energy starts at 0. log(0) is -inf.
-             # We should probably shift or mask 0.
-             plot_y = [v if v > 1e-6 else 1e-6 for v in y] if self.show_relative else y
+             epsilon = 1e-7
+             plot_y = [max(v, epsilon) for v in y]
              
              self.canvas.axes.semilogy(x, plot_y, 'b-', label='Energy', picker=5)
              self.scatter = self.canvas.axes.scatter(x, plot_y, c='red', s=40, picker=5, zorder=5)
@@ -239,6 +341,7 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.axes.set_ylabel(ylabel)
         self.canvas.axes.set_title("Energy Profile")
         self.canvas.axes.grid(True, which="both", ls="-", alpha=0.3)
+        self.canvas.axes.ticklabel_format(useOffset=False, style='plain')
         
         # Re-add tooltip annotation to cleared axis
         self.annot = self.canvas.axes.annotate("", xy=(0,0), xytext=(20,20),
@@ -248,6 +351,7 @@ class TrajectoryResultDialog(QDialog):
         self.annot.set_visible(False)
         
         self.highlight_point(self.slider.value())
+        self.canvas.fig.tight_layout()
         self.canvas.draw()
         
     def highlight_point(self, idx):
@@ -277,10 +381,19 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
         
     def on_step_changed(self, idx):
+        # Bounds check to prevent IndexError during mode transitions
+        if idx < 0 or idx >= len(self.steps):
+            return
+            
         self.highlight_point(idx)
         step = self.steps[idx]
         val = self.display_energies[idx]
-        self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.4f} {self.current_unit}")
+        abs_h = step['energy']
+        
+        if self.show_relative:
+            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.8f} {self.current_unit} (Abs: {abs_h:.10f} Eh)")
+        else:
+            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.8f} {self.current_unit}")
         
         self.update_structure(step['atoms'], step['coords'])
         
@@ -333,7 +446,11 @@ class TrajectoryResultDialog(QDialog):
                 pos = self.scatter.get_offsets()[idx]
                 self.annot.xy = pos
                 val = self.display_energies[idx]
-                text = f"Step {idx}\n{val:.4f} {self.current_unit}"
+                abs_h = self.steps[idx]['energy']
+                if self.show_relative:
+                    text = f"Step {idx}\n{val:.8f} {self.current_unit}\n(Abs: {abs_h:.10f} Eh)"
+                else:
+                    text = f"Step {idx}\n{val:.8f} {self.current_unit}"
                 self.annot.set_text(text)
                 self.annot.set_visible(True)
                 self.canvas.draw_idle()

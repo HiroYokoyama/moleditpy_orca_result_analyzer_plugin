@@ -102,6 +102,7 @@ class OrcaParser:
         
         current_step = {}
         in_step = False
+        current_scan_step = None
         
         # Helper to find coords after a header
         def read_coords_from(idx):
@@ -138,8 +139,10 @@ class OrcaParser:
             # Scan Step Header
             if "RELAXED SURFACE SCAN STEP" in uu_line:
                 step_idx = 0
-                try: step_idx = int(line.split()[-1])
-                except: pass
+                match = re.search(r"STEP\s+(\d+)", uu_line)
+                if match:
+                    step_idx = int(match.group(1))
+                current_scan_step = step_idx
                 
                 # Find next step to bound search
                 next_marker = len(self.lines)
@@ -154,6 +157,18 @@ class OrcaParser:
                     uu = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu:
                          try: en = float(self.lines[k].split()[-1])
+                         except: pass
+                    elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
+                         # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
+                         try:
+                             parts = self.lines[k].split(":")
+                             en = float(parts[1].split()[0])
+                         except: pass
+                    elif "CURRENT ENERGY" in uu and "...." in uu:
+                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
+                         try:
+                             parts = self.lines[k].split("....")
+                             en = float(parts[1].split()[0])
                          except: pass
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
@@ -185,7 +200,6 @@ class OrcaParser:
                                 elif "max(" in cl.lower():
                                     # Parse Max(...) stats
                                     # e.g. Max(Bonds) 0.123 Max(Angles) 0.0
-                                    import re
                                     matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
                                     for label, val in matches:
                                         conv_info[label] = {
@@ -211,6 +225,8 @@ class OrcaParser:
                 atoms, coords, found = read_coords_from(i)
                 if found:
                     self.data["scan_steps"].append({
+                        'type': 'scan_step',
+                        'scan_step_id': current_scan_step,
                         'step': step_idx,
                         'energy': en,
                         'atoms': atoms,
@@ -221,10 +237,9 @@ class OrcaParser:
                     
             elif "OPTIMIZATION CYCLE" in uu_line:
                 cycle_idx = 0
-                try: 
-                    parts = line.strip().split()
-                    cycle_idx = int(parts[-1])
-                except: pass
+                match = re.search(r"CYCLE\s+(\d+)", uu_line)
+                if match:
+                    cycle_idx = int(match.group(1))
                 
                 # Find next cycle to bound search
                 next_marker = len(self.lines)
@@ -248,6 +263,16 @@ class OrcaParser:
                     uu = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu:
                          try: en = float(self.lines[k].split()[-1])
+                         except: pass
+                    elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
+                         try:
+                             parts = self.lines[k].split(":")
+                             en = float(parts[1].split()[0])
+                         except: pass
+                    elif "CURRENT ENERGY" in uu and "...." in uu:
+                         try:
+                             parts = self.lines[k].split("....")
+                             en = float(parts[1].split()[0])
                          except: pass
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
@@ -279,7 +304,6 @@ class OrcaParser:
                                         found_any = True
                                 elif "max(" in cl.lower():
                                     # Parse Max(...) stats
-                                    import re
                                     matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
                                     for label, val in matches:
                                         conv_info[label] = {
@@ -313,6 +337,8 @@ class OrcaParser:
                 atoms, coords, found = read_coords_from(i)
                 if found:
                      self.data["scan_steps"].append({
+                        'type': 'opt_cycle',
+                        'scan_step_id': current_scan_step,
                         'step': cycle_idx,
                         'energy': en,
                         'atoms': atoms,
@@ -626,7 +652,6 @@ class OrcaParser:
                      try:
                          # Handle merged "0C" case
                          first_part = parts[0]
-                         import re
                          match = re.match(r"^(\d+)([a-zA-Z]+)$", first_part)
                          if match:
                              idx_str = match.group(1)

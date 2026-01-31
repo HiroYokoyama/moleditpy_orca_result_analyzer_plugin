@@ -129,6 +129,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 padding: 8px 15px;
                 border-radius: 5px;
                 border: none;
+                text-align: left;
             }
             QPushButton:hover {
                 background-color: #0052a3;
@@ -152,6 +153,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 padding: 8px 15px;
                 border-radius: 5px;
                 border: none;
+                text-align: left;
             }
             QPushButton:hover {
                 background-color: #218838;
@@ -327,7 +329,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             
             self.parser = new_parser
             self.file_path = path
-            self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
+            #self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
             self.lbl_file_path.setText(path)
             
             # Update Version
