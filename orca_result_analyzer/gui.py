@@ -106,6 +106,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.lbl_file_path.setWordWrap(True)
         file_info_layout.addWidget(self.lbl_file_path)
         
+        # Version Label
+        version_str = self.parser.data.get("version", "Unknown") if self.parser else "Unknown"
+        self.lbl_version = QLabel(f"ORCA Version: {version_str}")
+        self.lbl_version.setStyleSheet("color: #555; font-size: 9pt; background: transparent; border: none; padding: 0;")
+        file_info_layout.addWidget(self.lbl_version)
+        
         file_frame_layout.addLayout(file_info_layout, 1)
         
         # Buttons Layout (Open + Reload)
@@ -295,8 +301,21 @@ class OrcaResultAnalyzerDialog(QDialog):
     def load_file(self, path):
         """Load a file and update UI"""
         try:
-            with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
+            content = ""
+            encodings = ['utf-8', 'utf-16', 'latin-1', 'cp1252']
+            found = False
+            for enc in encodings:
+                try:
+                    with open(path, 'r', encoding=enc) as f:
+                        content = f.read()
+                    found = True
+                    break
+                except UnicodeError:
+                    continue
+            
+            if not found:
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
                 
             # import importlib # Moved to top
             from . import parser as parser_mod
@@ -310,6 +329,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.file_path = path
             self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
             self.lbl_file_path.setText(path)
+            
+            # Update Version
+            v = self.parser.data.get("version", "Unknown")
+            if hasattr(self, 'lbl_version'):
+                 self.lbl_version.setText(f"ORCA Version: {v}")
             
             # Auto-load 3D structure
             self.load_structure_3d()

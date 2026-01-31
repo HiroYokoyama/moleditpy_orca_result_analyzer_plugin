@@ -11,7 +11,7 @@ class ForceViewerDialog(QDialog):
     def __init__(self, parent_dlg, gradients, parser=None):
         super().__init__(parent_dlg)
         self.setWindowTitle("Force Analysis")
-        self.resize(700, 500)
+        self.resize(700, 750)
         self.parent_dlg = parent_dlg
         self.gradients = gradients  # Current gradients from .out file
         self.parser = parser
@@ -253,6 +253,9 @@ class ForceViewerDialog(QDialog):
             self.traj_label.setText(f"Step {val + 1}/{num_steps}")
             self.traj_info.setText(f"Energy: {energy:.8f} Eh")
             
+            # Update convergence info
+            self._update_conv_label(step.get('convergence', {}))
+            
             # Update gradients for this step
             self.gradients = step.get('gradients', [])
             
@@ -293,12 +296,40 @@ class ForceViewerDialog(QDialog):
                 dn = display_keys.get(k.lower(), k.title())
                 status = v.get('converged', '??').upper()
                 # Status determines color of the whole line
-                color = "#28a745" if status == "YES" else "#dc3545"
-                items.append(f"<span style='color: {color};'><b>{dn}:</b> {v.get('value')} ({status})</span>")
+                if status == "YES":
+                    color = "#28a745" # Green
+                    status_text = f" ({status})"
+                elif status == "NO":
+                    color = "#dc3545" # Red
+                    status_text = f" ({status})"
+                elif status == "INFO":
+                    color = "#000000" # Black
+                    status_text = ""
+                else:
+                    color = "#000000"
+                    status_text = f" ({status})"
+                    
+                items.append(f"<span style='color: {color};'><b>{dn}:</b> {v.get('value')}{status_text}</span>")
             else:
                 items.append(f"<b>{k}:</b> {v:.6f}")
         
-        self.traj_conv.setText("<br>".join(items))
+        num_items = len(items)
+        if num_items == 0:
+            self.traj_conv.setText("")
+            return
+
+        # split into 2 columns
+        import math
+        half = math.ceil(num_items / 2)
+        col1_items = items[:half]
+        col2_items = items[half:]
+        
+        html = "<table width='100%'><tr>"
+        html += "<td valign='top'>" + "<br>".join(col1_items) + "</td>"
+        html += "<td valign='top'>" + "<br>".join(col2_items) + "</td>"
+        html += "</tr></table>"
+        
+        self.traj_conv.setText(html)
     
     def reload_data(self):
         """Reload data from the output file"""
@@ -311,8 +342,21 @@ class ForceViewerDialog(QDialog):
             return
             
         try:
-            with open(self.parser.filename, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
+            content = ""
+            encodings = ['utf-8', 'utf-16', 'latin-1', 'cp1252']
+            found = False
+            for enc in encodings:
+                try:
+                    with open(self.parser.filename, 'r', encoding=enc) as f:
+                        content = f.read()
+                    found = True
+                    break
+                except UnicodeError:
+                    continue
+            
+            if not found:
+                 with open(self.parser.filename, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
             
             # Re-parse (using the already initialized parser)
             self.parser.load_from_memory(content, self.parser.filename)

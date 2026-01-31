@@ -367,11 +367,80 @@ class ChargeDialog(QDialog):
         
     def update_table(self):
         data = self.all_charges.get(self.current_type, [])
+        if not data:
+            self.table.setRowCount(0)
+            return
+            
+        # Determine all available keys from first item
+        first_item = data[0]
+        # Always "atom_idx", "atom_sym", "charge"
+        # Others might be "spin", "valency", "bonded_valency", "free_valency", "population"
+        
+        headers = ["Idx", "Atom", "Charge"]
+        keys = ["atom_idx", "atom_sym", "charge"]
+        
+        # Check for extras
+        special_map = {
+            "spin": "Spin",
+            "valency": "Valency (VA)",
+            "bonded_valency": "Bonded (BVA)",
+            "free_valency": "Free (FA)",
+            "population": "Pop",
+            "core": "Core",
+            "valence": "Valence",
+            "rydberg": "Rydberg",
+            "total": "Total",
+            "homo_mulliken": "HOMO(M)",
+            "homo_loewdin": "HOMO(L)",
+            "lumo_mulliken": "LUMO(M)",
+            "lumo_loewdin": "LUMO(L)"
+        }
+        
+        # Collect other keys present in the data
+        other_keys = []
+        for k in first_item.keys():
+            if k not in keys:
+                other_keys.append(k)
+        
+        # Sort or prioritize
+        # Make sure standard Mayer order if present: VA, BVA, FA
+        if "valency" in other_keys: 
+            if "valency" in other_keys: other_keys.remove("valency")
+            if "bonded_valency" in other_keys: other_keys.remove("bonded_valency")
+            if "free_valency" in other_keys: other_keys.remove("free_valency")
+            keys.extend(["valency", "bonded_valency", "free_valency"])
+            headers.extend(["Valency (VA)", "Bonded (BVA)", "Free (FA)"])
+            
+        # Prioritized Sort for remaining keys
+        def sort_key(k):
+             order = [
+                 "core", "valence", "rydberg", "total", # NBO
+                 "homo_mulliken", "homo_loewdin",       # FMO
+                 "lumo_mulliken", "lumo_loewdin",
+                 "spin", "population"
+             ]
+             if k in order: return order.index(k)
+             return 999
+        
+        other_keys.sort(key=sort_key)
+
+        # Add remaining (like spin)
+        for k in other_keys:
+             keys.append(k)
+             headers.append(special_map.get(k, k.capitalize()))
+             
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        
         self.table.setRowCount(len(data))
         for r, item in enumerate(data):
-            self.table.setItem(r, 0, QTableWidgetItem(str(item['atom_idx'])))
-            self.table.setItem(r, 1, QTableWidgetItem(item['atom_sym']))
-            self.table.setItem(r, 2, QTableWidgetItem(f"{item['charge']:.4f}"))
+            for c, k in enumerate(keys):
+                val = item.get(k, "")
+                if isinstance(val, float):
+                    val_str = f"{val:.4f}"
+                else:
+                    val_str = str(val)
+                self.table.setItem(r, c, QTableWidgetItem(val_str))
             
     def apply_colors(self):
         data = self.all_charges.get(self.current_type, [])
@@ -518,13 +587,53 @@ class ChargeDialog(QDialog):
         
         try:
             import csv
+            data = self.all_charges.get(self.current_type, [])
+            if not data: return
+            
+            # Determine headers dynamically
+            first_item = data[0]
+            # Priorities: atom_idx, atom_sym, charge
+            prio = ["atom_idx", "atom_sym", "charge"]
+            
+            headers = [k for k in prio if k in first_item]
+            other_keys = [k for k in first_item.keys() if k not in prio]
+            
+            # Sorting logic for common extra fields
+            def sort_key(k):
+                order = ["valency", "bonded_valency", "free_valency", "core", "valence", "rydberg", "total", "spin", "population"]
+                if k in order: return order.index(k)
+                return 999
+                
+            other_keys.sort(key=sort_key)
+            headers.extend(other_keys)
+            
+            # Formatted Headers maps
+            header_map = {
+                "atom_idx": "Index",
+                "atom_sym": "Atom",
+                "charge": "Charge",
+                "valency": "Valency (VA)",
+                "bonded_valency": "Bonded (BVA)",
+                "free_valency": "Free (FA)",
+                "core": "Core", 
+                "valence": "Valence (NBO)",
+                "rydberg": "Rydberg",
+                "total": "Total Pop",
+                "homo_mulliken": "HOMO(Mulliken)",
+                "homo_loewdin": "HOMO(Loewdin)",
+                "lumo_mulliken": "LUMO(Mulliken)",
+                "lumo_loewdin": "LUMO(Loewdin)"
+            }
+            display_headers = [header_map.get(k, k.capitalize()) for k in headers]
+
             with open(filename, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(["Index", "Atom", "Charge (e)"])
+                writer.writerow(display_headers)
                 
-                data = self.all_charges.get(self.current_type, [])
                 for item in data:
-                    row = [item['atom_idx'], item['atom_sym'], item['charge']]
+                    row = []
+                    for k in headers:
+                        row.append(item.get(k, ""))
                     writer.writerow(row)
                     
             # print(f"Data exported to {filename}")

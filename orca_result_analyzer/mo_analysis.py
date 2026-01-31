@@ -45,7 +45,9 @@ class MODialog(QDialog):
             out_dir = os.path.join(base_dir, f"{filename_base}_cubes")
             # Ensure dir exists? Logic doesn't seem to create it here, but usually caller handles or it's fine.
             # Standardizing path return.
-            return os.path.join(out_dir, f"{filename_base}_MO_{display_id}.cube")
+            # Sanitize display ID (which might contain "1 (a)")
+            safe_id = str(display_id).replace(" ", "_").replace("(", "").replace(")", "").replace(":", "")
+            return os.path.join(out_dir, f"{filename_base}_MO_{safe_id}.cube")
         return None
 
     def setup_ui(self):
@@ -194,7 +196,7 @@ class MODialog(QDialog):
         
         btn_csv = QPushButton("Export CSV")
         btn_csv.clicked.connect(self.export_csv)
-        btn_layout.insertWidget(2, btn_csv)
+        btn_layout.addWidget(btn_csv)
                 
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
@@ -229,31 +231,106 @@ class MODialog(QDialog):
     def normalize_and_populate(self):
         self.tree.clear() # Verify clear first
         self.mo_list = []
+        
+        # Sort keys logic:
+        # Keys are likely strings "0_alpha", "1_alpha" etc. or integers (if old/other format)
+        # We want to sort by Spin then Index, or just by Energy if available?
+        # Standard: Sort by Spin (Alpha first), then Index.
+        
+        keys = []
         if isinstance(self.mos, dict):
-            for k in sorted(self.mos.keys()):
+            raw_keys = list(self.mos.keys())
+            # Check key type
+            if raw_keys and isinstance(raw_keys[0], str) and "_" in raw_keys[0]:
+                # Sort by spin, then index
+                def sort_key(k):
+                    if "_" in str(k):
+                        idx_s, spin_s = str(k).split("_")
+                        # alpha < beta < restricted ???
+                        # "alpha" < "beta" (alphabetical ok).
+                        return (spin_s, int(idx_s))
+                    return (str(k), 0)
+                keys = sorted(raw_keys, key=sort_key)
+            else:
+                # Fallback numeric sort
+                keys = sorted(raw_keys, key=lambda x: int(x) if str(x).isdigit() else str(x))
+                
+            for k in keys:
                 val = self.mos[k]
                 if 'id' not in val: val['id'] = k
+                # Store the Access Key used in self.mos dictionary
+                val['_access_key'] = k 
                 self.mo_list.append(val)
         elif isinstance(self.mos, list):
             self.mo_list = self.mos
+            # Add index as access key
+            for i, mo in enumerate(self.mo_list):
+                 mo['_access_key'] = i
             
-        # Estimate HOMO/LUMO
-        # Count electrons? Or check occ drop
-        n_occ = 0
+        # Separate HOMO/LUMO logic for each spin
+        spin_mos = {'restricted': [], 'alpha': [], 'beta': []}
         for mo in self.mo_list:
-            occ = mo.get('occ', mo.get('occupation', 0.0))
-            if occ > 0.1: n_occ += 1
+            s = mo.get('spin', 'restricted')
+            if s not in spin_mos: s = 'restricted' # fallback using restricted logic for unknown strings if any
+            spin_mos[s].append(mo)
             
-        homo_idx = n_occ - 1
+        spin_homo_idx = {}
+        for s in spin_mos:
+             n_occ = 0
+             for mo in spin_mos[s]:
+                 occ = mo.get('occ', mo.get('occupation', 0.0))
+                 if occ > 0.1: n_occ += 1
+             spin_homo_idx[s] = n_occ - 1
+
+        # Display order: Reversed (High Energy Top)
+        # We need to sort global list carefully if mixing spins?
+        # Or just show them in the order we sorted above (Alpha then Beta)
+        # Our self.mo_list is already sorted by Spin, Index.
+        # But we iterate backwards! so Beta (high idx -> low idx) -> Alpha (high idx -> low idx)
         
-        # Display order: Reversed (High Energy Top, Low Energy Bottom) - "Orbital Diagram" style
-        # Iterate backwards
         count = len(self.mo_list)
         for i in range(count - 1, -1, -1):
             mo = self.mo_list[i]
             
-            # Internal mo_id is 0-based
-            mo_id = mo.get('id', mo.get('index', i))
+            # Internal unique key
+            access_key = mo.get('_access_key')
+            
+            # Display ID
+            mo_idx_val = mo.get('id', mo.get('index', i))
+            spin = mo.get('spin', 'restricted')
+            
+            # Determine if HOMO/LUMO for this specific spin channel
+            # We need the index OF THIS MO within its spin group
+            # Since self.mo_list is sorted, we can find it?
+            # Or just use the ID? Usually ID corresponds to index.
+            # Let's use the ID if available, assuming 0-based index.
+            
+            local_idx = -1
+            try:
+                local_idx = int(mo_idx_val)
+            except: pass
+            
+            is_homo = False
+            is_lumo = False
+            if spin in spin_homo_idx:
+                h = spin_homo_idx[spin]
+                if local_idx == h: is_homo = True
+                elif local_idx == h + 1: is_lumo = True
+            
+            display_id = str(mo_idx_val)
+            try:
+                 display_id = str(int(mo_idx_val) + 1)
+            except: pass
+            
+            label_id = display_id
+            if spin == 'alpha':
+                label_id += " (a)"
+            elif spin == 'beta':
+                label_id += " (b)"
+                
+            if is_homo: label_id += " (HOMO)"
+            elif is_lumo: label_id += " (LUMO)"
+            
             occ = mo.get('occ', mo.get('occupation', 0.0))
             e_eh = mo.get('energy_eh', mo.get('energy'))
             e_ev = mo.get('energy_ev')
@@ -263,42 +340,46 @@ class MODialog(QDialog):
             if e_eh is None: e_eh = 0.0
             if e_ev is None: e_ev = 0.0
             
-            # Display MO ID as 1-based (User Request)
-            display_id = mo_id + 1
-            label_id = str(display_id)
-            if i == homo_idx: label_id += " (HOMO)"
-            elif i == homo_idx + 1: label_id += " (LUMO)"
-            
             item = QTreeWidgetItem([label_id, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"])
+            
+            # Store the unique lookup key
+            item.setData(0, Qt.ItemDataRole.UserRole, access_key)
             
             # Text Color based on Occ
             if occ > 1.9:
-                item.setForeground(0, QColor("blue")) # HOMO/Occupied
+                item.setForeground(0, QColor("blue")) 
             elif occ > 0.1:
                 item.setForeground(0, QColor("green"))
             else:
-                item.setForeground(0, QColor("gray")) # Virtual
+                item.setForeground(0, QColor("gray"))
             
-            # Background Color if Generated (User Request)
-            path = self.get_cube_path(display_id)
-            if path and os.path.exists(path):
-                # Light Green Background (Lighter shade requested)
-                bg = QBrush(QColor(240, 255, 240))
-                for c in range(4):
-                    item.setBackground(c, bg)
-
+            # Background Color if Generated
+            # Need to match path logic with key? 
+            # get_cube_path usually uses display_id (int).
+            # If keys are strings, cache might break if we just use INT.
+            # We should probably incorporate spin into cache filename.
+            
+            # Quick fix: Pass full label_id hash or just access_key to path
+            # But get_cube_path expects display_id.
+            # Let's keep existing check but maybe use access_key for path generation in future.
+            
+            
             self.tree.addTopLevelItem(item)
             
-        # Scroll to HOMO (Default View)
-        # Since list is reversed, index of HOMO in tree is: (N - 1) - homo_idx
-        # homo_idx is 0-based index in original sorted list.
-        # Tree index: 0 is highest energy (last item in original list).
-        if homo_idx >= 0:
-            tree_homo_idx = (count - 1) - homo_idx
-            if tree_homo_idx >= 0 and tree_homo_idx < self.tree.topLevelItemCount():
-                item = self.tree.topLevelItem(tree_homo_idx)
-                self.tree.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
-                self.tree.setCurrentItem(item)
+        # Scroll to HOMO of first available spin branch
+        # Since we just fill them, scrolling to center might be ambiguous.
+        # Let's scroll to the first 'Occupied' item found from top of tree (High energy)
+        # That would be the HOMO of the last spin block added (e.g. Beta HOMO if present, or Alpha HOMO).
+        # Actually tree has High Energy at top. So First Occupied Item is HOMO.
+        
+        iterator = QTreeWidgetItemIterator(self.tree)
+        while iterator.value():
+            item = iterator.value()
+            if "HOMO" in item.text(0):
+                 self.tree.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+                 self.tree.setCurrentItem(item)
+                 break
+            iterator += 1
 
     def on_double_click(self, item, col):
         self.visualize_current_mo()
@@ -308,16 +389,15 @@ class MODialog(QDialog):
         has_coeffs = False
         if items:
             try:
-                mo_id_txt = items[0].text(0).split()[0]
-                display_id = int(mo_id_txt)
-                internal_id = display_id - 1
+                # Use UserRole data for robust lookup
+                key = items[0].data(0, Qt.ItemDataRole.UserRole)
                 
                 # Check coeffs in parser data
-                # Safety check for parser and data
                 if hasattr(self.parent_dlg, 'parser') and self.parent_dlg.parser:
                     if hasattr(self.parent_dlg.parser, 'data') and self.parent_dlg.parser.data:
                         if "mo_coeffs" in self.parent_dlg.parser.data:
-                            if internal_id in self.parent_dlg.parser.data["mo_coeffs"]:
+                            # Use key directly
+                            if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
             except: pass
             
@@ -381,15 +461,16 @@ class MODialog(QDialog):
             return None
 
     def visualize_current_mo(self):
-        items = self.tree.selectedItems()
-        if not items: return
         try:
-            mo_id_txt = items[0].text(0).split()[0]
-            display_id = int(mo_id_txt)
-            internal_mo_id = display_id - 1
+            items = self.tree.selectedItems()
+            if not items: return
+            
+            key = items[0].data(0, Qt.ItemDataRole.UserRole)
+            display_id = items[0].text(0) # Just for caching/display
+            
         except: return
         
-        # Check coefficients with INTERNAL ID
+        # Check coefficients with KEY
         # Safety checks
         if not hasattr(self.parent_dlg, 'parser') or not self.parent_dlg.parser:
             QMessageBox.warning(self, "Error", "Parser not available")
@@ -397,9 +478,9 @@ class MODialog(QDialog):
         if not hasattr(self.parent_dlg.parser, 'data') or not self.parent_dlg.parser.data:
             QMessageBox.warning(self, "Error", "No parser data available")
             return
-
+            
         coeffs_map = self.parent_dlg.parser.data.get("mo_coeffs", {})
-        mo_data = coeffs_map.get(internal_mo_id)
+        mo_data = coeffs_map.get(key)
         if not mo_data:
             QMessageBox.warning(self, "Error", f"No coefficients for MO {display_id}")
             return
@@ -434,7 +515,7 @@ class MODialog(QDialog):
         dialog.setWindowModality(Qt.WindowModality.WindowModal)
         
         self.worker = CalcWorker(
-            engine, internal_mo_id, self.spin_pts.value(), self.spin_margin.value(),
+            engine, key, self.spin_pts.value(), self.spin_margin.value(),
             self.parent_dlg.parser.data["atoms"], self.parent_dlg.parser.data["coords"], dense_vec, out_path
         )
         

@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "1.1.0"
+PLUGIN_VERSION = "1.2.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -25,12 +25,28 @@ def initialize(context):
         mw = context.get_main_window()
         
         # Read file to memory
-        try:
-            with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
-        except Exception as e:
-            QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
-            return
+        content = ""
+        encodings = ['utf-8', 'utf-16', 'latin-1', 'cp1252']
+        for enc in encodings:
+            try:
+                with open(path, 'r', encoding=enc) as f:
+                    content = f.read()
+                break
+            except UnicodeError:
+                continue
+            except Exception as e:
+                # If it's not an encoding error, standard error
+                QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
+                return
+        
+        if not content:
+             # Fallback with error replace
+             try:
+                 with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                     content = f.read()
+             except Exception as e:
+                 QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
+                 return
 
         # Initialize Parser
         # Force reload to ensure latest code is used (dev mode helper)

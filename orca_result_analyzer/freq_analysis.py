@@ -429,7 +429,34 @@ class FrequencyDialog(QDialog):
     def populate_list(self):
         self.tree.clear()
         sf = self.spin_sf.value()
+        
+        # Determine if we should hide first 6 (translation/rotation)
+        # Usually they are 0.00 or very small imaginary.
+        # Let's check the first few.
+        start_idx = 0
+        if len(self.frequencies) > 6:
+            # Check if first 6 are "small" (e.g. < 20 cm-1) - Non-Linear
+            is_trivial_6 = True
+            for k in range(6):
+                if abs(self.frequencies[k]['freq']) > 20.0:
+                    is_trivial_6 = False
+                    break
+            
+            if is_trivial_6:
+                 start_idx = 6
+            else:
+                # Check if first 5 are "small" - Linear
+                is_trivial_5 = True
+                for k in range(5):
+                    if abs(self.frequencies[k]['freq']) > 20.0:
+                        is_trivial_5 = False
+                        break
+                if is_trivial_5:
+                    start_idx = 5
+
         for i, f in enumerate(self.frequencies):
+            if i < start_idx: continue
+            
             freq_val = f['freq'] * sf
             # Always show both IR and Raman in columns
             item = QTreeWidgetItem([str(i), f"{freq_val:.2f}", f"{f.get('ir', 0.0):.2f}", f"{f.get('raman', 0.0):.2f}"])

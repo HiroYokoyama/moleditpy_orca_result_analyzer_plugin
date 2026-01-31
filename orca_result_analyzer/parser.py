@@ -22,7 +22,8 @@ class OrcaParser:
             "dipole": None,
             "dipoles": None,
             "nmr_shielding": [],
-            "charges": {} # Type -> List
+            "charges": {}, # Type -> List
+            "version": None
         }
 
     def load_from_memory(self, content, filename=""):
@@ -37,7 +38,6 @@ class OrcaParser:
         self.parse_trajectory()
         self.parse_frequencies()
         self.parse_thermal()
-        self.parse_mo()
         self.parse_mo_coeffs()
         self.parse_orbital_energies()
         self.parse_charges()
@@ -50,17 +50,30 @@ class OrcaParser:
     def parse_basic(self):
         """Parse basic info: SCF Energy, Convergence, Geometry."""
         for i, line in enumerate(self.lines):
+            if "Program Version" in line:
+                try:
+                    self.data["version"] = line.split("Version")[-1].strip().split()[0]
+                except: pass
+
             line = line.strip()
             uu = line.upper()
             if "FINAL SINGLE POINT ENERGY" in uu:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
                 except: pass
-            if "TOTAL CHARGE" in uu and "MULTIPLICITY" in uu:
+            if "TOTAL CHARGE" in uu:
+                # Could be "Total Charge 0" or "Total Charge ... 0"
                 try:
-                     parts = line.split()
-                     self.data["charge"] = int(parts[-4])
-                     self.data["mult"] = int(parts[-1])
+                    parts = line.split()
+                    val = int(parts[-1])
+                    self.data["charge"] = val
+                except: pass
+                
+            if "MULTIPLICITY" in uu:
+                try:
+                    parts = line.split()
+                    val = int(parts[-1])
+                    self.data["mult"] = val
                 except: pass
             if "SCF CONVERGED" in uu or "OPTIMIZATION CONVERGED" in uu or "HURRAY" in uu:
                 self.data["converged"] = True
@@ -145,14 +158,13 @@ class OrcaParser:
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         found_any = False
-                        while c_idx < next_marker and c_idx < k + 20:
+                        while c_idx < next_marker and c_idx < k + 30:
                             cl = self.lines[c_idx].strip()
                             # Only break on rule if we've already found some data lines
+                            # ORCA 6.1.1 has intermediate separators, so we shouldn't break immediately.
                             if "---" in cl:
-                                if found_any: break
-                                else: 
-                                    c_idx += 1
-                                    continue
+                                c_idx += 1
+                                continue
                             
                             p = cl.split()
                             if len(p) >= 4:
@@ -160,13 +172,28 @@ class OrcaParser:
                                 t = p[-2]
                                 v = p[-3]
                                 n = " ".join(p[:-3]).strip().lower()
-                                if n and n != "item": # Skip header line
-                                    conv_info[n] = {
-                                        'value': v,
-                                        'tolerance': t,
-                                        'converged': s
-                                    }
-                                    found_any = True
+                                
+                                # Check if it's a standard Yes/No criterion
+                                if s.upper() in ["YES", "NO"]:
+                                    if n and n != "item": 
+                                        conv_info[n] = {
+                                            'value': v,
+                                            'tolerance': t,
+                                            'converged': s
+                                        }
+                                        found_any = True
+                                elif "max(" in cl.lower():
+                                    # Parse Max(...) stats
+                                    # e.g. Max(Bonds) 0.123 Max(Angles) 0.0
+                                    import re
+                                    matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
+                                    for label, val in matches:
+                                        conv_info[label] = {
+                                            'value': val, 
+                                            'tolerance': '', 
+                                            'converged': 'INFO'
+                                        }
+                                        found_any = True
                             c_idx += 1
 
                 # Find matching gradients for this step
@@ -225,16 +252,14 @@ class OrcaParser:
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         found_any = False
-                        while c_idx < next_marker and c_idx < k + 25:
+                        while c_idx < next_marker and c_idx < k + 30:
                             cl = self.lines[c_idx].strip()
                             if not cl:
                                 c_idx += 1
                                 continue
                             if "---" in cl:
-                                if found_any: break
-                                else:
-                                    c_idx += 1
-                                    continue
+                                c_idx += 1
+                                continue
                             
                             p = cl.split()
                             if len(p) >= 4:
@@ -242,13 +267,27 @@ class OrcaParser:
                                 t = p[-2]
                                 v = p[-3]
                                 n = " ".join(p[:-3]).strip().lower()
-                                if n and n != "item":
-                                    conv_info[n] = {
-                                        'value': v,
-                                        'tolerance': t,
-                                        'converged': s
-                                    }
-                                    found_any = True
+                                
+                                # Check if it's a standard Yes/No criterion
+                                if s.upper() in ["YES", "NO"]:
+                                    if n and n != "item":
+                                        conv_info[n] = {
+                                            'value': v,
+                                            'tolerance': t,
+                                            'converged': s
+                                        }
+                                        found_any = True
+                                elif "max(" in cl.lower():
+                                    # Parse Max(...) stats
+                                    import re
+                                    matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
+                                    for label, val in matches:
+                                        conv_info[label] = {
+                                            'value': val, 
+                                            'tolerance': '', 
+                                            'converged': 'INFO'
+                                        }
+                                        found_any = True
                             c_idx += 1
                 
                 # Find matching gradients for this cycle
@@ -296,7 +335,7 @@ class OrcaParser:
         for i, line in enumerate(self.lines):
             uu = line.upper()
             if "MOLECULAR ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
-                start_indices.append((i, "alpha"))
+                start_indices.append((i, "restricted"))
             elif "SPIN UP ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
                 start_indices.append((i, "alpha"))
             elif "SPIN DOWN ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
@@ -304,7 +343,17 @@ class OrcaParser:
                 
         if not start_indices: return
         
-        for start_idx, spin in start_indices:
+        # Only keep the LAST occurrence for each spin type
+        final_indices = {}
+        for idx, spin in start_indices:
+            final_indices[spin] = idx
+            
+        filtered_indices = []
+        for spin, idx in final_indices.items():
+            filtered_indices.append((idx, spin))
+        filtered_indices.sort()
+        
+        for start_idx, spin in filtered_indices:
             curr = start_idx + 2
             
             while curr < len(self.lines):
@@ -337,8 +386,9 @@ class OrcaParser:
                     
                     # Init storage dicts
                     for idx in current_mos:
-                        if idx not in self.data["mo_coeffs"]:
-                             self.data["mo_coeffs"][idx] = {'coeffs': [], 'spin': spin, 'energy': 0.0, 'occ': 0.0}
+                        key = f"{idx}_{spin}"
+                        if key not in self.data["mo_coeffs"]:
+                             self.data["mo_coeffs"][key] = {'coeffs': [], 'spin': spin, 'energy': 0.0, 'occ': 0.0, 'id': idx}
                     
                     # Try to parse Energy / Occ lines immediately following
                     # Usually:
@@ -358,8 +408,10 @@ class OrcaParser:
                                  energies = [float(v) for v in vals1]
                                  occs = [float(v) for v in vals2]
                                  for k, idx in enumerate(current_mos):
-                                     self.data["mo_coeffs"][idx]['energy'] = energies[k]
-                                     self.data["mo_coeffs"][idx]['occ'] = occs[k]
+                                     key = f"{idx}_{spin}"
+                                     if key in self.data["mo_coeffs"]:
+                                         self.data["mo_coeffs"][key]['energy'] = energies[k]
+                                         self.data["mo_coeffs"][key]['occ'] = occs[k]
                                  have_energy_occ = True
                                  curr += 2 # Skip these 2 lines
                              except: pass
@@ -396,94 +448,19 @@ class OrcaParser:
                          if len(val_strs) == len(current_mos):
                               for k, v_str in enumerate(val_strs):
                                   mo_idx = current_mos[k]
+                                  key = f"{mo_idx}_{spin}"
                                   try:
                                       val = float(v_str)
-                                      # Filter small coeffs to save space/time? 
-                                      # Maybe keep all for accuracy?
-                                      # Original code had > 0.01 filter.
-                                      # If filter is too high? 0.01 is reasonable for isosurface.
-                                      # But let's lower to 1e-4 just in case.
-                                      # Or remove filter. 
-                                      # Let's store all for now.
-                                      self.data["mo_coeffs"][mo_idx]['coeffs'].append({
-                                          "atom_idx": atom_idx,
-                                          "sym": sym,
-                                          "orb": orb,
-                                          "coeff": val
-                                      })
+                                      if key in self.data["mo_coeffs"]:
+                                          self.data["mo_coeffs"][key]['coeffs'].append({
+                                              "atom_idx": atom_idx,
+                                              "sym": sym,
+                                              "orb": orb,
+                                              "coeff": val
+                                          })
                                   except: pass
                      except: pass
                 curr += 1
-        
-    def parse_charges(self):
-        self.data["charges"] = {} 
-        
-        # Look for Mulliken, Loewdin, Hirshfeld
-        # MULLIKEN ATOMIC CHARGES
-        # LOEWDIN ATOMIC CHARGES
-        # HIRSHFELD ANALYSIS
-        
-        blocks = {
-            "Mulliken": "MULLIKEN ATOMIC CHARGES",
-            "Loewdin": "LOEWDIN ATOMIC CHARGES",
-            "Hirshfeld": "HIRSHFELD ANALYSIS"
-        }
-        
-        for name, header in blocks.items():
-            for i, line in enumerate(self.lines):
-                if header.upper() in line.upper():
-                    # Found block
-                    # Skip until "-----------------"
-                    # Then read
-                    curr = i + 1
-                    while curr < len(self.lines):
-                         if "----------------" in self.lines[curr]:
-                             curr += 1
-                             break
-                         curr += 1
-                    
-                    found_charges = []
-                    while curr < len(self.lines):
-                        l = self.lines[curr].strip()
-                        if not l: 
-                            if found_charges: break # Done reading
-                            curr += 1
-                            continue
-                        if "Sum of atomic charges" in l: break
-                        if "----------------" in l: break
-                        
-                        parts = l.split()
-                        # Format: idx Atom Charge ...
-                        # 0 C : -0.123
-                        # OR 0 C -0.123
-                        if len(parts) >= 3:
-                             # Check if first is int
-                             try:
-                                 idx = int(parts[0].strip(':'))
-                                 sym = parts[1]
-                                 val = float(parts[-1]) # Charge is usually last or 3rd
-                                 # In Hirshfeld: "  0   C     -0.033606     0.054394" (Charge, Spin)
-                                 # In Mulliken: "  0 C :   -0.123 "
-                                 
-                                 # Refine Parsing based on name matches
-                                 if name == "Hirshfeld":
-                                     # 0  C   Charge   Spin
-                                     val = float(parts[2])
-                                 else:
-                                     # Mulliken/Loewdin
-                                     # 0 C : -0.123
-                                     # Check if parts[2] is ':'
-                                     if parts[2] == ':':
-                                         val = float(parts[3])
-                                     else:
-                                         val = float(parts[2])
-                                         
-                                 found_charges.append({'atom_idx': idx, 'atom_sym': sym, 'charge': val})
-                             except: pass
-                        curr += 1
-                        
-                    if found_charges:
-                        self.data["charges"][name] = found_charges
 
     def parse_scan(self):
         """Alias for parse_trajectory."""
@@ -608,108 +585,298 @@ class OrcaParser:
     def parse_charges(self):
         self.data["charges"] = {} # type -> list of {atom_idx, atom_sym, charge}
         
-        # MULLIKEN ATOMIC CHARGES
+        # Section Markers
         mulliken_start = -1
-        # LOEWDIN ATOMIC CHARGES
         loewdin_start = -1
-        # HIRSHFELD ANALYSIS
         hirshfeld_start = -1
+        mayer_start = -1
+        nbo_start = -1
+        chelpg_start = -1
+        mk_start = -1
+        mbis_start = -1
+        resp_start = -1
+        fmo_start = -1
         
         for i, line in enumerate(self.lines):
-            if "MULLIKEN ATOMIC CHARGES" in line: mulliken_start = i
-            if "LOEWDIN ATOMIC CHARGES" in line: loewdin_start = i
-            if "HIRSHFELD ANALYSIS" in line: hirshfeld_start = i
+            uu = line.upper()
+            if "MULLIKEN ATOMIC CHARGES" in uu: mulliken_start = i
+            elif "LOEWDIN ATOMIC CHARGES" in uu: loewdin_start = i
+            elif "HIRSHFELD ANALYSIS" in uu: hirshfeld_start = i
+            elif "MAYER POPULATION ANALYSIS" in uu: mayer_start = i
+            elif "NATURAL POPULATIONS" in uu: nbo_start = i
+            elif "CHELPG ATOMIC CHARGES" in uu: chelpg_start = i
+            elif "MERZ-KOLLMAN ATOMIC CHARGES" in uu or "MK ATOMIC CHARGES" in uu: mk_start = i
+            elif "MBIS ANALYSIS" in uu: mbis_start = i
+            elif "RESP ATOMIC CHARGES" in uu: resp_start = i
+            elif "FRONTIER MOLECULAR ORBITAL POPULATION ANALYSIS" in uu: fmo_start = i
             
-        def parse_block(start_idx, header_lines=2):
+        def parse_standard_block(start_idx, header_lines=2, hirshfeld=False, mbis=False):
             res = []
             if start_idx == -1: return res
             curr = start_idx + header_lines
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line: break
-                if "Sum of atomic charges" in line: break
-                if "----------------" in line: break
+                if not line or "---" in line or "Sum of" in line:
+                    if res: break
+                    curr += 1
+                    continue
                 
                 parts = line.split()
-                # Format: 0 C : -0.123
-                # Or: 0 C -0.123
                 if len(parts) >= 3:
-                     # Usually: Index Symbol : Charge
-                     # 0 O : -0.567
                      try:
-                         idx_str = parts[0].strip(":")
-                         sym = parts[1].strip(":")
-                         val_str = parts[-1] 
-                         # Careful with ":"
-                         if parts[2] == ":": val_str = parts[3]
+                         # Handle merged "0C" case
+                         first_part = parts[0]
+                         import re
+                         match = re.match(r"^(\d+)([a-zA-Z]+)$", first_part)
+                         if match:
+                             idx_str = match.group(1)
+                             sym = match.group(2)
+                         else:
+                             idx_str = first_part.strip(":")
+                             # If "0 C", sym is parts[1]
+                             sym = parts[1].strip(":")
                          
-                         res.append({
+                         if hirshfeld or mbis:
+                              val = float(parts[2]) # 0 C Charge Spin
+                         else:
+                              # 0 C : -1.23 or 0 C -1.23
+                              val = float(parts[3]) if parts[2] == ":" else float(parts[2])
+                         
+                         atom_data = {
                              "atom_idx": int(idx_str),
                              "atom_sym": sym,
-                             "charge": float(val_str)
-                         })
+                             "charge": val
+                         }
+                         
+                         # Capture spin if available (Hirshfeld/MBIS)
+                         if hirshfeld:
+                             if len(parts) >= 4:
+                                 atom_data["spin"] = float(parts[3])
+                         elif mbis:
+                             if len(parts) >= 4:
+                                 # ATOM CHARGE POPULATION [SPIN]
+                                 atom_data["population"] = float(parts[3])
+                             if len(parts) >= 5:
+                                 atom_data["spin"] = float(parts[4])
+                             
+                         res.append(atom_data)
                      except: pass
                 curr += 1
             return res
 
-        self.data["charges"]["Mulliken"] = parse_block(mulliken_start)
-        self.data["charges"]["Loewdin"] = parse_block(loewdin_start)
+        self.data["charges"]["Mulliken"] = parse_standard_block(mulliken_start)
+        self.data["charges"]["Loewdin"] = parse_standard_block(loewdin_start)
+        self.data["charges"]["Hirshfeld"] = parse_standard_block(hirshfeld_start, hirshfeld=True)
+        self.data["charges"]["CHELPG"] = parse_standard_block(chelpg_start)
+        self.data["charges"]["MK"] = parse_standard_block(mk_start)
+        self.data["charges"]["MBIS"] = parse_standard_block(mbis_start, header_lines=3, mbis=True)
+        self.data["charges"]["RESP"] = parse_standard_block(resp_start)
         
-        # NBO Parsing
-        nbo_start = -1
-        # Look for the header "NATURAL ATOMIC ORBITAL AND NATURAL BOND ORBITAL ANALYSIS"
-        # Or simpler "Summary of Natural Population Analysis:" or "NATURAL POPULATIONS:"
-        # In ORCA 5 or NBO6 output through ORCA.
+        # Clean up empty entries
+        self.data["charges"] = {k: v for k, v in self.data["charges"].items() if v}
         
-        # Common header in ORCA NBO output
-        for i, line in enumerate(self.lines):
-            if "NATURAL POPULATIONS" in line.upper() and "Summary of Natural" in self.lines[i-2 if i>2 else 0]:
-                nbo_start = i
-            elif "NATURAL POPULATIONS" in line.upper(): 
-                 # Fallback
-                 nbo_start = i
-
-        if nbo_start != -1:
-             # Parsing NBO table
-             #                                     Natural Population 
-             #              Natural    ---------------------------------------------
-             #   Atom No    Charge        Core      Valence    Rydberg      Total 
-             # ---------------------------------------------------------------------
-             #     C  1    -0.12345      1.9999     4.1235     0.0100      6.1235
-             # ...
-             # ===============================
-            
-            nbo_charges = []
-            curr = nbo_start + 1
-            while curr < len(self.lines):
-                line = self.lines[curr].strip()
-                if "----------------" in line:
+        # Mayer Parsing (QA is Mulliken charge)
+        if mayer_start != -1:
+            mayer_res = []
+            curr = mayer_start + 1
+            while curr < len(self.lines) and curr < mayer_start + 15:
+                if "ATOM" in self.lines[curr] and "QA" in self.lines[curr]:
                     curr += 1
-                    continue
-                if "================" in line: break
-                if not line:
-                     curr += 1
-                     continue
-                
-                parts = line.split()
-                # Expected format: Atom No Charge ...
-                # C 1 -0.12345 ...
-                if len(parts) >= 3:
-                     # Check if parst[1] is int
-                     try:
-                         sym = parts[0]
-                         idx = int(parts[1])
-                         chg = float(parts[2])
-                         nbo_charges.append({
-                             "atom_idx": idx - 1, # 1-based in NBO table usually
-                             "atom_sym": sym,
-                             "charge": chg
-                         })
-                     except: pass
+                    break
                 curr += 1
             
+            while curr < len(self.lines):
+                line = self.lines[curr].strip()
+                if not line or "---" in line or "Mayer bond" in line: break
+                parts = line.split()
+                if len(parts) >= 4:
+                    try:
+                        idx = int(parts[0])
+                        sym = parts[1]
+                        # NA, ZA, QA, VA, BVA, FA
+                        # parts[2] = NA
+                        # parts[3] = ZA (Atomic Number)
+                        # parts[4] = QA (Charge)
+                        qa = float(parts[4])
+                        
+                        # Extra Mayer Indices
+                        extra = {}
+                        if len(parts) >= 8:
+                            extra["valency"] = float(parts[5])       # VA
+                            extra["bonded_valency"] = float(parts[6]) # BVA
+                            extra["free_valency"] = float(parts[7])   # FA
+                            
+                        mayer_res.append({"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra})
+                    except: pass
+                curr += 1
+            if mayer_res: 
+                self.data["charges"]["Mayer"] = mayer_res
+                if not self.data["charges"].get("Mulliken"):
+                    self.data["charges"]["Mulliken"] = mayer_res
+
+        # NBO Parsing
+        if nbo_start != -1:
+            nbo_charges = []
+            
+            # 1. Try to find Detailed Summary Table first
+            # "Summary of Natural Population Analysis"
+            summary_start = -1
+            # Search a bit deeper than nbo_start, as "NATURAL POPULATIONS" might be just one header
+            # But usually the summary is a distinct block.
+            # Let's search the whole file? No, usually near the end or after NBO analysis
+            # Optimization: Look forward from nbo_start
+            
+            for i in range(nbo_start, min(nbo_start + 2000, len(self.lines))):
+                 if "Summary of Natural Population Analysis" in self.lines[i]:
+                     summary_start = i
+                     break
+            
+            if summary_start != -1:
+                # Parse the detailed table
+                curr = summary_start + 1
+                while curr < len(self.lines):
+                    line = self.lines[curr].strip()
+                    if "Atom No" in line and "Charge" in line and "Core" in line:
+                        curr += 1 # Skip header line
+                        if curr < len(self.lines) and "----" in self.lines[curr]: 
+                            curr += 1 # Skip separator
+                        break
+                    curr += 1
+                
+                while curr < len(self.lines):
+                    line = self.lines[curr].strip()
+                    if "====" in line or "Total" in line: break
+                    if not line:
+                        curr += 1
+                        continue
+                    
+                    parts = line.split()
+                    # C  1   -0.49495      1.99999     4.48487    0.01009     6.49495
+                    if len(parts) >= 7:
+                        try:
+                            sym = parts[0]
+                            idx = int(parts[1])
+                            chg = float(parts[2])
+                            core = float(parts[3])
+                            val = float(parts[4])
+                            ryd = float(parts[5])
+                            tot = float(parts[6])
+                            
+                            nbo_charges.append({
+                                "atom_idx": idx - 1,
+                                "atom_sym": sym,
+                                "charge": chg,
+                                "core": core,
+                                "valence": val,
+                                "rydberg": ryd,
+                                "total": tot
+                            })
+                        except: pass
+                    curr += 1
+            
+            # 2. Fallback if no summary found (or parsing failed), try simple block near nbo_start
+            if not nbo_charges:
+                curr = nbo_start + 1
+                while curr < len(self.lines):
+                    line = self.lines[curr].strip()
+                    if "---" in line:
+                        curr += 1
+                        continue
+                    if "================" in line or "Natural Electron Configuration" in line:
+                        if nbo_charges: break
+                        curr += 1
+                        continue
+                    if not line:
+                        if nbo_charges: break # Stop on empty line if we have data
+                        curr += 1
+                        continue
+                    
+                    parts = line.split()
+                    if len(parts) >= 3:
+                         try:
+                             # Simple format: Atom No Charge ...
+                             # or format: C 1 -0.123
+                             sym = parts[0]
+                             idx = int(parts[1])
+                             chg = float(parts[2])
+                             nbo_charges.append({
+                                 "atom_idx": idx - 1, 
+                                 "atom_sym": sym,
+                                 "charge": chg
+                             })
+                         except: pass
+                    curr += 1
+
             if nbo_charges:
                 self.data["charges"]["NBO"] = nbo_charges
+
+        # FMO Parsing
+        if fmo_start != -1:
+             fmo_data = []
+             curr = fmo_start + 1
+             
+             table_start = False
+             # Look for table header
+             while curr < len(self.lines) and curr < fmo_start + 40:
+                 if "--------" in self.lines[curr]:
+                      # Check previous lines for "Atom" "HOMO" etc.
+                      # Usually two or three lines of header, then barrier
+                      # Or "Atom   Q(Mulliken) ..."
+                      if curr > 0 and "Atom" in self.lines[curr-1]:
+                          table_start = True
+                          curr += 1
+                          break
+                      if curr > 1 and "HOMO" in self.lines[curr-2]:
+                          table_start = True
+                          curr += 1
+                          break
+                 curr += 1
+            
+             if table_start:
+                 while curr < len(self.lines):
+                     line = self.lines[curr].strip()
+                     if not line or "--------" in line:
+                         if fmo_data: break
+                         curr += 1
+                         continue
+                     
+                     parts = line.split()
+                     # 0-C 0.937 0.906 0.804 0.755
+                     if len(parts) >= 5:
+                         try:
+                             atom_lbl = parts[0] # 0-C
+                             if "-" in atom_lbl:
+                                 # Split only on first hyphen to handle negative indices or strange names?
+                                 # Usually ORCA format is 0-C, 1-H etc.
+                                 p_lbl = atom_lbl.split("-")
+                                 idx_str = p_lbl[0] 
+                                 sym = p_lbl[1]
+                                 idx = int(idx_str)
+                             else:
+                                 # Fallback if just C or just 0
+                                 idx = len(fmo_data)
+                                 sym = atom_lbl
+                             
+                             homo_m = float(parts[1])
+                             homo_l = float(parts[2])
+                             lumo_m = float(parts[3])
+                             lumo_l = float(parts[4])
+                             
+                             fmo_data.append({
+                                 "atom_idx": idx,
+                                 "atom_sym": sym,
+                                 # Use Mulliken HOMO as primary visual if asked for "charge"
+                                 "charge": homo_m, 
+                                 "homo_mulliken": homo_m,
+                                 "homo_loewdin": homo_l,
+                                 "lumo_mulliken": lumo_m,
+                                 "lumo_loewdin": lumo_l
+                             })
+                         except: pass
+                     curr += 1
+                 
+                 if fmo_data:
+                     self.data["charges"]["FMO"] = fmo_data
 
         
     def parse_nmr(self):
@@ -725,14 +892,21 @@ class OrcaParser:
                 summary_start = i
                 
         if summary_start != -1:
-            curr = summary_start + 5 # Skip headers
-            #  N Nucleus  Shielding
-            #  0  H       31.456
-            #  ...
+            curr = summary_start + 1
+            # Skip until we hit the header "N Nucleus Shielding"
+            while curr < len(self.lines) and curr < summary_start + 10:
+                if "N" in self.lines[curr] and "Shielding" in self.lines[curr]:
+                    curr += 1
+                    break
+                curr += 1
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line: break
-                if "---------------" in line: break
+                if "--------------" in line:
+                    if len(self.data["nmr_shielding"]) > 0: break
+                    curr += 1
+                    continue
                 
                 parts = line.split()
                 # Format: Index Nucleus Shielding
@@ -934,49 +1108,6 @@ class OrcaParser:
                     except: pass
                 curr += 1
         
-    def parse_mo(self):
-        self.data["mos"] = [] # List of dict: {id, occ, energy, spin}
-        
-        # Look for "ORBITAL ENERGIES"
-        start_line = -1
-        for i, line in enumerate(self.lines):
-            if "ORBITAL ENERGIES" in line.upper():
-                start_line = i
-        
-        if start_line != -1:
-            curr = start_line + 4 # Skip headers
-            # Format:
-            #   NO   OCC          E(Eh)            E(eV)
-            #    0   2.0000      -19.125026      -520.4184
-            #   ...
-            
-            while curr < len(self.lines):
-                line = self.lines[curr].strip()
-                if not line:
-                    curr += 1
-                    continue
-                if "MULLIKEN POPULATION ANALYSIS" in line: break
-                
-                parts = line.split()
-                if len(parts) >= 4:
-                    try:
-                        idx = int(parts[0])
-                        occ = float(parts[1])
-                        eh = float(parts[2])
-                        ev = float(parts[3])
-                        
-                        # Check spin? ORCA lists alpha/beta separately if UKS.
-                        # Usually "SPIN UP ORBITALS" and "SPIN DOWN" blocks if unrestricted.
-                        # For now assume restricted or just list all found.
-                        
-                        self.data["mos"].append({
-                            "id": idx,
-                            "occ": occ,
-                            "energy_eh": eh,
-                            "energy_ev": ev
-                        })
-                    except: pass
-                curr += 1
 
     def parse_thermal(self):
         self.data["thermal"] = {}
@@ -1238,46 +1369,75 @@ class OrcaParser:
     def parse_orbital_energies(self):
         """Parse orbital energies from ORBITAL ENERGIES section"""
         self.data["orbital_energies"] = []
+        self.data["mos"] = [] # Backward compatibility
         
         # Look for "ORBITAL ENERGIES" section
-        start_idx = -1
+        start_indices = []
         for i, line in enumerate(self.lines):
-            if "ORBITAL ENERGIES" in line.upper() and i+1 < len(self.lines) and "---" in self.lines[i+1]:
-                start_idx = i
-                break
+            uu = line.upper()
+            if "ORBITAL ENERGIES" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+                start_indices.append((i, "restricted")) # Default
+            elif "SPIN UP ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+                start_indices.append((i, "alpha"))
+            elif "SPIN DOWN ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+                start_indices.append((i, "beta"))
         
-        if start_idx == -1:
+        if not start_indices:
             return
-        
-        # Skip header lines
-        curr = start_idx + 3  # Skip title, separator, column headers
-        
-        while curr < len(self.lines):
-            line = self.lines[curr].strip()
-            if not line or "---" in line:
-                break
             
-            parts = line.split()
-            # Format: NO   OCC          E(Eh)            E(eV)
-            #           0   2.0000     -10.186408      -277.1862
-            if len(parts) >= 4:
-                try:
-                    orbital_idx = int(parts[0])
-                    occupation = float(parts[1])
-                    energy_eh = float(parts[2])
-                    energy_ev = float(parts[3])
-                    
-                    self.data["orbital_energies"].append({
-                        "index": orbital_idx,
-                        "occupation": occupation,
-                        "energy_eh": energy_eh,
-                        "energy_ev": energy_ev,
-                        "type": "occupied" if occupation > 0.1 else "virtual"
-                    })
-                except:
-                    pass
+        # Only keep the LAST occurrence for each spin type
+        final_indices = {}
+        for idx, spin in start_indices:
+            final_indices[spin] = idx
             
-            curr += 1
+        filtered_indices = []
+        for spin, idx in final_indices.items():
+            filtered_indices.append((idx, spin))
+        filtered_indices.sort()
+        
+        for start_idx, spin in filtered_indices:
+            # Skip title and separator, then find column header
+            curr = start_idx + 2
+            while curr < len(self.lines) and curr < start_idx + 10:
+                line = self.lines[curr].strip()
+                # Check for "NO", "OCC", and "Eh" or "eV"
+                if "NO" in line and ("OCC" in line or "E(Eh)" in line or "E(eV)" in line):
+                    curr += 1
+                    break
+                curr += 1
+                
+            while curr < len(self.lines):
+                line = self.lines[curr].strip()
+                if not line or "---" in line or "****" in line or "MULLIKEN" in line:
+                    break
+                
+                parts = line.split()
+                # Format: NO   OCC          E(Eh)            E(eV)
+                #           0   2.0000     -10.186408      -277.1862
+                if len(parts) >= 4:
+                    try:
+                        orbital_idx = int(parts[0])
+                        occupation = float(parts[1])
+                        energy_eh = float(parts[2])
+                        energy_ev = float(parts[3])
+                        
+                        orb_data = {
+                            "index": orbital_idx,
+                            "id": orbital_idx, # For mo_analysis
+                            "occupation": occupation,
+                            "occ": occupation, # For mo_analysis
+                            "energy_eh": energy_eh,
+                            "energy_ev": energy_ev,
+                            "energy": energy_eh, # For backward compatibility
+                            "spin": spin,
+                            "type": "occupied" if occupation > 0.1 else "virtual"
+                        }
+                        self.data["orbital_energies"].append(orb_data)
+                        self.data["mos"].append(orb_data)
+                    except:
+                        pass
+                
+                curr += 1
     
     # COMMENTED OUT: Hessian file parsing no longer needed
     # Force analysis now uses only output file gradient data
@@ -1650,17 +1810,23 @@ class OrcaParser:
                 for k in range(1, 15):
                     if i + k >= len(self.lines): break
                     uu_k = self.lines[i+k].upper()
-                    if "ITERATION" in uu_k and "ENERGY" in uu_k:
+                    if "ITER" in uu_k and "ENERGY" in uu_k:
                         header_idx = i + k
                         break
                 
                 if header_idx != -1:
                     trace = []
-                    idx = header_idx + 2
+                    idx = header_idx + 1
+                    # Check for separator line right after header
+                    if idx < len(self.lines) and "---" in self.lines[idx]:
+                        idx += 1
+                    
                     while idx < len(self.lines):
                         l_scf = self.lines[idx].strip()
                         if not l_scf or "---" in l_scf or "SUCCESS" in l_scf or "Energy Check" in l_scf:
-                            break
+                            if trace: break
+                            idx += 1
+                            continue
                         
                         parts = l_scf.split()
                         if len(parts) >= 2:
