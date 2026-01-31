@@ -1,12 +1,15 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.1.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
 from .gui import OrcaResultAnalyzerDialog
 from .parser import OrcaParser
+from PyQt6.QtWidgets import QMessageBox, QFileDialog
+import importlib
+import os
 
 # Global reference to keep window alive
 _analyzer_window = None
@@ -26,13 +29,11 @@ def initialize(context):
             with open(path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
         except Exception as e:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
             return
 
         # Initialize Parser
         # Force reload to ensure latest code is used (dev mode helper)
-        import importlib
         from . import parser as parser_mod
         importlib.reload(parser_mod)
         from .parser import OrcaParser
@@ -74,7 +75,6 @@ def initialize(context):
 
     # Add to Main Menu
     def menu_action():
-        from PyQt6.QtWidgets import QFileDialog
         mw = context.get_main_window()
         path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log)")
         if path:

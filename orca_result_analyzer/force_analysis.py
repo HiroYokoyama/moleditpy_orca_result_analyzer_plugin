@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -16,6 +17,7 @@ class ForceViewerDialog(QDialog):
         self.parser = parser
         self.actors = []
         self.force_color = "red"
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         # Get trajectory steps if available
         self.traj_steps = []
@@ -54,6 +56,8 @@ class ForceViewerDialog(QDialog):
         self.chk_auto_scale = QCheckBox("Auto Apply")
         self.chk_auto_scale.setToolTip("Automatically auto-scale vectors when step changes")
         row1.addWidget(self.chk_auto_scale)
+        
+        row1.addStretch()
         
         row1.addStretch()
         
@@ -97,6 +101,10 @@ class ForceViewerDialog(QDialog):
         
         # Initialize
         self.populate_force_table()
+        
+        # Load Settings (Reverse, Color, Etc.) - Scale NOT loaded to allow auto-scaling
+        self.load_settings()
+        
         # self.auto_scale() # Manual only per user request
 
     def toggle_visualization(self):
@@ -477,6 +485,10 @@ class ForceViewerDialog(QDialog):
                 
                 # Force = -Gradient
                 force = np.array([-vec[0], -vec[1], -vec[2]])
+                
+                # Reverse if requested
+                # if hasattr(self, 'chk_reverse') and self.chk_reverse.isChecked():
+                #     force = -force
                 magnitude = np.linalg.norm(force)
                 
                 if magnitude < 1e-12:
@@ -531,4 +543,43 @@ class ForceViewerDialog(QDialog):
     def closeEvent(self, event):
         """Clean up when dialog closes"""
         self.clear_vectors()
+        self.save_settings()
         super().closeEvent(event)
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                
+                settings = all_settings.get("force_settings", {})
+                
+                # Note: 'scale' is intentionally NOT loaded to allow auto-scaling based on specific molecule data
+                
+                if "force_color" in settings:
+                    self.force_color = settings["force_color"]
+                    
+            except Exception as e:
+                print(f"Error loading force settings: {e}")
+
+    def save_settings(self):
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        force_settings = {
+            # "scale": self.spin_scale.value(), # Do not save scale
+            # "reverse_vector": self.chk_reverse.isChecked() if hasattr(self, 'chk_reverse') else True,
+            "force_color": self.force_color
+        }
+        
+        all_settings["force_settings"] = force_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving force settings: {e}")

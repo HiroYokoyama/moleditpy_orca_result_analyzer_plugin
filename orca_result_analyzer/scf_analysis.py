@@ -3,6 +3,8 @@ from PyQt6.QtCore import Qt
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import csv
 
 class SCFTraceDialog(QDialog):
     def __init__(self, parent, scf_traces):
@@ -61,6 +63,13 @@ class SCFTraceDialog(QDialog):
         layout.addWidget(btn_close)
         
         self.update_plot()
+        
+    def closeEvent(self, event):
+        try:
+            plt.close(self.figure)
+        except:
+            pass
+        super().closeEvent(event)
 
     def update_plot(self):
         idx = self.combo_steps.currentData()
@@ -137,7 +146,6 @@ class SCFTraceDialog(QDialog):
         if not path: return
         
         try:
-            import csv
             if idx == -1:
                 # Export all
                 with open(path, 'w', newline='') as f:
@@ -156,5 +164,8 @@ class SCFTraceDialog(QDialog):
                     writer.writerow(["Iteration", "Energy (Eh)"])
                     for d in trace.get('iterations', []):
                         writer.writerow([d['iter'], d['energy']])
+            # print(f"Data exported to {path}")
+            if hasattr(self.parent(), 'mw') and self.parent().mw:
+                self.parent().mw.statusBar().showMessage(f"Data exported to {path}", 5000)
         except Exception as e:
             print(f"Error exporting CSV: {e}")

@@ -1,8 +1,10 @@
 
 import os
+import importlib
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QWidget, QGridLayout, QMessageBox, QMenuBar, QMenu, QFileDialog)
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import Qt, QSize
 
 try:
     from rdkit import Chem
@@ -42,6 +44,13 @@ class OrcaResultAnalyzerDialog(QDialog):
         # self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
         self.init_ui()
 
+    def get_icon(self, name):
+        """Helper to load icon from icon directory"""
+        icon_path = os.path.join(os.path.dirname(__file__), 'icon', name)
+        if os.path.exists(icon_path):
+            return QIcon(icon_path)
+        return QIcon()
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         
@@ -55,11 +64,13 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         open_action = QAction("&Open File...", self)
         open_action.setShortcut("Ctrl+O")
+        open_action.setIcon(self.get_icon("menu_open.svg"))
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
         
         reload_action = QAction("&Reload File", self)
         reload_action.setShortcut("Ctrl+R")
+        reload_action.setIcon(self.get_icon("menu_reload.svg"))
         reload_action.triggered.connect(self.reload_file)
         file_menu.addAction(reload_action)
         
@@ -67,6 +78,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         close_action = QAction("&Close", self)
         close_action.setShortcut("Ctrl+W")
+        close_action.setIcon(self.get_icon("menu_close.svg"))
         close_action.triggered.connect(self.close)
         file_menu.addAction(close_action)
         
@@ -101,6 +113,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         # Large Open File Button
         btn_open_large = QPushButton("Open File...")
+        btn_open_large.setIcon(self.get_icon("menu_open.svg"))
         btn_open_large.setStyleSheet("""
             QPushButton {
                 background-color: #0066cc;
@@ -123,6 +136,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         # Reload Button
         btn_reload = QPushButton("Reload")
+        btn_reload.setIcon(self.get_icon("menu_reload.svg"))
         btn_reload.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
@@ -178,57 +192,79 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """
         
+        icon_size = QSize(32, 32)
+
         # Row 0: Electronic Structure
         self.btn_scf = QPushButton("SCF Trace")
+        self.btn_scf.setIcon(self.get_icon("icon_scf.svg"))
+        self.btn_scf.setIconSize(icon_size)
         self.btn_scf.setStyleSheet(button_style)
         self.btn_scf.clicked.connect(self.show_scf_trace)
         grid.addWidget(self.btn_scf, 0, 0)
         
         self.btn_mo = QPushButton("MO Analysis")
+        self.btn_mo.setIcon(self.get_icon("icon_mo.svg"))
+        self.btn_mo.setIconSize(icon_size)
         self.btn_mo.setStyleSheet(button_style)
         self.btn_mo.clicked.connect(self.show_mo_analyzer)
         grid.addWidget(self.btn_mo, 0, 1)
 
         # Row 1: Geometry Trajectory
         self.btn_traj = QPushButton("Optimization / Scan")
+        self.btn_traj.setIcon(self.get_icon("icon_traj.svg"))
+        self.btn_traj.setIconSize(icon_size)
         self.btn_traj.setStyleSheet(button_style)
         self.btn_traj.clicked.connect(self.show_trajectory)
         grid.addWidget(self.btn_traj, 1, 0)
 
         self.btn_forces = QPushButton("Forces")
+        self.btn_forces.setIcon(self.get_icon("icon_forces.svg"))
+        self.btn_forces.setIconSize(icon_size)
         self.btn_forces.setStyleSheet(button_style)
         self.btn_forces.clicked.connect(self.show_forces)
         grid.addWidget(self.btn_forces, 1, 1)
         
         # Row 2: Atomic Properties
         self.btn_charge = QPushButton("Atomic Charges")
+        self.btn_charge.setIcon(self.get_icon("icon_charge.svg"))
+        self.btn_charge.setIconSize(icon_size)
         self.btn_charge.setStyleSheet(button_style)
         self.btn_charge.clicked.connect(self.show_charges)
         grid.addWidget(self.btn_charge, 2, 0)
         
         self.btn_dipole = QPushButton("Dipole Moment")
+        self.btn_dipole.setIcon(self.get_icon("icon_dipole.svg"))
+        self.btn_dipole.setIconSize(icon_size)
         self.btn_dipole.setStyleSheet(button_style)
         self.btn_dipole.clicked.connect(self.show_dipole)
         grid.addWidget(self.btn_dipole, 2, 1)
 
         # Row 3: Vibrations & Thermodynamics
         self.btn_freq = QPushButton("Frequencies")
+        self.btn_freq.setIcon(self.get_icon("icon_freq.svg"))
+        self.btn_freq.setIconSize(icon_size)
         self.btn_freq.setStyleSheet(button_style)
         self.btn_freq.clicked.connect(self.show_freq)
         grid.addWidget(self.btn_freq, 3, 0)
 
         self.btn_therm = QPushButton("Thermochemistry")
+        self.btn_therm.setIcon(self.get_icon("icon_therm.svg"))
+        self.btn_therm.setIconSize(icon_size)
         self.btn_therm.setStyleSheet(button_style)
         self.btn_therm.clicked.connect(self.show_thermal)
         grid.addWidget(self.btn_therm, 3, 1)
         
         # Row 4: Advanced Spectroscopy
         self.btn_tddft = QPushButton("TDDFT")
+        self.btn_tddft.setIcon(self.get_icon("icon_tddft.svg"))
+        self.btn_tddft.setIconSize(icon_size)
         self.btn_tddft.setStyleSheet(button_style)
         self.btn_tddft.clicked.connect(self.show_tddft)
         grid.addWidget(self.btn_tddft, 4, 0)
 
         self.btn_nmr = QPushButton("NMR")
+        self.btn_nmr.setIcon(self.get_icon("icon_nmr.svg"))
+        self.btn_nmr.setIconSize(icon_size)
         self.btn_nmr.setStyleSheet(button_style)
         self.btn_nmr.clicked.connect(self.show_nmr)
         grid.addWidget(self.btn_nmr, 4, 1)
@@ -262,7 +298,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             with open(path, 'r', encoding='utf-8', errors='replace') as f:
                 content = f.read()
                 
-            import importlib
+            # import importlib # Moved to top
             from . import parser as parser_mod
             importlib.reload(parser_mod)
             from .parser import OrcaParser
@@ -279,7 +315,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_structure_3d()
             self.update_button_states()
             
-            QMessageBox.information(self, "Loaded", f"Successfully loaded:\n{os.path.basename(path)}")
+            self.update_button_states()
+            
+            # QMessageBox.information(self, "Loaded", f"Successfully loaded:\n{os.path.basename(path)}")
+            # print(f"Successfully loaded: {os.path.basename(path)}")
+            self.mw.statusBar().showMessage(f"Successfully loaded: {os.path.basename(path)}", 5000)
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")

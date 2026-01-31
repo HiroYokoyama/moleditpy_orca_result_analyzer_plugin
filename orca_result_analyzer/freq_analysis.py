@@ -6,7 +6,16 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import math
 import numpy as np
+import os
+import json
+import traceback
 import pyvista as pv
+from .spectrum_widget import SpectrumWidget
+
+try:
+    from rdkit.Geometry import Point3D
+except ImportError:
+    Point3D = None
 
 try:
     from PIL import Image
@@ -27,7 +36,7 @@ class FreqSpectrumWindow(QWidget):
         self.scaling_factor = 1.0
         
         self.setWindowTitle("IR/Raman Spectrum")
-        self.resize(600, 500)
+        self.resize(700, 500)
         
         self.init_ui()
         
@@ -35,7 +44,7 @@ class FreqSpectrumWindow(QWidget):
         layout = QVBoxLayout(self)
         
         # Spectrum Widget
-        from .spectrum_widget import SpectrumWidget
+        # Spectrum Widget
         self.spectrum = SpectrumWidget(self.frequencies, x_key='freq', y_key='ir', x_unit='Frequency (cm-1)', y_unit='Intensity (a.u.)', sigma=20.0)
         self.spectrum.show_legend = False
         layout.addWidget(self.spectrum)
@@ -144,6 +153,10 @@ class FreqSpectrumWindow(QWidget):
         btn_sticks.clicked.connect(self.save_sticks)
         graph_layout.addWidget(btn_sticks)
         
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.close)
+        graph_layout.addWidget(btn_close)
+        
         layout.addLayout(graph_layout)
         
         # Initial Update
@@ -229,7 +242,10 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
+                if self.freq_dialog and self.freq_dialog.mw:
+                    self.freq_dialog.mw.statusBar().showMessage(f"Data saved to: {os.path.basename(path)}", 5000)
+                else:
+                    print(f"Data saved to: {path}")
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
                 
@@ -238,7 +254,10 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                QMessageBox.information(self, "Exported", f"Stick data saved to:\n{path}")
+                if self.freq_dialog and self.freq_dialog.mw:
+                    self.freq_dialog.mw.statusBar().showMessage(f"Stick data saved to: {os.path.basename(path)}", 5000)
+                else:
+                    print(f"Stick data saved to: {path}")
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
     
@@ -275,6 +294,7 @@ class FrequencyDialog(QDialog):
         self.setWindowTitle("Vibrational Frequencies")
         self.resize(450, 650) 
         
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.init_ui()
         
     def init_ui(self):
@@ -357,7 +377,7 @@ class FrequencyDialog(QDialog):
         self.spin_amp = QDoubleSpinBox()
         self.spin_amp.setRange(0.1, 10.0)
         self.spin_amp.setSingleStep(0.1)
-        self.spin_amp.setValue(1.0)
+        self.spin_amp.setValue(0.5)
         anim_row1.addWidget(self.spin_amp)
         
         anim_row1.addWidget(QLabel(" | FPS:"))
@@ -399,8 +419,12 @@ class FrequencyDialog(QDialog):
         btn_close.clicked.connect(self.close_clean)
         main_layout.addWidget(btn_close)
         
+
+        
         self.vector_actor = None
         self.populate_list()
+        
+        self.load_settings()
         
     def populate_list(self):
         self.tree.clear()
@@ -439,9 +463,15 @@ class FrequencyDialog(QDialog):
     def on_mode_selected(self, current, previous):
         if not current: return
         idx = int(current.text(0))
+        
+        was_playing = self.is_playing
+        
         self.current_mode_idx = idx
         self.stop_animation()
         self.update_view()
+        
+        if was_playing:
+            self.start_animation()
         
     def update_view(self):
         if self.current_mode_idx < 0: return
@@ -464,7 +494,6 @@ class FrequencyDialog(QDialog):
         if not vecs: return
         
         try:
-            import numpy as np
             points = np.array(self.base_coords)
             vectors = np.array(vecs)
             
@@ -534,7 +563,6 @@ class FrequencyDialog(QDialog):
         if not vecs: return
         
         try:
-            from rdkit.Geometry import Point3D
             mol = self.mw.current_mol
             conf = mol.GetConformer()
             for i, (bx, by, bz) in enumerate(self.base_coords):
@@ -552,7 +580,6 @@ class FrequencyDialog(QDialog):
                 
         except Exception as e:
             print(f"Error in animate_frame: {e}")
-            import traceback
             traceback.print_exc()
     
     def update_vectors_at_displaced_position(self):
@@ -598,7 +625,6 @@ class FrequencyDialog(QDialog):
 
     def reset_geometry(self):
         try:
-            from rdkit.Geometry import Point3D
             mol = self.mw.current_mol
             conf = mol.GetConformer()
             for i, (bx, by, bz) in enumerate(self.base_coords):
@@ -625,7 +651,7 @@ class FrequencyDialog(QDialog):
         
         spin_fps = QSpinBox()
         spin_fps.setRange(1, 60)
-        spin_fps.setValue(20)
+        spin_fps.setValue(self.spin_fps.value())
         form.addRow("FPS:", spin_fps)
         
         chk_trans = QCheckBox()
@@ -723,7 +749,10 @@ class FrequencyDialog(QDialog):
                             processed_images.append(img.convert("RGB"))
                 
                 processed_images[0].save(path, save_all=True, append_images=processed_images[1:], duration=duration, loop=0, disposal=2)
-                QMessageBox.information(self, "Success", f"GIF saved to:\n{path}")
+                if self.mw and hasattr(self.mw, 'statusBar'):
+                    self.mw.statusBar().showMessage(f"GIF saved to: {os.path.basename(path)}", 5000)
+                else:
+                    print(f"GIF saved to: {path}")
                 
         except Exception as e:
              QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
@@ -754,7 +783,57 @@ class FrequencyDialog(QDialog):
              except: pass
         if self.spectrum_win:
              self.spectrum_win.close()
+             
+        self.save_settings()
         event.accept()
 
     def close_clean(self):
         self.close()
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                
+                settings = all_settings.get("freq_settings", {})
+                
+                if "sf" in settings: self.spin_sf.setValue(float(settings["sf"]))
+                if "show_vec" in settings: self.chk_vector.setChecked(bool(settings["show_vec"]))
+                # if "vec_scale" in settings: self.spin_vec_scale.setValue(float(settings["vec_scale"])) # Reset scale
+                if "vec_res" in settings: self.spin_vec_res.setValue(int(settings["vec_res"]))
+                if "vec_color" in settings: 
+                    self.vector_color = settings["vec_color"]
+                    self.btn_vec_color.setStyleSheet(f"background-color: {self.vector_color}; border: 1px solid gray; height: 20px;")
+                if "amp" in settings: self.spin_amp.setValue(float(settings["amp"]))
+                if "fps" in settings: self.spin_fps.setValue(int(settings["fps"]))
+                    
+            except Exception as e:
+                print(f"Error loading freq settings: {e}")
+
+    def save_settings(self):
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                import json
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        freq_settings = {
+            "sf": self.spin_sf.value(),
+            "show_vec": self.chk_vector.isChecked(),
+            # "vec_scale": self.spin_vec_scale.value(), # Do not save
+            "vec_res": self.spin_vec_res.value(),
+            "vec_color": self.vector_color,
+            "amp": self.spin_amp.value(),
+            "fps": self.spin_fps.value()
+        }
+        
+        all_settings["freq_settings"] = freq_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving freq settings: {e}")

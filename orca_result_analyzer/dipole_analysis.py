@@ -1,5 +1,7 @@
 
 import numpy as np
+import os
+import json
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QCheckBox, QDoubleSpinBox, QColorDialog, QSpinBox,
@@ -14,8 +16,10 @@ class DipoleDialog(QDialog):
         self.parent_dlg = parent_dlg
         self.dipole_data = dipole_data
         self.arrow_actor = None
+        self.arrow_actor = None
         self.arrow_color = "cyan"
         self.arrow_res = 20
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         main_layout = QVBoxLayout(self)
         
@@ -42,13 +46,18 @@ class DipoleDialog(QDialog):
         self.chk_show.stateChanged.connect(self.update_view)
         view_layout.addWidget(self.chk_show)
         
+        self.chk_reverse = QCheckBox("Reverse Vector")
+        self.chk_reverse.setChecked(True)
+        self.chk_reverse.stateChanged.connect(self.update_view)
+        view_layout.addWidget(self.chk_reverse)
+        
         # Scale and Resolution in one row
         res_row = QHBoxLayout()
         res_row.addWidget(QLabel("Scale:"))
         self.spin_scale = QDoubleSpinBox()
         self.spin_scale.setRange(0.1, 10.0)
         self.spin_scale.setSingleStep(0.1)
-        self.spin_scale.setValue(1.0)
+        self.spin_scale.setValue(2.0)
         self.spin_scale.valueChanged.connect(self.update_view)
         res_row.addWidget(self.spin_scale)
         
@@ -80,6 +89,8 @@ class DipoleDialog(QDialog):
         btn_close.clicked.connect(self.close)
         main_layout.addWidget(btn_close)
         
+        self.load_settings()
+        
     def update_view(self):
         # Clear old
         if self.arrow_actor:
@@ -107,6 +118,9 @@ class DipoleDialog(QDialog):
             if mag < 1e-6: return
             
             direction = vec / mag
+            if self.chk_reverse.isChecked():
+                direction = -direction
+                
             scale = self.spin_scale.value()
             length = mag * scale
             
@@ -137,6 +151,60 @@ class DipoleDialog(QDialog):
                  self.parent_dlg.mw.plotter.render()
              except: pass
         # Clean up reference in parent
+        # Clean up reference in parent
         if hasattr(self.parent_dlg, 'dipole_dlg'):
              self.parent_dlg.dipole_dlg = None
+             
+        self.save_settings()
         event.accept()
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                
+                settings = all_settings.get("dipole_settings", {})
+                
+                # if "scale" in settings:
+                #    self.spin_scale.setValue(float(settings["scale"]))
+                
+                if "res" in settings:
+                    self.spin_res.setValue(int(settings["res"]))
+                    
+                if "color" in settings:
+                    self.arrow_color = settings["color"]
+                    self.btn_color.setStyleSheet(f"background-color: {self.arrow_color}; border: 1px solid gray; height: 20px;")
+                
+                if "show" in settings:
+                    self.chk_show.setChecked(bool(settings["show"]))
+                    
+                if "reverse" in settings:
+                    self.chk_reverse.setChecked(bool(settings["reverse"]))
+                    
+            except Exception as e:
+                print(f"Error loading dipole settings: {e}")
+
+    def save_settings(self):
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        dipole_settings = {
+            # "scale": self.spin_scale.value(),
+            "res": self.spin_res.value(),
+            "color": self.arrow_color,
+            "show": self.chk_show.isChecked(),
+            "reverse": self.chk_reverse.isChecked()
+        }
+        
+        all_settings["dipole_settings"] = dipole_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving dipole settings: {e}")

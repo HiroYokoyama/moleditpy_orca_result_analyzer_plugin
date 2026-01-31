@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
+import traceback
 
 # from .logger import Logger
 
@@ -441,6 +442,5 @@ class CalcWorker(QThread):
             self.finished_sig.emit(True, self.output_path)
             
         except Exception as e:
-            import traceback
             traceback.print_exc()
             self.finished_sig.emit(False, str(e))

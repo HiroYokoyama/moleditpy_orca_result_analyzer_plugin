@@ -1,13 +1,18 @@
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, 
-                             QHeaderView, QPushButton, QApplication, QCheckBox, QAbstractItemView)
+                             QHeaderView, QPushButton, QApplication, QCheckBox, QAbstractItemView, QFileDialog)
+import os
+import json
+import csv
 
 class ThermalTableDialog(QDialog):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Thermochemistry")
         self.resize(550, 460)
+        self.resize(550, 460)
         self.data = data
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         layout = QVBoxLayout(self)
         
@@ -37,6 +42,44 @@ class ThermalTableDialog(QDialog):
         layout.addWidget(btn_close)
         
         self.update_table()
+        self.load_settings()
+        
+    def closeEvent(self, event):
+        self.save_settings()
+        super().closeEvent(event)
+        
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                
+                settings = all_settings.get("thermal_settings", {})
+                if "show_details" in settings:
+                    self.chk_details.setChecked(bool(settings["show_details"]))
+                    
+            except Exception as e:
+                print(f"Error loading thermal settings: {e}")
+
+    def save_settings(self):
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        thermal_settings = {
+            "show_details": self.chk_details.isChecked()
+        }
+        
+        all_settings["thermal_settings"] = thermal_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving thermal settings: {e}")
         
     def update_table(self):
         show_details = self.chk_details.isChecked()
@@ -128,8 +171,6 @@ class ThermalTableDialog(QDialog):
         QApplication.clipboard().setText(text)
 
     def export_csv(self):
-        from PyQt6.QtWidgets import QFileDialog
-        import csv
         path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
         if path:
             try:
@@ -140,5 +181,8 @@ class ThermalTableDialog(QDialog):
                         p = self.table.item(r, 0).text()
                         v = self.table.item(r, 1).text()
                         writer.writerow([p, v])
+                # print(f"Data exported to {path}")
+                if hasattr(self.parent(), 'mw') and self.parent().mw:
+                    self.parent().mw.statusBar().showMessage(f"Data exported to {path}", 5000)
             except Exception as e:
                 pass # Simple error handling

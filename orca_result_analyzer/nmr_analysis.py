@@ -17,7 +17,7 @@ try:
 except ImportError:
     VDW_RADII = {'H': 1.2 * 0.3, 'C': 1.7 * 0.3, 'N': 1.55 * 0.3, 'O': 1.52 * 0.3}
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 from .nmr_custom_ref_dialog import CustomReferenceDialog
@@ -867,8 +867,10 @@ class NMRDialog(QDialog):
         # Now that we switched inputs (if we were in All), this should work
         self.combo_ref.setCurrentText(ref_name)
         
-        QMessageBox.information(self, "Success", 
-                              f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.")
+        if self.parent_dlg and hasattr(self.parent_dlg, 'mw'):
+            self.parent_dlg.mw.statusBar().showMessage(f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.", 5000)
+        else:
+            print(f"Added reference '{ref_name}'")
 
     def delete_custom_reference(self):
         """Delete currently selected custom reference"""
@@ -916,7 +918,10 @@ class NMRDialog(QDialog):
                     del self.reference_standards[current_nucleus][current_ref]
                     self.save_settings()
                     self.update_reference_combo()
-                    QMessageBox.information(self, "Deleted", f"Reference '{current_ref}' removed.")
+                    if self.parent_dlg and hasattr(self.parent_dlg, 'mw'):
+                        self.parent_dlg.mw.statusBar().showMessage(f"Reference '{current_ref}' removed.", 5000)
+                    else:
+                        print(f"Reference '{current_ref}' removed.")
                 else:
                     # Should not happen if UI is consistent
                     QMessageBox.warning(self, "Error", "Reference not found in storage.")
@@ -1205,7 +1210,10 @@ class NMRDialog(QDialog):
         if filename:
             try:
                 self.figure.savefig(filename, dpi=300, bbox_inches='tight')
-                QMessageBox.information(self, "Success", f"Spectrum exported to:\n{os.path.basename(filename)}")
+                if self.parent_dlg and hasattr(self.parent_dlg, 'mw'):
+                    self.parent_dlg.mw.statusBar().showMessage(f"Spectrum exported to: {os.path.basename(filename)}", 5000)
+                else:
+                    print(f"Spectrum exported to: {filename}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
     
@@ -1219,7 +1227,10 @@ class NMRDialog(QDialog):
                 cols.append(it.text() if it else "")
             text += "\t".join(cols) + "\n"
         QApplication.clipboard().setText(text)
-        QMessageBox.information(self, "Copied", "Table data copied to clipboard!")
+        if self.parent_dlg and hasattr(self.parent_dlg, 'mw'):
+            self.parent_dlg.mw.statusBar().showMessage("Table data copied to clipboard!", 5000)
+        else:
+            print("Table data copied to clipboard!")
     
     def on_peak_click(self, event):
         """Handle click on spectrum peak"""
@@ -1238,8 +1249,11 @@ class NMRDialog(QDialog):
         if click_x is None:
             return
         
-        # Find nearest peak within tolerance
-        tolerance = 0.5  # ppm
+        # Find nearest peak within tolerance (relative to current x-axis range)
+        xlim = event.inaxes.get_xlim()
+        x_range = abs(xlim[1] - xlim[0])
+        tolerance = x_range * 0.01  # 1% of view width
+        
         distances = [abs(shift - click_x) for shift in self.current_shifts]
         min_distance = min(distances)
         

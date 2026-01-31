@@ -1,5 +1,6 @@
 
 import csv
+import os
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -126,6 +127,11 @@ class TrajectoryResultDialog(QDialog):
         self.btn_play.clicked.connect(self.toggle_play)
         btn_layout.addWidget(self.btn_play)
         
+        self.btn_prev = QPushButton("<")
+        self.btn_prev.setFixedWidth(30)
+        self.btn_prev.clicked.connect(self.prev_frame)
+        btn_layout.addWidget(self.btn_prev)
+
         self.btn_next = QPushButton(">")
         self.btn_next.setFixedWidth(30)
         self.btn_next.clicked.connect(self.next_frame)
@@ -137,6 +143,10 @@ class TrajectoryResultDialog(QDialog):
         self.spin_fps.setValue(10)
         self.spin_fps.valueChanged.connect(self.on_fps_changed)
         btn_layout.addWidget(self.spin_fps)
+        
+        self.chk_loop = QCheckBox("Loop")
+        self.chk_loop.setChecked(True)
+        btn_layout.addWidget(self.chk_loop)
         
         btn_layout.addStretch()
         
@@ -152,6 +162,10 @@ class TrajectoryResultDialog(QDialog):
         btn_save_gif.clicked.connect(self.save_gif)
         btn_save_gif.setEnabled(HAS_PIL)
         btn_layout.addWidget(btn_save_gif)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.close)
+        btn_layout.addWidget(btn_close)
         
         self.layout().addLayout(btn_layout)
         
@@ -334,6 +348,10 @@ class TrajectoryResultDialog(QDialog):
             self.btn_play.setText("Play")
             self.is_playing = False
         else:
+            # If loop is off and we are at the last frame, start from the beginning
+            if not self.chk_loop.isChecked() and self.slider.value() >= len(self.steps) - 1:
+                self.slider.setValue(0)
+                
             fps = self.spin_fps.value()
             self.timer.start(int(1000/fps))
             self.btn_play.setText("Pause")
@@ -347,7 +365,21 @@ class TrajectoryResultDialog(QDialog):
     def next_frame(self):
         idx = self.slider.value() + 1
         if idx >= len(self.steps):
-            idx = 0
+            if self.chk_loop.isChecked():
+                idx = 0
+            else:
+                idx = len(self.steps) - 1
+                if self.is_playing:
+                    self.toggle_play()
+        self.slider.setValue(idx)
+        
+    def prev_frame(self):
+        idx = self.slider.value() - 1
+        if idx < 0:
+            if self.chk_loop.isChecked():
+                 idx = len(self.steps) - 1
+            else:
+                 idx = 0
         self.slider.setValue(idx)
         
     def save_graph(self):
@@ -359,7 +391,10 @@ class TrajectoryResultDialog(QDialog):
         path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "Images (*.png *.jpg *.svg)")
         if path:
             self.canvas.fig.savefig(path, dpi=300)
-            QMessageBox.information(self, "Saved", f"Graph saved to:\n{path}")
+            if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
+                self.gl_widget.statusBar().showMessage(f"Graph saved to: {os.path.basename(path)}", 5000)
+            else:
+                print(f"Graph saved to: {path}")
             
         # Restore annotation visibility
         self.annot.set_visible(was_visible)
@@ -389,7 +424,10 @@ class TrajectoryResultDialog(QDialog):
                     mode = "Relative" if self.show_relative else "Absolute"
                     for i, step in enumerate(self.steps):
                          writer.writerow([i+1, self.display_energies[i], mode])
-                QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
+                if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
+                    self.gl_widget.statusBar().showMessage(f"Data saved to: {os.path.basename(path)}", 5000)
+                else:
+                    print(f"Data saved to: {path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -405,12 +443,16 @@ class TrajectoryResultDialog(QDialog):
         
         spin_fps = QSpinBox()
         spin_fps.setRange(1, 60)
-        spin_fps.setValue(10)
+        spin_fps.setValue(self.spin_fps.value())
         form.addRow("FPS:", spin_fps)
         
         chk_trans = QCheckBox()
         chk_trans.setChecked(True)
         form.addRow("Transparent:", chk_trans)
+        
+        chk_hq = QCheckBox()
+        chk_hq.setChecked(True)
+        form.addRow("High Quality (Adaptive):", chk_hq)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         btns.accepted.connect(dialog.accept)
@@ -421,6 +463,7 @@ class TrajectoryResultDialog(QDialog):
         
         fps = spin_fps.value()
         transparent = chk_trans.isChecked()
+        use_hq = chk_hq.isChecked()
         
         path, _ = QFileDialog.getSaveFileName(self, "Save GIF", "", "GIF Files (*.gif)")
         if not path: return
@@ -454,18 +497,38 @@ class TrajectoryResultDialog(QDialog):
                 img_array = mw.plotter.screenshot(transparent_background=transparent, return_img=True)
                 if img_array is not None:
                      img = Image.fromarray(img_array)
-                     if transparent:
-                         img = img.convert("RGBA")
-                     else:
-                         img = img.convert("RGB").quantize(colors=256)
                      images.append(img)
             
             # Save GIF
             if images:
                 duration = int(1000 / fps)
-                # Basic save
-                images[0].save(path, save_all=True, append_images=images[1:], duration=duration, loop=0, disposal=2)
-                QMessageBox.information(self, "Success", f"GIF saved to:\n{path}")
+                processed_images = []
+                for img in images:
+                    if use_hq:
+                        if transparent:
+                            # Alpha preservation with adaptive palette
+                            alpha = img.split()[3]
+                            img_rgb = img.convert("RGB")
+                            # Quantize to 255 colors to leave room for transparency
+                            img_p = img_rgb.convert('P', palette=Image.Palette.ADAPTIVE, colors=255)
+                            # Set transparency
+                            mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
+                            img_p.paste(255, mask)
+                            img_p.info['transparency'] = 255
+                            processed_images.append(img_p)
+                        else:
+                            processed_images.append(img.convert("P", palette=Image.Palette.ADAPTIVE, colors=256))
+                    else:
+                        if transparent:
+                            processed_images.append(img.convert("RGBA"))
+                        else:
+                            processed_images.append(img.convert("RGB"))
+                
+                processed_images[0].save(path, save_all=True, append_images=processed_images[1:], duration=duration, loop=0, disposal=2)
+                if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
+                    self.gl_widget.statusBar().showMessage(f"GIF saved to: {os.path.basename(path)}", 5000)
+                else:
+                    print(f"GIF saved to: {path}")
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
@@ -475,5 +538,7 @@ class TrajectoryResultDialog(QDialog):
             if was_playing: self.toggle_play()
 
     def closeEvent(self, event):
-        self.timer.stop()
+        """Clean up timer and resources"""
+        if hasattr(self, 'timer') and self.timer.isActive():
+            self.timer.stop()
         super().closeEvent(event)

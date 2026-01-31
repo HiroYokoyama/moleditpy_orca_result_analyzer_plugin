@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import numpy as np
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -50,7 +50,7 @@ class SpectrumWidget(QWidget):
         layout.addWidget(self.canvas)
         
         # Enable interactive toolbar features
-        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
+        from matplotlib.backends.backend_qtagg import NavigationToolbar2QT
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         layout.addWidget(self.toolbar)
         

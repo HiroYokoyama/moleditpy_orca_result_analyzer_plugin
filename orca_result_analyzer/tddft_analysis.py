@@ -1,6 +1,8 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QRadioButton, QDoubleSpinBox, QCheckBox, QPushButton, 
                              QFileDialog, QMessageBox, QGroupBox)
+import os
+import json
 
 try:
     from .spectrum_widget import SpectrumWidget
@@ -16,6 +18,7 @@ class TDDFTDialog(QDialog):
         self.setWindowTitle("TDDFT Spectrum")
         self.resize(900, 700)
         self.excitations = excitations
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
         main_layout = QVBoxLayout(self)
         
@@ -144,6 +147,56 @@ class TDDFTDialog(QDialog):
         action_layout.addWidget(self.btn_close)
         
         main_layout.addLayout(action_layout)
+        self.load_settings()
+        
+    def closeEvent(self, event):
+        self.save_settings()
+        super().closeEvent(event)
+
+    def load_settings(self):
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                
+                settings = all_settings.get("tddft_settings", {})
+                
+                if "sigma" in settings:
+                    self.spin_sigma.setValue(float(settings["sigma"]))
+                
+                if "show_sticks" in settings:
+                    self.chk_sticks.setChecked(bool(settings["show_sticks"]))
+                    
+                if "type" in settings:
+                    if settings["type"] == "cd":
+                        self.radio_cd.setChecked(True)
+                    else:
+                        self.radio_abs.setChecked(True)
+                        
+            except Exception as e:
+                print(f"Error loading TDDFT settings: {e}")
+
+    def save_settings(self):
+        all_settings = {}
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    all_settings = json.load(f)
+            except: pass
+            
+        tddft_settings = {
+            "sigma": self.spin_sigma.value(),
+            "show_sticks": self.chk_sticks.isChecked(),
+            "type": "cd" if self.radio_cd.isChecked() else "abs"
+        }
+        
+        all_settings["tddft_settings"] = tddft_settings
+        
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(all_settings, f, indent=2)
+        except Exception as e:
+            print(f"Error saving TDDFT settings: {e}")
 
     def toggle_auto_y(self):
         is_auto = self.chk_auto_y.isChecked()
@@ -187,7 +240,10 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
+                # print(f"Data saved to {path}")
+                # QMessageBox.information(self, "Saved", f"Data saved to:\n{path}")
+                if hasattr(self.parent(), 'mw') and self.parent().mw:
+                    self.parent().mw.statusBar().showMessage(f"Data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
                 
@@ -197,7 +253,10 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                QMessageBox.information(self, "Exported", f"Stick data saved to:\n{path}")
+                # print(f"Stick data saved to {path}")
+                # QMessageBox.information(self, "Exported", f"Stick data saved to:\n{path}")
+                if hasattr(self.parent(), 'mw') and self.parent().mw:
+                    self.parent().mw.statusBar().showMessage(f"Stick data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
                 

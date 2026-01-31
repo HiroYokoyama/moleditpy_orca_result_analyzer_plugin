@@ -5,7 +5,7 @@ import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox, QGroupBox, QAbstractItemView)
+                             QWidget, QCheckBox, QInputDialog, QColorDialog, QMessageBox, QGroupBox, QAbstractItemView, QFileDialog)
 from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
@@ -169,6 +169,10 @@ class ChargeDialog(QDialog):
         btn_clear = QPushButton("Clear Selection")
         btn_clear.clicked.connect(self.table.clearSelection)
         bottom_row.addWidget(btn_clear)
+        
+        btn_csv = QPushButton("Export CSV")
+        btn_csv.clicked.connect(self.export_csv)
+        bottom_row.addWidget(btn_csv)
         
         bottom_row.addStretch()
         
@@ -354,7 +358,10 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, 'plotter'):
                 self.parent_dlg.mw.plotter.render()
             
-            QMessageBox.information(self, "Done", "Colors reset to CPK default.")
+            if self.parent_dlg.mw and hasattr(self.parent_dlg.mw, 'statusBar'):
+                self.parent_dlg.mw.statusBar().showMessage("Colors reset to CPK default.", 5000)
+            else:
+                print("Colors reset to CPK default.")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
         
@@ -497,7 +504,57 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, 'plotter'):
                 self.parent_dlg.mw.plotter.render()
                 
-            QMessageBox.information(self, "Done", f"Applied '{self.current_scheme}' coloring to 3D view.")
+            if self.parent_dlg.mw and hasattr(self.parent_dlg.mw, 'statusBar'):
+                self.parent_dlg.mw.statusBar().showMessage(f"Applied '{self.current_scheme}' coloring to 3D view.", 5000)
+            else:
+                print(f"Applied '{self.current_scheme}' coloring.")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
+
+    def export_csv(self):
+        filename, _ = QFileDialog.getSaveFileName(self, "Export Charge Data", "", "CSV Files (*.csv)")
+        if not filename: return
+        
+        try:
+            import csv
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["Index", "Atom", "Charge (e)"])
+                
+                data = self.all_charges.get(self.current_type, [])
+                for item in data:
+                    row = [item['atom_idx'], item['atom_sym'], item['charge']]
+                    writer.writerow(row)
+                    
+            # print(f"Data exported to {filename}")
+            # QMessageBox.information(self, "Success", f"Data exported to {filename}")
+            if hasattr(self.parent_dlg, 'mw') and self.parent_dlg.mw:
+                self.parent_dlg.mw.statusBar().showMessage(f"Data exported to {filename}", 5000)
+            elif hasattr(self.parent_dlg, 'context'):
+                 self.parent_dlg.context.get_main_window().statusBar().showMessage(f"Data exported to {filename}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
+
+    def closeEvent(self, event):
+        """Clean up labels and scalar bar on close"""
+        # Remove scalar bar
+        if hasattr(self, '_charge_scalar_bar'):
+            try:
+                self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
+            except: pass
+            
+        # Remove labels
+        if hasattr(self, '_charge_labels'):
+            for actor in self._charge_labels:
+                try:
+                    self.parent_dlg.mw.plotter.remove_actor(actor)
+                except: pass
+        
+        if hasattr(self.parent_dlg.mw, 'plotter'):
+            self.parent_dlg.mw.plotter.render()
+            
+        # Save settings on close
+        self.save_settings()
+        
+        super().closeEvent(event)

@@ -192,10 +192,14 @@ class MODialog(QDialog):
         # Connect selection
         self.tree.itemSelectionChanged.connect(self.on_selection_changed)
         
+        btn_csv = QPushButton("Export CSV")
+        btn_csv.clicked.connect(self.export_csv)
+        btn_layout.insertWidget(2, btn_csv)
+                
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.accept)
         btn_layout.addWidget(btn_close)
-        
+
         # Add Stretch to push buttons to right or keep centered? 
         # Standard dialogs often have buttons on right.
         # But centering is fine.
@@ -334,7 +338,10 @@ class MODialog(QDialog):
     def copy_orca_input(self):
         text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
         QApplication.clipboard().setText(text)
-        QMessageBox.information(self, "Copied", "ORCA Input block copied to clipboard.")
+        if self.mw and hasattr(self.mw, 'statusBar'):
+            self.mw.statusBar().showMessage("ORCA Input block copied to clipboard.", 5000)
+        else:
+            print("ORCA Input block copied to clipboard.")
 
     def get_engine(self):
         if not BasisSetEngine:
@@ -646,3 +653,50 @@ class MODialog(QDialog):
             vis.show_iso(self.spin_iso.value(), opacity=self.spin_opacity.value(), 
                          color_p=cp, color_n=cn, style=style, smooth_shading=self.check_smooth.isChecked())
             mw.plotter.render()
+
+    def closeEvent(self, event):
+        """Clean up 3D actors when closing"""
+        if hasattr(self.parent_dlg, 'mw'):
+             plotter = self.parent_dlg.mw.plotter
+             plotter.remove_actor("mo_iso_p")
+             plotter.remove_actor("mo_iso_n")
+             plotter.render()
+        elif hasattr(self.parent_dlg, 'context'):
+             plotter = self.parent_dlg.context.get_main_window().plotter
+             plotter.remove_actor("mo_iso_p")
+             plotter.remove_actor("mo_iso_n")
+             plotter.render()
+             
+        super().closeEvent(event)
+
+    def export_csv(self):
+        filename, _ = QFileDialog.getSaveFileName(self, "Export MO Data", "", "CSV Files (*.csv)")
+        if not filename: return
+        
+        try:
+            import csv
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(["ID", "Occupation", "Energy (eV)", "Energy (Eh)"])
+                
+                # Iterate tree items to respect current sort/display?
+                # Using the data list is safer and complete.
+                # However, the tree has formatted text. Let's use the list self.mo_list
+                # But self.mo_list is raw. Let's replicate the display logic or use tree items.
+                
+                # Using tree items ensures we export what is seen (including calculated Energy if missing)
+                it = QTreeWidgetItemIterator(self.tree)
+                while it.value():
+                    item = it.value()
+                    # ID, Occ, eV, Eh
+                    row = [item.text(0), item.text(1), item.text(2), item.text(3)]
+                    writer.writerow(row)
+                    it += 1
+            # print(f"Data exported to {filename}")
+            # QMessageBox.information(self, "Success", f"Data exported to {filename}")
+            if hasattr(self.parent_dlg, 'mw') and self.parent_dlg.mw:
+                self.parent_dlg.mw.statusBar().showMessage(f"Data exported to {filename}", 5000)
+            elif hasattr(self.parent_dlg, 'context'):
+                 self.parent_dlg.context.get_main_window().statusBar().showMessage(f"Data exported to {filename}", 5000)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
