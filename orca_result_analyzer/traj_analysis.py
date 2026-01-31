@@ -341,7 +341,10 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.axes.set_ylabel(ylabel)
         self.canvas.axes.set_title("Energy Profile")
         self.canvas.axes.grid(True, which="both", ls="-", alpha=0.3)
-        self.canvas.axes.ticklabel_format(useOffset=False, style='plain')
+        
+        # Only apply ticklabel_format for non-log scale (it only works with ScalarFormatter)
+        if not self.use_log_scale:
+            self.canvas.axes.ticklabel_format(useOffset=False, style='plain')
         
         # Re-add tooltip annotation to cleared axis
         self.annot = self.canvas.axes.annotate("", xy=(0,0), xytext=(20,20),
