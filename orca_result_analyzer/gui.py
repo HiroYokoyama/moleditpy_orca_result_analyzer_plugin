@@ -327,6 +327,47 @@ class OrcaResultAnalyzerDialog(QDialog):
             new_parser = OrcaParser()
             new_parser.load_from_memory(content, path)
             
+            # --- Auto-load NEB Trajectory if present ---
+            # Try to get explicit filename from parser first
+            parsed_trj = new_parser.data.get("neb_trj_file")
+            base_dir = os.path.dirname(path)
+            
+            potential_paths = []
+            if parsed_trj:
+                potential_paths.append(os.path.join(base_dir, parsed_trj))
+            
+            # Fallback: Standard naming
+            base, ext = os.path.splitext(path)
+            potential_paths.append(base + "_MEP_trj.xyz")
+            
+            trj_path = None
+            for p in potential_paths:
+                if os.path.exists(p):
+                    trj_path = p
+                    break
+            
+            if trj_path:
+                 try:
+                     with open(trj_path, 'r', encoding='utf-8', errors='replace') as ftrj:
+                         trj_content = ftrj.read()
+                     trj_steps = new_parser.parse_xyz_content(trj_content)
+                     if trj_steps:
+                         # Prioritize detailed TRJ structure over summary
+                         new_parser.data['scan_steps'] = trj_steps
+                         
+                         # Update main structure with the last frame of the trajectory
+                         if trj_steps[-1].get('atoms') and trj_steps[-1].get('coords'):
+                             new_parser.data['atoms'] = trj_steps[-1]['atoms']
+                             new_parser.data['coords'] = trj_steps[-1]['coords']
+                             
+                         # print(f"Loaded NEB Trajectory: {len(trj_steps)} frames from {os.path.basename(trj_path)}")
+                         self.mw.statusBar().showMessage(f"Loaded NEB Trajectory from {os.path.basename(trj_path)}", 5000)
+                 except Exception as e:
+                     # print(f"Failed to load associated TRJ: {e}")
+                     pass
+            else:
+                 pass
+
             self.parser = new_parser
             self.file_path = path
             #self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
@@ -339,8 +380,6 @@ class OrcaResultAnalyzerDialog(QDialog):
             
             # Auto-load 3D structure
             self.load_structure_3d()
-            self.update_button_states()
-            
             self.update_button_states()
             
             # QMessageBox.information(self, "Loaded", f"Successfully loaded:\n{os.path.basename(path)}")
@@ -384,10 +423,27 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.btn_traj.setEnabled(has_scan)
         self.btn_traj.setToolTip("" if has_scan else "No trajectory/scan steps found")
        
-        # Enable Forces button if gradients exist or scan exists
+        # Enable Forces button if gradients exist or scan exists (BUT NOT FOR NEB SUMMARY)
         grads = data.get("gradients", [])
         scan_steps = data.get("scan_steps", [])
-        has_forces = bool(grads) or bool(scan_steps)
+        
+        # Check if scan steps are purely NEB images (summary only, no force data)
+        # Note: If we auto-loaded XYZ, we now HAVE structure steps (type='neb_step' from xyz parser or similar)
+        # xyz parser sets type='neb_step', summary parser sets type='neb_image'
+        # If it's 'neb_step', it might have structure but NO FORCES. 
+        # Actually standard XYZ doesn't have forces.
+        # So we should likely still keep Forces disabled if 'neb_step' unless we parsed gradients separately.
+        
+        is_neb_summary = False
+        if scan_steps and isinstance(scan_steps, list):
+             first_type = scan_steps[0].get('type')
+             if first_type in ['neb_image', 'neb_step']: # Both summary and XYZ steps usually lack Forces in standard ORCA XYZ
+                 is_neb_summary = True
+        
+        has_forces = bool(grads)
+        if scan_steps and not is_neb_summary:
+            has_forces = True
+            
         self.btn_forces.setEnabled(has_forces)
         tooltip = ""
         if not has_forces:
@@ -466,7 +522,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 except: pass
         except Exception as e:
             # self.logger.error(f"Error loading 3D: {e}")
-            print(f"Error loading 3D: {e}")
+            # print(f"Error loading 3D: {e}")
             import traceback
             traceback.print_exc()
 
@@ -509,8 +565,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         if hasattr(self, 'traj_dlg') and self.traj_dlg is not None:
              self.traj_dlg.close()
         charge = self.parser.data.get("charge", 0)
-        self.traj_dlg = TrajectoryResultDialog(self.mw, data, charge=charge, title="Optimization / Scan Analysis")
+        base_dir = os.path.dirname(self.file_path) if self.file_path else None
+        parsed_trj = self.parser.data.get("neb_trj_file")
+        self.traj_dlg = TrajectoryResultDialog(self.mw, data, charge=charge, title="Trajectory / NEB Analysis", 
+                                               base_dir=base_dir, output_path=self.file_path, predicted_trj=parsed_trj)
         self.traj_dlg.show()
+
         
     def show_forces(self):
         grads = self.parser.data.get("gradients", [])

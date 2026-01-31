@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "1.2.2"
+PLUGIN_VERSION = "1.3.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -75,18 +75,25 @@ def initialize(context):
         # Auto-load 3D structure
         _analyzer_window.load_structure_3d()
 
+    # Register Drop Handler
     def handle_drop(path):
-        if path.lower().endswith((".out", ".log")):
-            open_orca_file(path)
-            return True
+        # 1. Check for standard ORCA output
+        if path.lower().endswith((".out", ".log", ".txt")):
+            # content check for ORCA
+            try:
+                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                    header = f.read(2048) # Read first 2KB
+                    if "* O   R   C   A *" in header or "Program Version" in header:
+                        open_orca_file(path)
+                        return True
+            except: pass
         return False
 
     # Register Opener
-    # Priority 100 as requested
+    # Priority 100
     context.register_file_opener(".out", open_orca_file, priority=100)
     context.register_file_opener(".log", open_orca_file, priority=100)
-    
-    # Register Drop Handler
+
     context.register_drop_handler(handle_drop, priority=100)
 
     # Add to Main Menu
@@ -94,7 +101,9 @@ def initialize(context):
         mw = context.get_main_window()
         path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log)")
         if path:
-             open_orca_file(path)
+             if not handle_drop(path):
+                 open_orca_file(path) # Fallback to standard opener logic if handle_drop returns false (e.g. extension check)
+
 
     #context.add_menu_action("Analysis/ORCA Result Analyzer", menu_action) 
 

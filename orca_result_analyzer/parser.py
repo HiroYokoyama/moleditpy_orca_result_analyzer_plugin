@@ -5,7 +5,6 @@ class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
     def __init__(self):
         # self.logger = Logger.get_logger("OrcaParser")
-        # print("OrcaParser initialized")
         self.filename = ""
         self.raw_content = ""
         self.lines = []
@@ -25,6 +24,95 @@ class OrcaParser:
             "charges": {}, # Type -> List
             "version": None
         }
+
+    def parse_xyz_content(self, content):
+        """Parse multi-frame XYZ content."""
+        lines = content.splitlines()
+        steps = []
+        i = 0
+        n_lines = len(lines)
+        
+        while i < n_lines:
+            line = lines[i].strip()
+            if not line:
+                i += 1
+                continue
+                
+            # Number of atoms
+            try:
+                natoms = int(line)
+            except ValueError:
+                i += 1
+                continue
+                
+            i += 1
+            if i >= n_lines: break
+            
+            # Comment line (extract energy if possible)
+            comment = lines[i].strip()
+            
+            # Filter out TS/CI steps if requested (User requirement: "if ts or ci present, do not use that in graph")
+            # We want to filter "TS" or "CI" labels but NOT "CI-NEB" which is the method name
+            import re
+            # Check for TS or CI as whole words
+            # Exclude strict "CI-NEB" matches from being flagged if "CI" is found
+            # Simple approach: Check word boundaries. 
+            # If "CI-NEB" is present, we might still have "CI" separately?
+            # Let's assume labels like "Image 5 (CI)" or "TS Structure"
+            
+            is_excluded = False
+            upper_comment = comment.upper()
+            
+            # Check TS
+            if re.search(r"\bTS\b", upper_comment):
+                is_excluded = True
+                
+            # Check CI, but carefully
+            # Only exclude if it's NOT "CI-NEB" or similar method string
+            if re.search(r"\bCI\b", upper_comment):
+                 # It contains CI. Check if it is part of CI-NEB
+                 if "CI-NEB" not in upper_comment:
+                     is_excluded = True
+            
+            if is_excluded:
+                # Skip this step (atoms + coords)
+                # We need to advance i by natoms
+                i += 1 + natoms
+                continue
+
+            energy = 0.0
+            # Try to find energy in comment (e.g. "Energy: -123.456" or just "-123.456")
+            # ORCA NEB format might have standard comment
+            # Look for floating point number
+            # Common formats: "Energy: -123.4", "Step 1 -123.4", "-123.4"
+            # Let's try to find a float that looks like an energy
+            floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
+            if floats:
+                try: energy = float(floats[-1]) # Take the last one? often energy is at end
+                except: pass
+            
+            i += 1
+            
+            atoms = []
+            coords = []
+            
+            for _ in range(natoms):
+                if i >= n_lines: break
+                parts = lines[i].split()
+                if len(parts) >= 4:
+                    atoms.append(parts[0])
+                    coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                i += 1
+                
+            steps.append({
+                'type': 'neb_step',
+                'energy': energy,
+                'atoms': atoms,
+                'coords': coords
+            })
+            
+        return steps
+
 
     def load_from_memory(self, content, filename=""):
         self.filename = filename
@@ -78,6 +166,16 @@ class OrcaParser:
             if "SCF CONVERGED" in uu or "OPTIMIZATION CONVERGED" in uu or "HURRAY" in uu:
                 self.data["converged"] = True
                 
+            if "CURRENT TRAJECTORY WILL BE WRITTEN TO" in uu:
+                # Robust regex extraction
+                match = re.search(r"Current trajectory will be written to\s*\.+\s*(.+)", line, re.IGNORECASE)
+                if match:
+                     self.data["neb_trj_file"] = match.group(1).strip()
+                else:
+                     # Fallback
+                     try: self.data["neb_trj_file"] = line.split()[-1].strip()
+                     except: pass
+                
             if "CARTESIAN COORDINATES" in uu and "A.U." not in uu: # Prefer Angstrom
                 # Read geometry
                 self.data["atoms"] = []
@@ -93,10 +191,10 @@ class OrcaParser:
                     curr += 1
 
     def parse_trajectory(self):
-        """Parse Optimization and Scan Trajectories."""
+        """Parse Optimization, Scan, and NEB Trajectories."""
         self.data["scan_steps"] = []
         
-        # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE"
+        # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE" or "NEB"
         # And capture Energy + Geometry
         # Actually usually Step header -> Energy -> ... -> Coordinates
         
@@ -108,14 +206,11 @@ class OrcaParser:
         def read_coords_from(idx):
             atoms = []
             coords = []
-            curr = idx + 2 # Skip header and rule
+            # curr = idx + 2 # Skip header and rule
             # ORCA output for coords in opt steps usually:
             # "CARTESIAN COORDINATES (ANGSTROEM)"
-            # But during Opt it prints "CARTESIAN COORDINATES (A.U.)" or similar?
-            # Actually standard output prints "CARTESIAN COORDINATES (ANGSTROEM)" often.
-            
-            # Let's search forward for coordinates
-            limit = 500 # Search limit
+            # search forward for coordinates
+            limit = 1000 # Search limit
             found_coords = False
             for k in range(limit):
                 if idx + k >= len(self.lines): break
@@ -136,6 +231,55 @@ class OrcaParser:
 
         for i, line in enumerate(self.lines):
             uu_line = line.upper()
+            
+            # --- NEB Parsing ---
+            if "PATH SUMMARY" in uu_line and "----" in self.lines[i+1]:
+                 # Found the summary table
+                 # Skip header lines
+                 # Line i: ---------------------------
+                 # Line i+1:          PATH SUMMARY
+                 # Line i+2: ---------------------------
+                 # Line i+3: All forces in Eh/Bohr.
+                 # Line i+4: Image Dist.(Ang.)    E(Eh)   dE(kcal/mol)  max(|Fp|)  RMS(Fp)
+                 
+                 curr = i + 1
+                 header_found = False
+                 while curr < len(self.lines) and curr < i + 10:
+                     if "Image" in self.lines[curr] and "E(Eh)" in self.lines[curr]:
+                         header_found = True
+                         curr += 1
+                         break
+                     curr += 1
+                 
+                 if header_found:
+                     while curr < len(self.lines):
+                         l_row = self.lines[curr].strip()
+                         if not l_row: 
+                             break
+                             
+                         parts = l_row.split()
+                         if len(parts) >= 3 and parts[0].isdigit():
+                             try:
+                                 img_idx = int(parts[0])
+                                 dist = float(parts[1])
+                                 en = float(parts[2])
+                                 
+                                 # We have no geometry, but user said "NO STRUCTURE IS OK"
+                                 # We provide empty atoms/coords
+                                 self.data["scan_steps"].append({
+                                    'type': 'neb_image',
+                                    'scan_step_id': img_idx,
+                                    'step': len(self.data["scan_steps"]) + 1,
+                                    'id': img_idx,
+                                    'dist': dist,
+                                    'energy': en,
+                                    'atoms': [],
+                                    'coords': []
+                                 })
+                             except: pass
+                         curr += 1
+
+
             # Scan Step Header
             if "RELAXED SURFACE SCAN STEP" in uu_line:
                 step_idx = 0

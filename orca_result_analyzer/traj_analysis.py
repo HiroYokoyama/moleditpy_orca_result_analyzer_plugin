@@ -35,13 +35,16 @@ class MplCanvas(FigureCanvasQTAgg):
 
 class TrajectoryResultDialog(QDialog):
 
-    def __init__(self, gl_widget, steps, charge=0, title="Trajectory Analysis"):
+    def __init__(self, gl_widget, steps, charge=0, title="Trajectory Analysis", base_dir=None, output_path=None, predicted_trj=None):
         super().__init__()
         self.setWindowTitle(title)
         self.resize(800, 600)
+        self.base_dir = base_dir
         self.gl_widget = gl_widget
         self.steps = steps # Current steps to display
         self.charge = charge
+        self.output_path = output_path
+        self.predicted_trj = predicted_trj
         
         # Filtering setup
         self.all_steps = steps
@@ -88,12 +91,60 @@ class TrajectoryResultDialog(QDialog):
         self.init_ui()
         self.plot_data()
         
+        # Schedule auto-load check after dialog init
+        QTimer.singleShot(10, self.run_auto_load)
+
+    def run_auto_load(self):
+        """Attempts to auto-load TRJ if structure is missing."""
+        # Strict check: Only auto-load if it looks like an NEB calculation (Path Summary)
+        # parser.py tags NEB path summary items with type='neb_image'
+        if not self.steps: return
+        
+        is_neb = self.steps[0].get('type') == 'neb_image'
+        
+        if not self.steps[0].get('atoms') and is_neb:
+             loaded = False
+             
+             # 1. Try Specific Candidates (Parsed or Output-based)
+             candidates = []
+             if self.base_dir:
+                 if self.predicted_trj: 
+                     candidates.append(os.path.join(self.base_dir, self.predicted_trj))
+                 if self.output_path:
+                     # Standard naming: [Basename]_MEP_trj.xyz
+                     base = os.path.splitext(os.path.basename(self.output_path))[0]
+                     cand = os.path.join(self.base_dir, base + "_MEP_trj.xyz")
+                     if cand not in candidates:
+                         candidates.append(cand)
+            
+             for path in candidates:
+                 if os.path.exists(path):
+                     try:
+                         self.load_external_trj(path, silent=True)
+                         loaded = True
+                         break
+                     except Exception as e:
+                         pass
+            
+             if not loaded and self.base_dir:
+                 # 2. Heuristic: look for unique *_MEP_trj.xyz in base_dir
+                 try:
+                     f_cands = [f for f in os.listdir(self.base_dir) if f.endswith("_MEP_trj.xyz")]
+                     if len(f_cands) == 1:
+                         full_path = os.path.join(self.base_dir, f_cands[0])
+                         self.load_external_trj(full_path, silent=True)
+                         loaded = True
+                 except: pass
+            
+             if not loaded:
+                 # 3. Last resort: prompt user
+                 QTimer.singleShot(200, self.load_mep_trj)
+
     def init_ui(self):
         
         # 2. Controls
         ctrl_layout = QHBoxLayout()
         
-        # Slider
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, len(self.steps) - 1)
         self.slider.valueChanged.connect(self.on_step_changed)
@@ -173,6 +224,9 @@ class TrajectoryResultDialog(QDialog):
         
         self.btn_play = QPushButton("Play")
         self.btn_play.clicked.connect(self.toggle_play)
+        # Disable if no structure (NEB Summary)
+        if self.steps and not self.steps[0].get('atoms'):
+            self.btn_play.setEnabled(False)
         btn_layout.addWidget(self.btn_play)
         
         self.btn_prev = QPushButton("<")
@@ -206,10 +260,29 @@ class TrajectoryResultDialog(QDialog):
         btn_save_csv.clicked.connect(self.save_csv)
         btn_layout.addWidget(btn_save_csv)
         
-        btn_save_gif = QPushButton("Save GIF")
-        btn_save_gif.clicked.connect(self.save_gif)
-        btn_save_gif.setEnabled(HAS_PIL)
-        btn_layout.addWidget(btn_save_gif)
+        self.btn_save_gif = QPushButton("Save GIF")
+        self.btn_save_gif.clicked.connect(self.save_gif)
+        self.btn_save_gif.setEnabled(HAS_PIL)
+        # Disable if no structure (NEB Summary)
+        if self.steps and not self.steps[0].get('atoms'):
+            self.btn_save_gif.setEnabled(False)
+        btn_layout.addWidget(self.btn_save_gif)
+        
+        # Load MEP TRJ Button (Only for NEB)
+        is_neb = False
+        if self.steps:
+            ft = self.steps[0].get('type')
+            if ft in ['neb_image', 'neb_step']:
+                is_neb = True
+                
+        if is_neb:
+            btn_load_trj = QPushButton("Load MEP TRJ")
+            btn_load_trj.clicked.connect(self.load_mep_trj)
+            btn_layout.addWidget(btn_load_trj)
+
+        # Auto-launch MEP TRJ loader logic
+        # If we have data but no structure (e.g. NEB Summary), try to find the file ourselves
+        # This block is now handled in __init__ after init_ui and plot_data
         
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.close)
@@ -398,9 +471,14 @@ class TrajectoryResultDialog(QDialog):
         else:
             self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.8f} {self.current_unit}")
         
+        # NEB Safety: If no atoms (PATH SUMMARY), skip structure update
+        if not step.get('atoms'):
+            return
+            
         self.update_structure(step['atoms'], step['coords'])
         
     def update_structure(self, atoms, coords):
+        if not atoms: return
         # RDKit build
         if not Chem: return
         mol = Chem.RWMol()
@@ -422,9 +500,14 @@ class TrajectoryResultDialog(QDialog):
                 rdDetermineBonds.DetermineConnectivity(mol)
                 rdDetermineBonds.DetermineBondOrders(mol, charge=self.charge)
             except Exception as e:
-                print(f"Bond determination failed at step: {e}")
+                # print(f"Bond determination failed at step: {e}")
+                pass
                 
         final_mol = mol.GetMol()
+        
+        # Update current molecule in Main Window context
+        if hasattr(self.gl_widget, 'current_mol'):
+            self.gl_widget.current_mol = final_mol
         
         if hasattr(self.gl_widget, 'draw_molecule_3d'):
              self.gl_widget.draw_molecule_3d(final_mol)
@@ -435,7 +518,73 @@ class TrajectoryResultDialog(QDialog):
         elif event.button == 'down':
             self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
 
+    def load_mep_trj(self):
+        start_path = self.base_dir if self.base_dir else ""
+        
+        # Try to suggest a filename if available
+        if self.base_dir:
+            if self.predicted_trj:
+                 start_path = os.path.join(self.base_dir, self.predicted_trj)
+            elif self.output_path:
+                 base = os.path.splitext(os.path.basename(self.output_path))[0]
+                 start_path = os.path.join(self.base_dir, base + "_MEP_trj.xyz")
+                 
+        path, _ = QFileDialog.getOpenFileName(self, "Open MEP Trajectory", start_path, "XYZ Files (*.xyz);;All Files (*)")
+        if not path: return
+        self.load_external_trj(path)
+
+    def load_external_trj(self, path, silent=False):
+        try:
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            from .parser import OrcaParser
+            parser = OrcaParser()
+            steps = parser.parse_xyz_content(content)
+            if not steps:
+                if not silent: QMessageBox.warning(self, "Error", "No valid steps found in XYZ file.")
+                return
+            
+            self.steps = steps
+            self.slider.blockSignals(True)
+            self.slider.setMaximum(len(self.steps)-1)
+            self.slider.setValue(0)
+            self.slider.blockSignals(False)
+            
+            # Re-enable buttons if we now have structure
+            if self.steps and self.steps[0].get('atoms'):
+                self.btn_play.setEnabled(True)
+                self.btn_save_gif.setEnabled(HAS_PIL)
+            
+            self.recalc_energies()
+            self.plot_data()
+            self.on_step_changed(0)
+            
+            # Request UI update on Main Window (Minimize 2D, Reset Camera)
+            mw = self.gl_widget
+            
+            # Minimize 2D editor
+            if hasattr(mw, 'splitter'):
+                try:
+                    total = mw.splitter.width()
+                    mw.splitter.setSizes([0, total])
+                except: pass
+                
+            # Reset Camera
+            if hasattr(mw, 'plotter') and mw.plotter:
+                try:
+                    mw.plotter.reset_camera()
+                except: pass
+                
+            # Only show message if manual load (optional, or just show it)
+            # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
+        except Exception as e:
+            if not silent: QMessageBox.critical(self, "Error", f"Failed to load TRJ:\n{e}")
+
     def on_pick(self, event):
+        # Disable pick if current steps have no atoms (NEB Summary)
+        if self.steps and not self.steps[0].get('atoms'):
+             return
+
         if event.artist and hasattr(event, 'ind'):
             idx = event.ind[0] # Index of point
             self.slider.setValue(idx)
@@ -463,6 +612,10 @@ class TrajectoryResultDialog(QDialog):
                     self.canvas.draw_idle()
             
     def toggle_play(self):
+        # Disable play if no atoms
+        if self.steps and not self.steps[0].get('atoms'):
+             return
+
         if self.is_playing:
             self.timer.stop()
             self.btn_play.setText("Play")
@@ -514,7 +667,7 @@ class TrajectoryResultDialog(QDialog):
             if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
                 self.gl_widget.statusBar().showMessage(f"Graph saved to: {os.path.basename(path)}", 5000)
             else:
-                print(f"Graph saved to: {path}")
+                pass
             
         # Restore annotation visibility
         self.annot.set_visible(was_visible)
@@ -547,7 +700,7 @@ class TrajectoryResultDialog(QDialog):
                 if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
                     self.gl_widget.statusBar().showMessage(f"Data saved to: {os.path.basename(path)}", 5000)
                 else:
-                    print(f"Data saved to: {path}")
+                    pass
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -648,7 +801,7 @@ class TrajectoryResultDialog(QDialog):
                 if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
                     self.gl_widget.statusBar().showMessage(f"GIF saved to: {os.path.basename(path)}", 5000)
                 else:
-                    print(f"GIF saved to: {path}")
+                    pass
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")

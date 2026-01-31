@@ -337,7 +337,7 @@ class FrequencyDialog(QDialog):
         
         vec_top_row = QHBoxLayout()
         self.chk_vector = QCheckBox("Show Vectors")
-        self.chk_vector.setChecked(True)
+        self.chk_vector.setChecked(False)
         self.chk_vector.stateChanged.connect(self.update_view)
         vec_top_row.addWidget(self.chk_vector)
         
