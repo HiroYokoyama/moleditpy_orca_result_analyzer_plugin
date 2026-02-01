@@ -29,6 +29,7 @@ class TDDFTDialog(QDialog):
             self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=5.0)
             self.spectrum.show_legend = False
             main_layout.addWidget(self.spectrum)
+            self.spectrum.clicked.connect(self.on_spectrum_click)
         else:
             main_layout.addWidget(QLabel("SpectrumWidget not available."))
             self.spectrum = None
@@ -272,3 +273,43 @@ class TDDFTDialog(QDialog):
             self.spectrum.y_key = 'osc'
             self.spectrum.y_unit = 'Oscillator Strength'
         self.spectrum.update()
+
+    def on_spectrum_click(self, item):
+        """Handle click on spectrum peak"""
+        state = item.get('state', '?')
+        energy_ev = item.get('energy_ev', 0.0)
+        energy_nm = item.get('energy_nm', 0.0)
+        osc = item.get('osc', 0.0)
+        
+        msg = f"Transition to Excited State {state}\n"
+        msg += f"Energy: {energy_ev:.4f} eV ({energy_nm:.2f} nm)\n"
+        msg += f"Oscillator Strength: {osc:.6f}\n"
+        
+        if 'rotatory_strength' in item:
+             msg += f"Rotatory Strength: {item['rotatory_strength']:.6f}\n"
+
+
+
+        # Use instantiated QMessageBox for selectable text
+        from PyQt6.QtCore import Qt
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(f"Transition Details - State {state}")
+        
+        # Add scroll area if message is too long? QMessageBox doesn't support scrolling easily.
+        # But for 20 lines it's fine.
+        # Let's increase the limit or make it nicer.
+        
+        if 'transitions' in item:
+            trans_data = item['transitions']
+            if trans_data and len(trans_data) > 0:
+                msg += "\nOrbital Contributions:\n"
+                # Show ALL transitions
+                msg += "\n".join(trans_data)
+            else:
+                msg += f"\n(No detailed orbital contributions found - data type: {type(trans_data)}, len: {len(trans_data) if trans_data else 0})"
+        else:
+            msg += "\n(No 'transitions' key in item)"
+
+        msg_box.setText(msg)
+        msg_box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        msg_box.exec()

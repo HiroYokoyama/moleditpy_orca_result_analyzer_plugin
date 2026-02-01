@@ -21,6 +21,7 @@ class OrcaParser:
             "dipole": None,
             "dipoles": None,
             "nmr_shielding": [],
+            "nmr_couplings": [],
             "charges": {}, # Type -> List
             "version": None
         }
@@ -1050,21 +1051,24 @@ class OrcaParser:
         
     def parse_nmr(self):
         self.data["nmr_shielding"] = [] # List of {atom_idx, atom_sym, shielding, shift=None}
+        self.data["nmr_couplings"] = []
         
-        # Look for "CHEMICAL SHIELDING SUMMARY (ppm)" or individual nucleus blocks
-        # ORCA output typically has a summary at the end of properties
-        
+        # Look for "CHEMICAL SHIELDING SUMMARY (PPM)" or individual nucleus blocks
         summary_start = -1
-        # Try to find the summary table first
         for i, line in enumerate(self.lines):
             if "CHEMICAL SHIELDING SUMMARY (PPM)" in line.upper():
                 summary_start = i
+                break
                 
         if summary_start != -1:
             curr = summary_start + 1
-            # Skip until we hit the header "N Nucleus Shielding"
+            # Skip until we hit the header "N Nucleus Shielding" or similar
             while curr < len(self.lines) and curr < summary_start + 10:
-                if "N" in self.lines[curr] and "Shielding" in self.lines[curr]:
+                l_up = self.lines[curr].upper()
+                if "N" in l_up and "SHIELDING" in l_up:
+                    curr += 1
+                    break
+                if "NUCLEUS" in l_up and ("ISOTROPIC" in l_up or "ELEMENT" in l_up):
                     curr += 1
                     break
                 curr += 1
@@ -1092,29 +1096,102 @@ class OrcaParser:
                      except: pass
                 curr += 1
                 
-        else:
-            # Fallback: Parse individual blocks "CHEMICAL SHIELDING TENSOR (ppm)"
-            # Nucleus   0C :
-            # ...
-            # Isotropic   =    123.456
-            
-            # This is more complex as it's scattered.
-            # Let's search for "Nucleus" and "Isotropic" lines if summary not found.
-            pass # Summary is almost always there in recent ORCA versions for NMR jobs
+        # Parse Couplings
+        # "SUMMARY OF ISOTROPIC COUPLING CONSTANTS (Hz)"
+        header_found = False
+        start_idx = -1
+        for i, line in enumerate(self.lines):
+             # Make (Hz) optional and case-insensitive
+             upper_line = line.upper()
+             if "SUMMARY OF ISOTROPIC COUPLING CONSTANTS" in upper_line:
+                  start_idx = i
+                  header_found = True
+                  break
+        
+        if header_found:
+             curr = start_idx + 1
+             # Skip until first separator or data
+             while curr < len(self.lines):
+                 if "----------------" in self.lines[curr]:
+                     curr += 1 # Skip first separator
+                     break
+                 curr += 1
+             
+             # Now we iterate through blocks
+             current_col_indices = [] # List of atom indices for current block of columns
+             
+             while curr < len(self.lines):
+                 line = self.lines[curr].strip()
+                 if not line: 
+                     curr += 1
+                     continue
+                 
+                 if "Maximum memory used" in line or "Timings" in line or "ORCA TERMINATED" in line:
+                     break
+                 
+                 parts = line.split()
+                 if len(parts) == 0: 
+                     curr += 1
+                     continue
+                 
+                 # Is it a header line?
+                 is_header = False
+                 # Header format: "0 C   1 C ..."
+                 # Row format: "0 C   0.000 ..."
+                 
+                 if len(parts) >= 3:
+                     # Check 3rd token (index 2). 
+                     token3 = parts[2]
+                     # In header, token3 is an index (int). In data, it is a value (float).
+                     # simple check: isdigit handles positive integers correctly.
+                     # 0.000 is not digit. -1.23 is not digit.
+                     if token3.isdigit():
+                         is_header = True
+                     else:
+                         is_header = False
+                 elif len(parts) == 2:
+                     # "0 C" only -> could be header of last column block
+                     is_header = True
+                         
+                 if is_header:
+                     # Parse column indices
+                     # ["0", "C", "1", "C", ...]
+                     current_col_indices = []
+                     p_idx = 0
+                     while p_idx < len(parts) - 1:
+                         if parts[p_idx].isdigit():
+                             current_col_indices.append(int(parts[p_idx]))
+                             p_idx += 2
+                         else:
+                             p_idx += 1
+                 else:
+                     # Parse Row
+                     if len(parts) >= 2 and parts[0].isdigit():
+                         try:
+                             row_atom_idx = int(parts[0])
+                             
+                             values = parts[2:]
+                             for c_i, val_str in enumerate(values):
+                                 if c_i < len(current_col_indices):
+                                     col_atom_idx = current_col_indices[c_i]
+                                     val = float(val_str)
+                                     
+                                     # Store unique couplings (J_AB)
+                                     if row_atom_idx < col_atom_idx:
+                                         self.data["nmr_couplings"].append({
+                                             "atom_idx1": row_atom_idx,
+                                             "atom_idx2": col_atom_idx,
+                                             "coupling": val
+                                         })
+                         except: pass
+                         
+                 curr += 1
 
         
     def parse_tddft(self):
         self.data["tddft"] = [] # List of {state, energy_ev, energy_nm, osc}
         
-        # Look for "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS"
-        # This is the most reliable summary table in ORCA 5.x
-        
-        # Sample Format:
-        #      Transition      Energy     Energy  Wavelength fosc(D2)      D2        DX        DY        DZ   
-        #                       (eV)      (cm-1)    (nm)                 (au**2)    (au)      (au)      (au)  
-        # ----------------------------------------------------------------------------------------------------
-        #   0-1A  ->  2-1A    ... (values) ...
-        
+        # 1. Parse Summary Table (Absorption Spectrum)
         found_block = False
         start_idx = -1
         
@@ -1124,7 +1201,6 @@ class OrcaParser:
                 start_idx = i
                 found_block = True
                 break
-            # Fallback for simpler header
             if "ABSORPTION SPECTRUM" in uu and "ELECTRIC DIPOLE" in uu and not found_block:
                 start_idx = i
                 found_block = True
@@ -1132,26 +1208,12 @@ class OrcaParser:
                 
         if found_block:
             curr = start_idx + 1
-            # Skip until we hit data
-            # Usually there is a header, then unit line, then separator line
-            # Let's just look for the separator line "---------"
-            
             while curr < len(self.lines):
                 if "----------------" in self.lines[curr]:
                     curr += 1
                     break
                 curr += 1
                 
-            # Now we are at unit line? Or Header?
-            # actually usually:
-            # Header
-            # Units
-            # Separator
-            # Data
-            
-            # So if we found one separator, might need to find the NEXT one depending on where we started
-            # Let's strictly skip header lines until we find a line starting with "0-" or similar, or just parse based on column count and type
-            
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line: 
@@ -1159,33 +1221,28 @@ class OrcaParser:
                     continue
                 if "----------------" in line: 
                     curr += 1 
-                    continue # Skip separators
+                    continue
                     
-                if "SOC CORRECTED" in line: break
-                if "CD SPECTRUM" in line: break
+                if "SOC CORRECTED" in line.upper(): break
+                if "CD SPECTRUM" in line.upper(): break
                 
                 parts = line.split()
-                # Expected: 0-1A -> 2-1A Ev Cm-1 Nm Osc ...
-                # 0: 0-1A
-                # 1: ->
-                # 2: 2-1A (Target State)
-                # 3: eV
-                # 4: cm-1
-                # 5: nm
-                # 6: fosc
-                
+                # Format 1: 0-1A -> 2-1A Ev Cm-1 Nm Osc ...
                 if len(parts) >= 7 and "->" in parts:
                     try:
                         # Parse State ID from "2-1A" -> 2
                         target_state = parts[2]
-                        # remove -1A etc
-                        # just take leading digits?
+                        # Extract leading digits
                         state_idx_str = ""
                         for char in target_state:
                             if char.isdigit(): state_idx_str += char
                             else: break
                         
                         state = int(state_idx_str) if state_idx_str else 0
+                        
+                        # Skip state 0 (invalid extraction)
+                        if state == 0:
+                            continue
                         
                         ev = float(parts[3])
                         nm = float(parts[5])
@@ -1198,20 +1255,14 @@ class OrcaParser:
                             "osc": osc
                         })
                     except: pass
-                # Fallback for older formats or different tables if "->" not present?
-                # Older ORCA might be: 1   26755.5    373.7    0.0000000
+                    
+                # Format 2: State  Energy(cm-1)  Wavelength(nm)  fosc
                 elif len(parts) >= 4 and parts[0].isdigit():
-                     try:
+                    try:
                         state = int(parts[0])
-                        # Check units. Usually cm-1, nm, osc
-                        # But verifying via header is hard.
-                        # Heuristic: 2nd col usually large (cm-1), 3rd col ~hundreds (nm), 4th small (osc)
-                        v2 = float(parts[2])
-                        v3 = float(parts[3])
-                        
-                        # Just assume standard order: State, Energy(cm-1), Wavelength(nm), Osc
-                        nm = v2
-                        osc = v3
+                        # parts[1] = cm-1, parts[2] = nm, parts[3] = osc
+                        nm = float(parts[2])
+                        osc = float(parts[3])
                         ev = 1239.84193 / nm if nm else 0
                         
                         self.data["tddft"].append({
@@ -1220,63 +1271,142 @@ class OrcaParser:
                              "energy_nm": nm,
                              "osc": osc
                         })
-                     except: pass
+                    except: pass
                      
                 curr += 1
+
                 
-        # Parse CD Spectrum if available
-        # Header: CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
-        # Cols: Transition, Energy(eV), Energy(cm-1), Wavelength(nm), R (1e40*cgs), MX, MY, MZ
+        # 2. Parse Detailed Transitions
+        # "EXCITED STATE 1" or "STATE 1:"
+        current_state = -1
+        transitions_map = {} # state_id -> list of strings
         
-        cd_start = -1
-        for i, line in enumerate(self.lines):
-            if "CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in line:
-                cd_start = i
-                break
+        for line in self.lines:
+            line_upper = line.upper()
+            
+            # Detect State Header
+            # Support "EXCITED STATE   1" and "STATE  1:"
+            new_state = -1
+            
+            match_state = re.search(r"(?:EXCITED\s+)?STATE\s+(\d+)[:\s]", line_upper)
+            if match_state:
+                new_state = int(match_state.group(1))
                 
-        if cd_start != -1:
-            curr = cd_start + 1
-            while curr < len(self.lines):
-                if "----------------" in self.lines[curr]:
-                    curr += 1
-                    break
-                curr += 1
+                # Try to parse Energy and Osc from header line
+                # Format: STATE 1: E= 0.090595 au ...
                 
-            # Skip potential second separator or units
-            while curr < len(self.lines):
-                line = self.lines[curr].strip()
-                if not line:
-                    curr += 1
-                    continue
-                if "----------------" in line:
-                    curr += 1
-                    continue
+                # But let's grab Energy at least.
+                # Format: STATE 1: E= 0.090595 au      2.465 eV    19883.2 cm**-1 ...
+                # Use a more robust float regex that handles signs and no leading zero
+                float_re = r"[-+]?\d*\.\d+"
                 
-                parts = line.split()
-                # 0-1A -> 2-1A  eV  cm-1  nm  R ...
+                cached_ev = 0.0
+                cached_nm = 0.0
+                cached_au = 0.0
+                cached_cm = 0.0
                 
-                if len(parts) >= 6 and "->" in parts:
-                    try:
-                        # Extract state from "2-1A"
-                        target_state = parts[2]
-                        state_idx_str = ""
-                        for char in target_state:
-                            if char.isdigit(): state_idx_str += char
-                            else: break
-                        state = int(state_idx_str) if state_idx_str else 0
-                        
-                        # R is usually at index 6 if standard format
-                        # Transition(0,1,2), eV(3), cm(4), nm(5), R(6)
-                        rot_str = float(parts[6])
-                        
-                        # Find matching state in self.data["tddft"]
-                        for item in self.data["tddft"]:
-                            if item["state"] == state:
-                                item["rotatory_strength"] = rot_str
-                                break
-                    except: pass
-                curr += 1
+                # 1. Try eV
+                match_ev = re.search(fr"({float_re})\s*eV", line)
+                if match_ev:
+                    cached_ev = float(match_ev.group(1))
+                
+                # 2. Try au
+                match_au = re.search(fr"({float_re})\s*au", line)
+                if match_au:
+                    cached_au = float(match_au.group(1))
+
+                # 3. Try cm**-1
+                match_cm = re.search(fr"({float_re})\s*cm", line)
+                if match_cm:
+                    cached_cm = float(match_cm.group(1))
+
+                # Backfill if necessary
+                if cached_ev == 0.0 and cached_au != 0.0:
+                    cached_ev = cached_au * 27.211386
+                elif cached_ev == 0.0 and cached_cm != 0.0:
+                    cached_ev = cached_cm / 8065.544
+
+                if cached_nm == 0.0 and cached_ev > 0:
+                     cached_nm = 1239.84193 / cached_ev
+
+                     
+                # Try to find Osc from summary map later?
+                # No, we need to store what we find here to backfill if summary missed it.
+                
+            if new_state != -1:
+                 current_state = new_state
+                 if current_state not in transitions_map:
+                     transitions_map[current_state] = []
+                     
+                 # Store supplementary info if we found it
+                 if 'detailed_info' not in self.data: self.data['detailed_info'] = {}
+                 if cached_ev > 0:
+                     self.data['detailed_info'][current_state] = {'ev': cached_ev, 'nm': cached_nm}
+            elif current_state != -1:
+                 # Capture lines until next state or end marker
+                 if not line.strip():
+                     continue
+
+                 # Stop conditions - end of TDDFT section markers
+                 line_upper = line.upper()
+                 if "----------" in line:
+                     if len(transitions_map[current_state]) > 0:
+                         current_state = -1
+                     continue
+                 
+                 # Additional stop markers
+                 if "STORING" in line_upper and "AMPLITUDE" in line_upper:
+                     current_state = -1
+                     continue
+                 if "ABSORPTION SPECTRUM" in line_upper:
+                     current_state = -1
+                     continue
+                 if "CD SPECTRUM" in line_upper:
+                     current_state = -1
+                     continue
+                 if "SOC CORRECTED" in line_upper:
+                     current_state = -1
+                     continue
+                 if "TIMINGS" in line_upper:
+                     current_state = -1
+                     continue
+
+                 # Only store lines that look like transitions (contain ->)
+                 # or lines with orbital notation (numbers, letters, :)
+                 if "->" in line or ":" in line:
+                     transitions_map[current_state].append(line.strip())
+
+        # Merge transitions into tddft list
+        # First, update existing states from ABSORPTION SPECTRUM table
+        for item in self.data["tddft"]:
+            state_id = item['state']
+            if state_id in transitions_map:
+                item['transitions'] = transitions_map[state_id]
+            
+        # Then, add any states that only exist in STATE headers (no ABSORPTION SPECTRUM)
+        existing_states = set(item['state'] for item in self.data["tddft"])
+        for state_id, transitions in transitions_map.items():
+            if state_id not in existing_states:
+                # State exists in detailed block but was missed in summary
+                # Check if we have cached info from headers
+                ev = 0.0
+                nm = 0.0
+                if 'detailed_info' in self.data and state_id in self.data['detailed_info']:
+                    info = self.data['detailed_info'][state_id]
+                    ev = info.get('ev', 0.0)
+                    nm = info.get('nm', 0.0)
+                
+                new_item = {
+                    "state": state_id,
+                    "energy_ev": ev,
+                    "energy_nm": nm,
+                    "osc": 0.0, # Osc often not in detail header, user might accept 0 or we parse lines
+                    "transitions": transitions
+                }
+                self.data["tddft"].append(new_item)
         
+        # Sort by state ID to keep things tidy
+        self.data["tddft"].sort(key=lambda x: x['state'])
 
     def parse_thermal(self):
         self.data["thermal"] = {}

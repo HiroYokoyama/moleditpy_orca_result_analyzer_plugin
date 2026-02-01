@@ -1,4 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtCore import pyqtSignal
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
@@ -10,6 +11,8 @@ class MplCanvas(FigureCanvasQTAgg):
         super().__init__(fig)
 
 class SpectrumWidget(QWidget):
+    clicked = pyqtSignal(object)
+
     def __init__(self, data_list, x_key='energy', y_key='intensity', x_unit='nm', y_unit='Intensity', sigma=20.0, invert_x=False, invert_y=False):
         """
         data_list: List of dicts containing the data.
@@ -55,6 +58,8 @@ class SpectrumWidget(QWidget):
         layout.addWidget(self.toolbar)
         
         self.plot_spectrum()
+        
+        self.canvas.mpl_connect('button_press_event', self.on_click)
 
     def set_data(self, data_list):
         self.data_list = data_list
@@ -313,3 +318,32 @@ class SpectrumWidget(QWidget):
     def update(self):
         """Override to trigger plot update"""
         self.plot_spectrum()
+
+    def on_click(self, event):
+        if event.inaxes != self.canvas.axes: return
+        if not self.data_list: return
+        
+        click_x = event.xdata
+        if click_x is None: return
+
+        # Relative tolerance: 1% of current view range
+        xlim = self.canvas.axes.get_xlim()
+        x_range = abs(xlim[1] - xlim[0])
+        tolerance = x_range * 0.01
+
+        # Find nearest point
+        best_item = None
+        min_dist = float('inf')
+
+        for item in self.data_list:
+            x = item.get(self.x_key, 0.0)
+            y = item.get(self.y_key, 0.0)
+            if abs(y) < 1e-12: continue
+
+            dist = abs(x - click_x)
+            if dist < min_dist:
+                min_dist = dist
+                best_item = item
+        
+        if best_item and min_dist <= tolerance:
+            self.clicked.emit(best_item)

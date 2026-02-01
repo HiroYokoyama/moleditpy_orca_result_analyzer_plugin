@@ -599,8 +599,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not excitations:
             QMessageBox.warning(self, "No Analysis", "No TDDFT/TDA excitation energies found.")
             return
-        dlg = TDDFTDialog(self, excitations)
-        dlg.exec()
+            
+        if hasattr(self, 'tddft_dlg') and self.tddft_dlg is not None:
+             self.tddft_dlg.close()
+             
+        self.tddft_dlg = TDDFTDialog(self, excitations)
+        self.tddft_dlg.show()
 
     def show_dipole(self):
         d = self.parser.data.get("dipoles")
@@ -624,10 +628,11 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def show_nmr(self):
         data = self.parser.data.get("nmr_shielding", [])
+        couplings = self.parser.data.get("nmr_couplings", [])
         if not data:
             QMessageBox.warning(self, "No Info", "No NMR chemical shielding data found.")
             return
-        dlg = NMRDialog(self, data, file_path=self.file_path)
+        dlg = NMRDialog(self, data, couplings=couplings, file_path=self.file_path)
         dlg.show()
 
     def show_scf_trace(self):

@@ -69,8 +69,9 @@ Analyze electronic excitations and absorption spectra.
 ### 10. NMR
 Advanced NMR chemical shielding validation and visualization.
 - **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards (TMS, CDCl3, DMSO-d6, etc.).
+- **Multiplet Simulation**: Realistic J-coupling splitting patterns and first-order multiplicity calculations with adjustable Lorentzian line-widths.
 - **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
-- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks with persistent storage.
+- **Equivalent Atom Merging**: Manually or automatically merge equivalent atoms into single peaks with persistent storage.
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa).
 
 ![NMR](img/nmr.png)
@@ -88,7 +89,7 @@ Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins dir
 
 ## Requirements
 - **ORCA Output**: Reads `.out` or `.log` files. Basis set info (`Print[P_Basis] 2`) is required for MO Cube generation.
-- **Dependencies**: `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `rdkit` is recommended for high-quality structure generation.
+- **Dependencies**: `rdkit`, `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `nmrsim` is optional (for J-coupling simulation). 
 
 ## Required ORCA Keywords
 To ensure all features (especially **MO Cube Generation**) work correctly, include the following in your ORCA input:
@@ -99,5 +100,3 @@ To ensure all features (especially **MO Cube Generation**) work correctly, inclu
 end
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
-
-
