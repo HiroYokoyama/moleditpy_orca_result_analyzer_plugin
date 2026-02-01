@@ -92,11 +92,25 @@ Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins dir
 - **Dependencies**: `rdkit`, `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `nmrsim` is optional (for J-coupling simulation). 
 
 ## Required ORCA Keywords
-To ensure all features (especially **MO Cube Generation**) work correctly, include the following in your ORCA input:
+
+**For MO Cube Generation:**
+
 ```text
 %output
-  Print[P_Basis] 2  # Required for Basis Set parsing (Cube Gen)
+  Print[P_Basis] 2  # Required for Basis Set parsing
   Print[P_Mos] 1    # Ensure MO coefficients are printed
 end
+
+```
+
+**For NMR Simulation (J-Coupling):**
+
+```text
+%eprnmr
+  Nuclei = all H { shift, sscoupling } # Required for J-coupling (nmrsim)
+end
+
+```
 ```
 *Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
