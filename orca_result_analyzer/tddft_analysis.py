@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QFileDialog, QMessageBox, QGroupBox)
 import os
 import json
+import csv
 
 try:
     from .spectrum_widget import SpectrumWidget
@@ -139,7 +140,11 @@ class TDDFTDialog(QDialog):
         self.btn_sticks = QPushButton("Export Sticks (CSV)")
         self.btn_sticks.clicked.connect(self.save_sticks)
         action_layout.addWidget(self.btn_sticks)
-        
+
+        self.btn_report = QPushButton("Export Full Data (.txt)")
+        self.btn_report.clicked.connect(self.save_orca_report)
+        action_layout.addWidget(self.btn_report)
+
         action_layout.addStretch()
         
         self.btn_close = QPushButton("Close")
@@ -261,6 +266,64 @@ class TDDFTDialog(QDialog):
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
                 
+    def save_orca_report(self):
+        if not self.excitations:
+            QMessageBox.warning(self, "No Data", "No excitation data to export.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(self, "Save Report", "", "Text Files (*.txt)")
+        if not path:
+            return
+
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write("-" * 80 + "\n")
+                f.write("         TD-DFT EXCITATION SPECTRA REPORT\n")
+                f.write("-" * 80 + "\n\n")
+
+                for item in self.excitations:
+                    state = item.get('state', '?')
+                    
+                    # ▼▼▼ 修正1: State 0 はスキップする ▼▼▼
+                    if str(state) == '0':
+                        continue
+
+                    energy_ev = item.get('energy_ev', 0.0)
+                    energy_nm = item.get('energy_nm', 0.0)
+                    
+                    # ▼▼▼ 修正2: データが0または未定義なら nm から計算する ▼▼▼
+                    energy_cm = item.get('energy_cm', 0.0)
+                    if energy_cm == 0.0 and energy_nm > 0:
+                        energy_cm = 10000000.0 / energy_nm
+                    
+                    osc = item.get('osc', 0.0)
+                    rot = item.get('rotatory_strength', None)
+
+                    # STATE行
+                    f.write(f"STATE {state:>3} :  E= {energy_ev:>8.4f} eV   {energy_nm:>8.2f} nm   {energy_cm:>8.1f} cm-1\n")
+                    f.write(f"             Oscillator Strength = {osc:>10.6f}\n")
+                    
+                    if rot is not None:
+                        f.write(f"             Rotatory Strength   = {rot:>10.6f}\n")
+                    
+                    # 遷移情報
+                    transitions = item.get('transitions', [])
+                    if isinstance(transitions, list):
+                        for trans in transitions:
+                            f.write(f"     {trans}\n")
+                    else:
+                        f.write(f"     {transitions}\n")
+
+                    f.write("\n")
+
+            if hasattr(self.parent(), 'mw') and self.parent().mw:
+                self.parent().mw.statusBar().showMessage(f"Report saved to {path}", 5000)
+            else:
+                QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
+    
     def switch_spectrum_type(self):
         if not self.spectrum: return
         is_cd = self.radio_cd.isChecked()

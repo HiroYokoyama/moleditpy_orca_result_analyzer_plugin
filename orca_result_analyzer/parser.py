@@ -1225,6 +1225,7 @@ class OrcaParser:
                     
                 if "SOC CORRECTED" in line.upper(): break
                 if "CD SPECTRUM" in line.upper(): break
+                if "VELOCITY" in line.upper(): break  # <--- これを追加
                 
                 parts = line.split()
                 # Format 1: 0-1A -> 2-1A Ev Cm-1 Nm Osc ...
