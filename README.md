@@ -95,6 +95,8 @@ Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins dir
 
 **For MO Cube Generation:**
 
+*Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
+
 ```text
 %output
   Print[P_Basis] 2  # Required for Basis Set parsing
@@ -106,11 +108,11 @@ end
 **For NMR Simulation (J-Coupling):**
 
 ```text
+! NMR
+
 %eprnmr
-  Nuclei = all H { shift, sscoupling } # Required for J-coupling (nmrsim)
+  NUCLEI = ALL H {SHIFT, SSALL} # Required for J-coupling (nmrsim)
 end
 
 ```
-```
-*Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
 
