@@ -71,7 +71,7 @@ Advanced NMR chemical shielding validation and visualization.
 - **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards (TMS, CDCl3, DMSO-d6, etc.).
 - **Multiplet Simulation**: Realistic J-coupling splitting patterns and first-order multiplicity calculations with adjustable Lorentzian line-widths.
 - **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
-- **Equivalent Atom Merging**: Manually or automatically merge equivalent atoms into single peaks with persistent storage.
+- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks with persistent storage.
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa).
 
 ![NMR](img/nmr.png)
@@ -115,4 +115,5 @@ end
 end
 
 ```
+
 
