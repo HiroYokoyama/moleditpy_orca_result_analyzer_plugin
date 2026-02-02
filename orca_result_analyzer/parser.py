@@ -492,15 +492,14 @@ class OrcaParser:
                         'gradients': step_grads
                      })
         
+    
     def parse_mo_coeffs(self):
         self.data["mo_coeffs"] = {} # mo_idx -> { 'coeffs': list, 'energy': float, 'occ': float, 'spin': 'alpha'/'beta' }
         
         # Blocks to look for:
-        # "MOLECULAR ORBITALS" (RHF)
+        # "MOLECULAR ORBITALS" (RHF or UHF if (UHF) present)
         # "SPIN UP ORBITALS" (UHF Alpha)
         # "SPIN DOWN ORBITALS" (UHF Beta)
-        
-        current_spin = "alpha" # Default
         
         start_indices = []
         for i, line in enumerate(self.lines):
@@ -527,6 +526,14 @@ class OrcaParser:
         for start_idx, spin in filtered_indices:
             curr = start_idx + 2
             
+            # Check if this "restricted" block is actually UHF
+            header_line = self.lines[start_idx].upper()
+            current_spin = spin
+            if spin == "restricted" and "(UHF)" in header_line:
+                current_spin = "alpha"
+            
+            last_first_mo_idx = -1
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line: 
@@ -555,11 +562,21 @@ class OrcaParser:
                 if is_header:
                     current_mos = [int(p) for p in parts]
                     
+                    # Detect spin switch (Index Reset) logic for implicit UHF
+                    if current_mos[0] <= last_first_mo_idx and last_first_mo_idx != -1:
+                        # If we were in alpha/restricted and index dropped, assume beta
+                        if current_spin == "alpha" or current_spin == "restricted":
+                            current_spin = "beta"
+                    
+                    last_first_mo_idx = current_mos[0]
+                    
                     # Init storage dicts
                     for idx in current_mos:
-                        key = f"{idx}_{spin}"
+                        key = f"{idx}_{current_spin}" # Use current_spin
+                        # If duplicate key (e.g. from previous block override), reset it
+                        # BUT be careful not to wipe if we are appending chunks (not the case here, cols are complete MOs)
                         if key not in self.data["mo_coeffs"]:
-                             self.data["mo_coeffs"][key] = {'coeffs': [], 'spin': spin, 'energy': 0.0, 'occ': 0.0, 'id': idx}
+                             self.data["mo_coeffs"][key] = {'coeffs': [], 'spin': current_spin, 'energy': 0.0, 'occ': 0.0, 'id': idx}
                     
                     # Try to parse Energy / Occ lines immediately following
                     # Usually:
@@ -579,7 +596,7 @@ class OrcaParser:
                                  energies = [float(v) for v in vals1]
                                  occs = [float(v) for v in vals2]
                                  for k, idx in enumerate(current_mos):
-                                     key = f"{idx}_{spin}"
+                                     key = f"{idx}_{current_spin}"
                                      if key in self.data["mo_coeffs"]:
                                          self.data["mo_coeffs"][key]['energy'] = energies[k]
                                          self.data["mo_coeffs"][key]['occ'] = occs[k]
@@ -615,11 +632,10 @@ class OrcaParser:
                              curr += 1
                              continue
 
-                         # Check if remaining parts match number of current MOs
                          if len(val_strs) == len(current_mos):
                               for k, v_str in enumerate(val_strs):
                                   mo_idx = current_mos[k]
-                                  key = f"{mo_idx}_{spin}"
+                                  key = f"{mo_idx}_{current_spin}"
                                   try:
                                       val = float(v_str)
                                       if key in self.data["mo_coeffs"]:

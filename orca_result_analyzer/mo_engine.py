@@ -429,6 +429,20 @@ class CalcWorker(QThread):
             vol_data = result_flat.reshape(nx, ny, nz)
             vectors = np.diag([dx, dy, dz])
             
+            # Safe handling of mo_idx for comment
+            # Convert 0-based to 1-based if numeric, including "0_alpha" -> "1_alpha"
+            mo_display_id = str(self.mo_idx)
+            try:
+                if "_" in str(self.mo_idx):
+                    parts = str(self.mo_idx).split("_")
+                    if parts[0].isdigit():
+                        parts[0] = str(int(parts[0]) + 1)
+                        mo_display_id = "_".join(parts)
+                else:
+                    mo_display_id = str(int(self.mo_idx) + 1)
+            except:
+                pass # Fallback to original string
+
             CubeWriter.write(
                 self.output_path, 
                 self.atoms_sym, 
@@ -436,7 +450,7 @@ class CalcWorker(QThread):
                 min_c, 
                 vectors, 
                 vol_data, 
-                comment=f"MO {self.mo_idx + 1}"
+                comment=f"MO {mo_display_id}"
             )
             
             self.finished_sig.emit(True, self.output_path)

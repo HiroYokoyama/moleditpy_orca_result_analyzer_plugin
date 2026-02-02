@@ -300,9 +300,23 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         self.load_file(path)
     
+
     def load_file(self, path):
         """Load a file and update UI"""
+        # Close existing dialogs to prevent confusion
+        dialog_attrs = ['mo_dlg', 'freq_dlg', 'traj_dlg', 'forces_dlg', 
+                        'thermal_dlg', 'tddft_dlg', 'dipole_dlg', 
+                        'charges_dlg', 'nmr_dlg', 'scf_dlg']
+        for attr in dialog_attrs:
+            if hasattr(self, attr):
+                dlg = getattr(self, attr)
+                if dlg is not None:
+                     try: dlg.close()
+                     except: pass
+                setattr(self, attr, None)
+
         try:
+
             content = ""
             encodings = ['utf-8', 'utf-16', 'latin-1', 'cp1252']
             found = False

@@ -23,6 +23,11 @@ except ImportError:
         CalcWorker = None
         CubeVisualizer = None
 
+try:
+    from .energy_diag import EnergyDiagramDialog
+except ImportError:
+    EnergyDiagramDialog = None
+
 class MODialog(QDialog):
     def __init__(self, parent, mos):
         super().__init__(parent)
@@ -31,6 +36,7 @@ class MODialog(QDialog):
         self.mos = mos
         self.parent_dlg = parent
         self.last_cube_path = None
+        self.generation_queue = [] # Init queue
         self.setup_ui()
 
     def get_cube_path(self, display_id):
@@ -43,10 +49,22 @@ class MODialog(QDialog):
             base_dir = os.path.dirname(fpath)
             filename_base = os.path.splitext(os.path.basename(fpath))[0]
             out_dir = os.path.join(base_dir, f"{filename_base}_cubes")
-            # Ensure dir exists? Logic doesn't seem to create it here, but usually caller handles or it's fine.
-            # Standardizing path return.
+            
+            # Ensure dir exists here or caller?
+            # Creating it here ensures get path is valid target
+            if not os.path.exists(out_dir):
+                try: 
+                    os.makedirs(out_dir)
+                except: pass
+            
             # Sanitize display ID (which might contain "1 (a)")
+            # Example: "1 (a)" -> "1_a"
             safe_id = str(display_id).replace(" ", "_").replace("(", "").replace(")", "").replace(":", "")
+            # Ensure no double underscores
+            while "__" in safe_id:
+                safe_id = safe_id.replace("__", "_")
+                
+            # User requested prefix: benzene-ene_MO_... (Using filename base)
             return os.path.join(out_dir, f"{filename_base}_MO_{safe_id}.cube")
         return None
 
@@ -168,18 +186,24 @@ class MODialog(QDialog):
         
         # 2. MO List
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["MO", "Occ", "E (eV)", "E (Eh)"])
+        self.tree.setHeaderLabels(["MO", "Label", "Occ", "E (eV)", "E (Eh)"])
         # Columns: Let them fill
-        self.tree.setColumnWidth(0, 150)
-        self.tree.setColumnWidth(1, 80)
+        self.tree.setColumnWidth(0, 120)
+        self.tree.setColumnWidth(1, 100) # Label
         self.tree.setColumnWidth(2, 80)
+        self.tree.setColumnWidth(3, 80)
         # Last column stretches
         header = self.tree.header()
         if header:
-            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
             
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
+        # Connect currentItemChanged for both keyboard navigation and single click
+        self.tree.currentItemChanged.connect(self.on_item_changed)
+        # Keep selection changed only for button state specific logic if needed, 
+        # but currentItemChanged covers the "primary" selection change.
+        self.tree.itemSelectionChanged.connect(self.on_selection_changed) 
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         layout.addWidget(self.tree)
         
@@ -187,13 +211,18 @@ class MODialog(QDialog):
         btn_layout = QHBoxLayout()
         self.btn_vis = QPushButton("Visualize Selected")
         self.btn_vis.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
-        self.btn_vis.clicked.connect(self.visualize_current_mo)
+        self.btn_vis.clicked.connect(self.visualize_selected_mos)
         self.btn_vis.setEnabled(False) # Default disabled until selection
         btn_layout.addWidget(self.btn_vis)
         
         # Connect selection
         self.tree.itemSelectionChanged.connect(self.on_selection_changed)
         
+        # MO Diagram Button
+        btn_diag = QPushButton("Show MO Diagram")
+        btn_diag.clicked.connect(self.show_mo_diagram)
+        btn_layout.addWidget(btn_diag)
+
         btn_csv = QPushButton("Export CSV")
         btn_csv.clicked.connect(self.export_csv)
         btn_layout.addWidget(btn_csv)
@@ -241,15 +270,22 @@ class MODialog(QDialog):
         if isinstance(self.mos, dict):
             raw_keys = list(self.mos.keys())
             # Check key type
+            #print(f"DEBUG Keys: {raw_keys[:10]}") # Debugging
             if raw_keys and isinstance(raw_keys[0], str) and "_" in raw_keys[0]:
-                # Sort by spin, then index
+                # Sort by spin, then index -> NOW Sort by Index, then Spin (interleaved)
                 def sort_key(k):
                     if "_" in str(k):
                         idx_s, spin_s = str(k).split("_")
-                        # alpha < beta < restricted ???
-                        # "alpha" < "beta" (alphabetical ok).
-                        return (spin_s, int(idx_s))
-                    return (str(k), 0)
+
+                        s_val = 0
+                        if spin_s == 'alpha': s_val = 1
+                        else: s_val = 0 # beta comes first in sorted list -> appears later in reverse iteration -> appears LOWER in UI?
+                        
+                        # So we need CUSTOM sort where Beta < Alpha.
+                        s_priority = 0 if spin_s == 'beta' else 1
+                        
+                        return (int(idx_s), s_priority)
+                    return (0, 0)
                 keys = sorted(raw_keys, key=sort_key)
             else:
                 # Fallback numeric sort
@@ -310,13 +346,9 @@ class MODialog(QDialog):
                 local_idx = int(mo_idx_val)
             except: pass
             
-            is_homo = False
-            is_lumo = False
             if spin in spin_homo_idx:
                 h = spin_homo_idx[spin]
-                if local_idx == h: is_homo = True
-                elif local_idx == h + 1: is_lumo = True
-            
+
             display_id = str(mo_idx_val)
             try:
                  display_id = str(int(mo_idx_val) + 1)
@@ -327,9 +359,17 @@ class MODialog(QDialog):
                 label_id += " (a)"
             elif spin == 'beta':
                 label_id += " (b)"
+
+            
+            # Label Separation
+            homo_lumo_label = ""
+            if spin in spin_homo_idx:
+                diff = local_idx - h
                 
-            if is_homo: label_id += " (HOMO)"
-            elif is_lumo: label_id += " (LUMO)"
+                if diff == 0: homo_lumo_label = "HOMO"
+                elif diff == 1: homo_lumo_label = "LUMO"
+                elif diff > 1 and diff < 100: homo_lumo_label = f"LUMO+{diff-1}"
+                elif diff < 0 and diff > -100: homo_lumo_label = f"HOMO{diff}"
             
             occ = mo.get('occ', mo.get('occupation', 0.0))
             e_eh = mo.get('energy_eh', mo.get('energy'))
@@ -340,7 +380,19 @@ class MODialog(QDialog):
             if e_eh is None: e_eh = 0.0
             if e_ev is None: e_ev = 0.0
             
-            item = QTreeWidgetItem([label_id, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"])
+            # Check if file exists to highlight
+            bg_color = None
+            try:
+                # Use label_id as the display_id to match logic in visualize_current_mo
+                path = self.get_cube_path(label_id)
+                if path and os.path.exists(path):
+                    bg_color = QColor(240, 255, 240) # Light Green
+            except: pass
+
+            item = QTreeWidgetItem([label_id, homo_lumo_label, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"])
+            if bg_color:
+                for c in range(5):
+                    item.setBackground(c, QBrush(bg_color))
             
             # Store the unique lookup key
             item.setData(0, Qt.ItemDataRole.UserRole, access_key)
@@ -352,18 +404,7 @@ class MODialog(QDialog):
                 item.setForeground(0, QColor("green"))
             else:
                 item.setForeground(0, QColor("gray"))
-            
-            # Background Color if Generated
-            # Need to match path logic with key? 
-            # get_cube_path usually uses display_id (int).
-            # If keys are strings, cache might break if we just use INT.
-            # We should probably incorporate spin into cache filename.
-            
-            # Quick fix: Pass full label_id hash or just access_key to path
-            # But get_cube_path expects display_id.
-            # Let's keep existing check but maybe use access_key for path generation in future.
-            
-            
+
             self.tree.addTopLevelItem(item)
             
         # Scroll to HOMO of first available spin branch
@@ -375,14 +416,35 @@ class MODialog(QDialog):
         iterator = QTreeWidgetItemIterator(self.tree)
         while iterator.value():
             item = iterator.value()
-            if "HOMO" in item.text(0):
-                 self.tree.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+            # Check column 1 for Label "HOMO"
+            if "HOMO" in item.text(1):
                  self.tree.setCurrentItem(item)
+                 self.tree.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
                  break
             iterator += 1
 
     def on_double_click(self, item, col):
-        self.visualize_current_mo()
+        # Double click always tries to visualize (generate if needed)
+        self.visualize_selected_mos()
+
+    def on_item_changed(self, current, previous):
+        # Single click or keyboard change
+        if not current: return
+        
+        # 1. Update Buttons (reuse logic)
+        # on_selection_changed handles button state but relies on "selectedItems"
+        # which might not be updated yet? usually it is.
+        # But let's check for Auto-Load
+        
+        try:
+             # Logic: If generated file exists, load it.
+             display_id = current.text(0)
+             # Need to clean display_id to match file system (e.g. "17 (a)" -> "17_a")
+             # Use self.get_cube_path which handles this
+             path = self.get_cube_path(display_id)
+             if path and os.path.exists(path):
+                  self.show_cube(path)
+        except: pass
 
     def on_selection_changed(self):
         items = self.tree.selectedItems()
@@ -460,93 +522,182 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
-    def visualize_current_mo(self):
-        try:
-            items = self.tree.selectedItems()
-            if not items: return
-            
-            key = items[0].data(0, Qt.ItemDataRole.UserRole)
-            display_id = items[0].text(0) # Just for caching/display
-            
-        except: return
+    def visualize_selected_mos(self):
+        # Batch generation for selected items
+        selected = self.tree.selectedItems()
+        if not selected: 
+             return
         
-        # Check coefficients with KEY
-        # Safety checks
+        # Build Queue
+        self.generation_queue = []
+        for item in selected:
+            key = item.data(0, Qt.ItemDataRole.UserRole)
+            if key is not None: # Ensure key is valid
+                self.generation_queue.append(key)
+                
+        if not self.generation_queue: return
+        
+        # Start Batch
+        self.process_generation_queue()
+
+    def process_generation_queue(self):
+        if not hasattr(self, 'generation_queue') or not self.generation_queue:
+            # Done
+            if hasattr(self, 'progress_dialog') and self.progress_dialog:
+                self.progress_dialog.close()
+                self.progress_dialog = None
+            return
+            
+        # Get next key
+        key = self.generation_queue.pop(0)
+        
+        # Check if worker running
+        # Actually we force sequential.
+        
+        self._generate_single_mo(key)
+
+    def _generate_single_mo(self, key):
+        # ... (Logic from old visualize_current_mo) ...
+        # Re-fetch data using key
+        # Key might be index (int) or dict key (str)
+        # Find the correct MO in self.mo_list
+        mo_data = None
+        for mo in self.mo_list:
+            if mo.get('_access_key') == key:
+                mo_data = mo
+                break
+        
+        if not mo_data:
+            print(f"MO not found for key: {key}")
+            self.process_generation_queue() # Skip invalid key
+            return
+        
+        # Get Display ID
+        # Need to get the display_id from the original item for consistent caching/display
+        # Find the item in the tree by key
+        display_id = None
+        it = QTreeWidgetItemIterator(self.tree)
+        while it.value():
+            item = it.value()
+            if item.data(0, Qt.ItemDataRole.UserRole) == key:
+                display_id = item.text(0)
+                break
+            it += 1
+        
+        if display_id is None:
+            # Fallback if item not found (shouldn't happen if key is from selected item)
+            display_id = str(mo_data.get('id', key))
+            spin = mo_data.get('spin', '')
+            if spin == 'alpha': display_id += " (a)"
+            elif spin == 'beta': display_id += " (b)"
+
+        # Safety checks for parser data
         if not hasattr(self.parent_dlg, 'parser') or not self.parent_dlg.parser:
             QMessageBox.warning(self, "Error", "Parser not available")
+            self.process_generation_queue()
             return
         if not hasattr(self.parent_dlg.parser, 'data') or not self.parent_dlg.parser.data:
             QMessageBox.warning(self, "Error", "No parser data available")
+            self.process_generation_queue()
             return
             
         coeffs_map = self.parent_dlg.parser.data.get("mo_coeffs", {})
-        mo_data = coeffs_map.get(key)
-        if not mo_data:
+        mo_data_coeffs = coeffs_map.get(key) # This is the actual coeffs data
+        if not mo_data_coeffs:
             QMessageBox.warning(self, "Error", f"No coefficients for MO {display_id}")
+            self.process_generation_queue()
+            return
+
+        engine = self.get_engine()
+        if not engine: 
+            self.process_generation_queue() # Skip
             return
             
-        engine = self.get_engine()
-        if not engine: return
+        if engine.n_basis == 0:
+            QMessageBox.warning(self, "Error", "Basis Set Engine initialized with 0 basis functions. Check parser.")
+            self.process_generation_queue()
+            return
         
         # Prepare Data
-        # Flatten coeffs
-        raw_coeffs = [x['coeff'] for x in mo_data['coeffs']]
+        raw_coeffs = [x['coeff'] for x in mo_data_coeffs['coeffs']]
         dense_vec = np.zeros(engine.n_basis)
         n = min(len(raw_coeffs), engine.n_basis)
         dense_vec[:n] = raw_coeffs[:n]
         
-        # Path Logic via Helper
+        if np.sum(np.abs(dense_vec)) < 1e-9:
+             QMessageBox.warning(self, "Data Error", f"MO coefficients for {display_id} are all zero/empty! Cube will be empty.")
+             self.process_generation_queue()
+             return
+
+        
         out_path = self.get_cube_path(display_id)
         if not out_path:
-             # Fallback if no filename
              out_path = os.path.join(tempfile.gettempdir(), f"orca_mo_{display_id}.cube")
         
         self.last_cube_path = out_path
         
-        # Check if exists
         if os.path.exists(out_path):
-             # Reuse!
-             #print(f"Loading cached cube: {out_path}")
              self.show_cube(out_path)
+             # Highlight
+             it = QTreeWidgetItemIterator(self.tree)
+             bg = QBrush(QColor(240, 255, 240))
+             while it.value():
+                 item = it.value()
+                 if item.data(0, Qt.ItemDataRole.UserRole) == key:
+                     for c in range(5): item.setBackground(c, bg)
+                     break
+                 it += 1
+             
+             # Next!
+             self.process_generation_queue()
              return
 
-        # Worker
-        dialog = QProgressDialog("Generating Cube...", "Cancel", 0, 100, self)
-        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        # Start Worker
+        # Manage Progress Dialog (Shared)
+        if not hasattr(self, 'progress_dialog') or self.progress_dialog is None:
+             self.progress_dialog = QProgressDialog("Generating Cubes...", "Cancel", 0, 100, self)
+             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+             self.progress_dialog.setAutoClose(False) # Keep open for batch
+             self.progress_dialog.show()
+             
+        self.progress_dialog.setLabelText(f"Generating {display_id}...")
+        self.progress_dialog.setValue(0)
         
         self.worker = CalcWorker(
             engine, key, self.spin_pts.value(), self.spin_margin.value(),
             self.parent_dlg.parser.data["atoms"], self.parent_dlg.parser.data["coords"], dense_vec, out_path
         )
         
-        self.worker.progress_sig.connect(dialog.setValue)
+        self.worker.progress_sig.connect(self.progress_dialog.setValue)
         
         def on_finished(success, res):
-            dialog.close()
             if success:
                 self.show_cube(res)
-                # Mark as Generated (Green Background)
-                # We need to find the item in tree. 
-                # Since tree is reversed, iterating to find it is easiest or calculating index.
-                # display_id is unique.
-                # Just iterate all items?
-                # Just iterate all items?
+                # Highlight
                 it = QTreeWidgetItemIterator(self.tree)
-                bg = QBrush(QColor(240, 255, 240)) # Light Green (Lighter)
+                bg = QBrush(QColor(240, 255, 240))
                 while it.value():
                     item = it.value()
-                    txt = item.text(0).split()[0]
-                    if txt == str(display_id):
-                        for c in range(4):
-                            item.setBackground(c, bg)
-                        break
+                    if item.data(0, Qt.ItemDataRole.UserRole) == key:
+                         for c in range(5): item.setBackground(c, bg)
+                         break
                     it += 1
+                
+                if hasattr(self, 'diag_dlg') and self.diag_dlg and self.diag_dlg.isVisible():
+                    self.diag_dlg.status_label.setText(f"Generated: {os.path.basename(res)}")
             else:
-                QMessageBox.critical(self, "Error", f"Calculation failed: {res}")
+                # If one fails, maybe continue? 
+                # Or stop? let's continue but warn?
+                print(f"Failed: {res}")
+                QMessageBox.warning(self, "Generation Failed", f"Failed to generate cube:\n{res}")
+                if hasattr(self, 'diag_dlg') and self.diag_dlg and self.diag_dlg.isVisible():
+                    self.diag_dlg.status_label.setText("Generation Failed")
+            
+            # Trigger Next
+            self.process_generation_queue()
                 
         self.worker.finished_sig.connect(on_finished)
         self.worker.start()
-        dialog.exec()
 
     def pick_color(self, which):
         current_col = QColor("red") if which == 'p' else QColor("blue")
@@ -715,8 +866,13 @@ class MODialog(QDialog):
         if self.last_cube_path and os.path.exists(self.last_cube_path):
             self.show_cube(self.last_cube_path)
 
+
     def show_cube(self, path):
-        if not CubeVisualizer: return
+        if not CubeVisualizer: 
+            print("Warning: CubeVisualizer module not loaded.")
+            QMessageBox.warning(self, "Visualizer Error", "CubeVisualizer module not loaded.\nCheck if 'pyvista' is installed.")
+            return
+
         
         # Access Main Window
         mw = None
@@ -781,3 +937,153 @@ class MODialog(QDialog):
                  self.parent_dlg.context.get_main_window().statusBar().showMessage(f"Data exported to {filename}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
+            
+    def show_mo_diagram(self):
+        if not EnergyDiagramDialog:
+            return
+
+        # Prepare Data for Diagram
+        # 1. Separate by spin
+        mos_alpha = []
+        mos_beta = []
+        mos_restr = []
+        
+        for mo in self.mo_list:
+            s = mo.get('spin', 'restricted')
+            e_eh = mo.get('energy_eh', mo.get('energy'))
+            e_ev = mo.get('energy_ev')
+             # Ensure e_eh is set (EnergyDiagram usually expects Hartree if unit selection is implemented there, defaults to "Ha")
+            if e_eh is None and e_ev is not None: e_eh = e_ev / 27.2114
+            if e_eh is None: e_eh = 0.0
+            
+            occ = mo.get('occ', mo.get('occupation', 0.0))
+            
+            item = {'e': e_eh, 'occ': occ}
+            
+            if s == 'alpha': mos_alpha.append(item)
+            elif s == 'beta': mos_beta.append(item)
+            else: mos_restr.append(item)
+
+        # 2. Determine Type
+        is_uhf = (len(mos_beta) > 0)
+        
+        diag_data = {}
+        if is_uhf:
+            diag_data["type"] = "UHF"
+            # Lists must be sorted by energy usually? They are sorted in list by spin/index.
+            # Assuming 'mo_list' was sorted by index effectively
+            # Let's ensure sort by index or energy
+            # Since self.mo_list keys were keys... 
+            # Let's rely on standard order.
+            
+            es_a = [m['e'] for m in mos_alpha]
+            noccs_a = [m['occ'] for m in mos_alpha]
+            es_b = [m['e'] for m in mos_beta]
+            noccs_b = [m['occ'] for m in mos_beta]
+            
+            diag_data["energies"] = [es_a, es_b]
+            diag_data["occupations"] = [noccs_a, noccs_b]
+        else:
+            diag_data["type"] = "RHF"
+            es = [m['e'] for m in mos_restr]
+            noccs = [m['occ'] for m in mos_restr]
+            if not es and mos_alpha: # Fallback if labeled alpha but no beta
+                 es = [m['e'] for m in mos_alpha]
+                 noccs = [m['occ'] for m in mos_alpha]
+                 
+            diag_data["energies"] = es
+            diag_data["occupations"] = noccs
+
+        # Determine Result Dir
+        res_dir = None
+        if hasattr(self.parent_dlg, 'parser') and self.parent_dlg.parser:
+             if hasattr(self.parent_dlg.parser, 'filename') and self.parent_dlg.parser.filename:
+                 res_dir = os.path.dirname(self.parent_dlg.parser.filename)
+                 # Check for dedicated cube dir?
+                 base = os.path.splitext(os.path.basename(self.parent_dlg.parser.filename))[0]
+                 cube_dir = os.path.join(res_dir, f"{base}_cubes")
+                 if os.path.exists(cube_dir):
+                     res_dir = cube_dir
+
+        # Make modeless
+        self.diag_dlg = EnergyDiagramDialog(diag_data, parent=self, result_dir=res_dir)
+        self.diag_dlg.show()
+        
+    def load_file_by_path(self, path):
+        """Called from Diagram to load valid existing file"""
+        if os.path.exists(path):
+            self.show_cube(path)
+            
+            # Highlight in tree if possible
+            # Need to reverse map path to key? Or user can just view it.
+            # Best effort to highlight
+            # We don't have the key here easily unless we parse filename.
+            # But the visualization is what matters.
+        
+    def generate_specific_orbital(self, index, label, spin_suffix=""):
+        """Called from Diagram to generate cube"""
+        # We need to map index -> Key.
+        # self.mo_list has keys.
+        # Index is 0-based.
+        # But separate by spin?
+        # Diagram index is index within spin channel.
+        # We need to find the MO with that index and spin.
+        
+        found_mo = None
+        target_spin = 'beta' if spin_suffix == "_B" else 'alpha' # or restricted
+        # Diagram treats 'restricted' as alpha usually (col 0).
+        
+        # Refined Logic:
+        # iterate self.mo_list, count indices for that spin
+        # 0-based index means nth orbital of that spin.
+        
+        # Check type
+        is_uhf = False
+        for mo in self.mo_list:
+            if mo.get('spin') == 'beta': is_uhf = True; break
+            
+        if not is_uhf: target_spin = 'restricted'
+        
+        # If we asked for Alpha but it's restricted, map alpha->restricted
+        if target_spin == 'alpha' and not is_uhf: target_spin = 'restricted'
+        
+        curr_idx = 0
+        mo_key = None
+        
+        # Sort self.mo_list by ID to match diagram order?
+        # self.mo_list is appended in loop.
+        # normalize_and_populate sorts keys.
+        # We need to trust the sort order is: Alpha 0..N, Beta 0..N ??
+        # Or keys are arbitrary.
+        # Let's re-sort to be safe.
+        
+        sorted_mos = sorted(self.mo_list, key=lambda x: (x.get('spin',''), int(x.get('id',-1))))
+        
+        for mo in sorted_mos:
+            s = mo.get('spin', 'restricted')
+            if s != target_spin: continue
+            
+            if curr_idx == index:
+                mo_key = mo.get('_access_key')
+                found_mo = mo
+                break
+            curr_idx += 1
+            
+        if found_mo:
+            # Trigger Visualization
+            # We need to select it in the tree?
+            # Or just call worker directly.
+            # Visualizing relies on selection in tree for `visualize_current_mo`.
+            # Let's Select it in tree.
+            
+            # Find item with data key
+            it = QTreeWidgetItemIterator(self.tree)
+            while it.value():
+                item = it.value()
+                if item.data(0, Qt.ItemDataRole.UserRole) == mo_key:
+                    self.tree.setCurrentItem(item)
+                    self.visualize_selected_mos()
+                    break
+                it += 1
+        else:
+            QMessageBox.warning(self, "Error", f"Could not find MO for Index {index} ({target_spin})")
