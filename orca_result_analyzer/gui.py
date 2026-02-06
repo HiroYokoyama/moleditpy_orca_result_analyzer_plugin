@@ -43,6 +43,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         # self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
         self.init_ui()
+        
+        # Update main window title to reflect ORCA result
+        if hasattr(self.mw, 'current_file_path'):
+            self.mw.current_file_path = self.file_path
+        if hasattr(self.mw, 'update_window_title'):
+             self.mw.update_window_title()
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -384,6 +390,13 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             self.parser = new_parser
             self.file_path = path
+            
+            # --- Sync with Main Window Title ---
+            if hasattr(self.mw, 'current_file_path'):
+                self.mw.current_file_path = path
+            if hasattr(self.mw, 'update_window_title'):
+                self.mw.update_window_title()
+
             #self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
             self.lbl_file_path.setText(path)
             
