@@ -450,64 +450,66 @@ class SpectrumWidget(QWidget):
             else:
                 self.canvas.axes.set_ylim(new_ymin, new_ymax)
 
+
             # Sync Dual Axis Limits to align Zeros
             if self.use_dual_axis and hasattr(self, 'ax2') and stick_points:
-                # Get sticker data range
+                # Get stick data range
                 st_ys = [p[1] for p in stick_points]
-                s_min, s_max = min(st_ys), max(st_ys)
+                if not st_ys:
+                    s_min, s_max = 0.0, 1.0
+                else:
+                    s_min, s_max = min(st_ys), max(st_ys)
                 
-                # Case 1: Absorption (0 at bottom)
-                if new_ymin == 0 and new_ymax > 0:
+                # Primary Axis Range (Curve)
+                p_min, p_max = new_ymin, new_ymax
+                
+                # --- Case 1: Absorption (0 at bottom) ---
+                if p_min >= 0 and p_max > 0:
                     ax2_min = 0
-                    # Apply same top margin ratio as primary axis
-                    # Primary: 0 to g_max * 1.1 -> effective data is at 1/1.1 ~ 0.909 height
-                    # Stick: s_max should be roughly there too? 
-                    # Simple approach: set max to s_max * 1.1 to match margin style
-                    ax2_max = s_max * 1.1 if s_max > 0 else 1.0
+                    # Primary scale ratio: max / (max - min) = 1 (since min=0)
+                    # We want stick max to be at same relative position roughly
+                    # Simple scaling: map 0->0 and max->max*constant
+                    # Let's align the "top" of data.
+                    # Curve data max is approx p_max / 1.1
+                    # Stick data max is s_max
+                    # So ax2_max should be s_max * 1.1
+                    ax2_max = s_max * 1.1 if s_max > 1e-12 else 1.0
                     self.ax2.set_ylim(ax2_min, ax2_max)
                     
-                # Case 2: CD / General (Zero inside)
-                elif new_ymin < 0 < new_ymax:
-                    # Align 0 position
-                    # Total range
-                    y_range = new_ymax - new_ymin
-                    if y_range == 0: y_range = 1.0
-                    
-                    # Fraction where 0 sits from bottom
-                    zero_frac = (0 - new_ymin) / y_range
-                    
-                    # We want 0 on ax2 to be at same fraction
-                    # We also want to fit s_min and s_max
-                    # Let's propose a range [-R_neg, R_pos]
-                    # such that R_neg / (R_neg + R_pos) = zero_frac
-                    
-                    # Required radius to fit data
-                    req_pos = s_max if s_max > 0 else 0
-                    req_neg = -s_min if s_min < 0 else 0
-                    
-                    # We need a total span H such that:
-                    # Top limit = H * (1 - zero_frac) >= req_pos
-                    # Bot limit = -H * zero_frac <= -req_neg  => H * zero_frac >= req_neg
-                    
-                    # So H >= req_pos / (1 - zero_frac)
-                    # And H >= req_neg / zero_frac
-                    
-                    if zero_frac > 0 and zero_frac < 1:
-                        h1 = req_pos / (1 - zero_frac) if (1-zero_frac) > 1e-6 else 0
-                        h2 = req_neg / zero_frac if zero_frac > 1e-6 else 0
-                        H = max(h1, h2) * 1.1 # Add 10% margin
-                        
-                        ax2_min = -H * zero_frac
-                        ax2_max = H * (1 - zero_frac)
-                        self.ax2.set_ylim(ax2_min, ax2_max)
-                    else:
-                        self.ax2.set_ylim(s_min, s_max) # Fallback
-
-                # Case 3: Zero not in range (Zoomed way in/out) - just auto
+                # --- Case 2: CD / General (Zero crossing) ---
                 else:
-                     # Fit sticks simply
-                     margin = (s_max - s_min) * 0.1
-                     self.ax2.set_ylim(s_min - margin, s_max + margin)
+                    # We need to align the y=0 lines of both axes.
+                    # Primary axis zero fraction from bottom:
+                    p_range = p_max - p_min
+                    if p_range == 0: p_range = 1.0
+                    zero_frac = (0 - p_min) / p_range
+                    
+                    # If zero is outside the view, just standard fit
+                    if zero_frac <= 0.05 or zero_frac >= 0.95:
+                         margin = (s_max - s_min) * 0.1
+                         if margin == 0: margin = 0.1
+                         self.ax2.set_ylim(s_min - margin, s_max + margin)
+                    else:
+                        # We want 0 on ax2 to be at 'zero_frac' height.
+                        # ax2_min = -H * zero_frac
+                        # ax2_max = H * (1 - zero_frac)
+                        # We need H such that [s_min, s_max] fits inside [ax2_min, ax2_max]
+                        
+                        # Conditions:
+                        # 1) ax2_max >= s_max  =>  H * (1-z) >= s_max  => H >= s_max / (1-z)
+                        # 2) ax2_min <= s_min  => -H * z     <= s_min  => H * z >= -s_min => H >= -s_min / z
+                        
+                        req_pos = max(0.0, s_max)
+                        req_neg = max(0.0, -s_min)
+                        
+                        h1 = req_pos / (1 - zero_frac)
+                        h2 = req_neg / zero_frac
+                        
+                        H = max(h1, h2) * 1.1 # 10% margin
+                        if H == 0: H = 1.0
+                        
+                        self.ax2.set_ylim(-H * zero_frac, H * (1 - zero_frac))
+
 
             # Re-connect callbacks (ax.clear() removes them)
             self.canvas.axes.callbacks.connect('xlim_changed', self._on_axes_changed)
