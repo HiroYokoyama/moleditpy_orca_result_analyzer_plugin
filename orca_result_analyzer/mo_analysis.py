@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLa
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
 import json
+from .utils import get_default_export_path
 
 try:
     from .mo_engine import BasisSetEngine, CalcWorker
@@ -908,7 +909,8 @@ class MODialog(QDialog):
         super().closeEvent(event)
 
     def export_csv(self):
-        filename, _ = QFileDialog.getSaveFileName(self, "Export MO Data", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.parent_dlg.file_path, suffix="_mo_list", extension=".csv")
+        filename, _ = QFileDialog.getSaveFileName(self, "Export MO Data", default_path, "CSV Files (*.csv)")
         if not filename: return
         
         try:

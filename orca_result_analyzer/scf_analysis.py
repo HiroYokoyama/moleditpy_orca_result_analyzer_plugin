@@ -5,6 +5,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas,
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import csv
+from .utils import get_default_export_path
 
 class SCFTraceDialog(QDialog):
     def __init__(self, parent, scf_traces):
@@ -142,7 +143,8 @@ class SCFTraceDialog(QDialog):
         idx = self.combo_steps.currentData()
         if idx is None: return
         
-        path, _ = QFileDialog.getSaveFileName(self, "Export SCF Trace", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.parent().file_path, suffix="_scf_trace", extension=".csv")
+        path, _ = QFileDialog.getSaveFileName(self, "Export SCF Trace", default_path, "CSV Files (*.csv)")
         if not path: return
         
         try:

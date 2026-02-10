@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBo
 from PyQt6.QtCore import Qt, QTimer
 import pyvista as pv
 import numpy as np
+from .utils import get_default_export_path
 
 try:
     import nmrsim
@@ -1429,10 +1430,10 @@ class NMRDialog(QDialog):
     def export_spectrum(self):
         """Export spectrum to file"""
         current_nucleus = self.current_nucleus
-        default_name = f"nmr_spectrum_{current_nucleus}.png"
+        default_path = get_default_export_path(self.file_path, suffix=f"_nmr_{current_nucleus}_spectrum", extension=".png")
         
         filename, _ = QFileDialog.getSaveFileName(
-            self, "Export Spectrum", default_name,
+            self, "Export Spectrum", default_path,
             "PNG Image (*.png);;PDF (*.pdf);;SVG (*.svg)"
         )
         
@@ -1452,9 +1453,9 @@ class NMRDialog(QDialog):
              QMessageBox.warning(self, "No Data", "No spectrum data to export.")
              return
 
-        default_name = f"nmr_spectrum_{self.current_nucleus}.csv"
+        default_path = get_default_export_path(self.file_path, suffix=f"_nmr_{self.current_nucleus}_sticks", extension=".csv")
         filename, _ = QFileDialog.getSaveFileName(
-            self, "Export Spectrum CSV", default_name,
+            self, "Export Spectrum CSV", default_path,
             "CSV Files (*.csv)"
         )
         if not filename:
@@ -1523,9 +1524,11 @@ class NMRDialog(QDialog):
 
     def export_table_csv(self):
         """Export table data to CSV"""
-        default_name = f"nmr_table_{self.current_nucleus}.csv"
+        current_nucleus = self.current_nucleus
+        default_path = get_default_export_path(self.file_path, suffix=f"_nmr_{current_nucleus}_table", extension=".csv")
+        
         filename, _ = QFileDialog.getSaveFileName(
-            self, "Export Table CSV", default_name,
+            self, "Export Table CSV", default_path,
             "CSV Files (*.csv)"
         )
         if not filename:

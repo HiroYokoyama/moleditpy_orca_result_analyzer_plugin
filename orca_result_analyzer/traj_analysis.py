@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
                              QFormLayout, QDialogButtonBox, QCheckBox, QFileDialog, 
                              QMessageBox, QApplication, QButtonGroup)
 from PyQt6.QtCore import Qt, QTimer
+from .utils import get_default_export_path
 
 try:
     from rdkit import Chem
@@ -661,7 +662,8 @@ class TrajectoryResultDialog(QDialog):
         self.annot.set_visible(False)
         self.canvas.draw()
         
-        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "Images (*.png *.jpg *.svg)")
+        default_path = get_default_export_path(self.output_path, suffix="_traj_graph", extension=".png")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", default_path, "Images (*.png *.jpg *.svg)")
         if path:
             self.canvas.fig.savefig(path, dpi=300)
             if self.gl_widget and hasattr(self.gl_widget, 'statusBar'):
@@ -688,7 +690,8 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
 
     def save_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.output_path, suffix="_traj_data", extension=".csv")
+        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", default_path, "CSV Files (*.csv)")
         if path:
             try:
                 with open(path, 'w', newline='', encoding='utf-8') as f:
@@ -738,7 +741,8 @@ class TrajectoryResultDialog(QDialog):
         transparent = chk_trans.isChecked()
         use_hq = chk_hq.isChecked()
         
-        path, _ = QFileDialog.getSaveFileName(self, "Save GIF", "", "GIF Files (*.gif)")
+        default_path = get_default_export_path(self.output_path, suffix="_traj_anim", extension=".gif")
+        path, _ = QFileDialog.getSaveFileName(self, "Save GIF", default_path, "GIF Files (*.gif)")
         if not path: return
         if not path.lower().endswith('.gif'): path += '.gif'
         

@@ -12,6 +12,7 @@ except ImportError:
         from spectrum_widget import SpectrumWidget
     except:
         SpectrumWidget = None
+from .utils import get_default_export_path
 
 class TDDFTDialog(QDialog):
     def __init__(self, parent, excitations):
@@ -336,13 +337,15 @@ class TDDFTDialog(QDialog):
         
     def save_png(self):
         if not self.spectrum: return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "Images (*.png)")
+        default_path = get_default_export_path(self.parent().file_path, suffix="_tddft", extension=".png")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Graph", default_path, "Images (*.png)")
         if path:
             self.spectrum.save_png(path)
             
     def save_csv(self):
         if not self.spectrum: return
-        path, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.parent().file_path, suffix="_tddft", extension=".csv")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Data", default_path, "CSV Files (*.csv)")
         if path:
             success = self.spectrum.save_csv(path)
             if success:
@@ -355,7 +358,8 @@ class TDDFTDialog(QDialog):
                 
     def save_sticks(self):
         if not self.spectrum: return
-        path, _ = QFileDialog.getSaveFileName(self, "Export Sticks", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.parent().file_path, suffix="_tddft_sticks", extension=".csv")
+        path, _ = QFileDialog.getSaveFileName(self, "Export Sticks", default_path, "CSV Files (*.csv)")
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
@@ -371,7 +375,8 @@ class TDDFTDialog(QDialog):
             QMessageBox.warning(self, "No Data", "No excitation data to export.")
             return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save Report", "", "Text Files (*.txt)")
+        default_path = get_default_export_path(self.parent().file_path, suffix="_tddft_report", extension=".txt")
+        path, _ = QFileDialog.getSaveFileName(self, "Save Report", default_path, "Text Files (*.txt)")
         if not path:
             return
 

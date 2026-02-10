@@ -10,6 +10,7 @@ from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
+from .utils import get_default_export_path
 
 # GradientBar Widget
 class GradientBar(QWidget):
@@ -582,7 +583,8 @@ class ChargeDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
 
     def export_csv(self):
-        filename, _ = QFileDialog.getSaveFileName(self, "Export Charge Data", "", "CSV Files (*.csv)")
+        default_path = get_default_export_path(self.parent_dlg.file_path, suffix="_charges_list", extension=".csv")
+        filename, _ = QFileDialog.getSaveFileName(self, "Export Charge Data", default_path, "CSV Files (*.csv)")
         if not filename: return
         
         try:
