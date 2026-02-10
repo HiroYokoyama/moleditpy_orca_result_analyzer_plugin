@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "1.6.0"
+PLUGIN_VERSION = "1.6.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -22,6 +22,12 @@ def initialize(context):
 
     def open_orca_file(path):
         global _analyzer_window
+        from PyQt6.QtWidgets import QApplication
+        
+        # Ensure main window is initialized and processed
+        # This helps when starting from CLI
+        QApplication.processEvents()
+        
         mw = context.get_main_window()
         
         # Read file to memory
@@ -72,8 +78,14 @@ def initialize(context):
         _analyzer_window.raise_()
         _analyzer_window.activateWindow()
         
+        # Ensure UI shows up before logic
+        QApplication.processEvents()
+        
         # Auto-load 3D structure
         _analyzer_window.load_structure_3d()
+        
+        # Final UI flush
+        QApplication.processEvents()
 
     # Register Drop Handler
     def handle_drop(path):

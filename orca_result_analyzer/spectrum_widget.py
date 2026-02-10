@@ -6,8 +6,8 @@ from matplotlib.figure import Figure
 
 class MplCanvas(FigureCanvasQTAgg):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
-        # We manually call tight_layout() in plot_spectrum() to avoid clashing with constrained_layout.
-        fig = Figure(figsize=(width, height), dpi=dpi)
+        # Use constrained_layout for robust handling of dual axes and labels
+        fig = Figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
 
@@ -20,6 +20,7 @@ class SpectrumWidget(QWidget):
         self.data_list = data_list
         self.x_key = x_key
         self.y_key = y_key
+        self.y_key_sticks = None # Key for stick data (if different from Gaussian curve)
         self.x_unit = x_unit
         self.y_unit = y_unit
         self.y_unit_sticks = "Intensity" # Default for dual axis stick labels
@@ -43,7 +44,8 @@ class SpectrumWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        self.canvas = MplCanvas(self, width=7, height=3, dpi=100)
+        # Increase default size for better visibility
+        self.canvas = MplCanvas(self, width=8, height=5, dpi=100)
         layout.addWidget(self.canvas)
         
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
@@ -130,9 +132,22 @@ class SpectrumWidget(QWidget):
             
         if not points: return False
         
+        
         xs = [p[0] for p in points]
-        min_x = min(xs) - self.sigma * 3
-        max_x = max(xs) + self.sigma * 3
+        
+        # Calculate margin based on broadening type and axis unit
+        is_energy_axis = 'cm' in self.x_unit.lower() or 'freq' in self.x_unit.lower()
+        
+        if self.broaden_in_energy and not is_energy_axis:
+            # Case: Plotting in nm, but Sigma is in cm-1
+            span = max(xs) - min(xs) if xs else 100
+            margin = max(50.0, span * 0.1)
+        else:
+            # Standard case
+            margin = self.sigma * 3
+
+        min_x = min(xs) - margin
+        max_x = max(xs) + margin
         if max_x - min_x < 1.0:
             min_x -= 10
             max_x += 10
@@ -209,33 +224,55 @@ class SpectrumWidget(QWidget):
             if not hasattr(self, 'scaling_factor'): self.scaling_factor = 1.0
             if not hasattr(self, 'use_dual_axis'): self.use_dual_axis = False
             
-            # Filter valid data
-            all_points = []
+            # Filter valid data for Gaussian Curve
+            gaussian_points = []
             for item in self.data_list:
                 x = item.get(self.x_key, 0.0)
                 y = item.get(self.y_key, 0.0)
                 if abs(y) > 1e-12: 
-                     all_points.append((x, y))
+                     gaussian_points.append((x, y))
                      
-            if not all_points:
+            # Filter valid data for Sticks
+            stick_points = []
+            target_stick_key = self.y_key_sticks if self.y_key_sticks else self.y_key
+            for item in self.data_list:
+                x = item.get(self.x_key, 0.0)
+                y = item.get(target_stick_key, 0.0)
+                if abs(y) > 1e-12: 
+                     stick_points.append((x, y))
+
+            if not gaussian_points and not stick_points:
                 self.canvas.axes.text(0.5, 0.5, "No Data", 
                                     ha='center', va='center', 
                                     transform=self.canvas.axes.transAxes)
                 self.canvas.draw()
                 return
             
-            # Adaptive filtering
-            points = all_points
+            # Use Gaussian points for X range if available, else Stick points
+            pts_for_range = gaussian_points if gaussian_points else stick_points
                 
-            xs = [p[0] for p in points]
-            ys = [p[1] for p in points]
+            xs = [p[0] for p in pts_for_range]
+            # ys not needed here for range
             
             # Determine X Range (for plotting calculation)
+            is_energy_axis = 'cm' in self.x_unit.lower() or 'freq' in self.x_unit.lower()
+            
             if self.x_range:
                 new_xmin, new_xmax = min(self.x_range), max(self.x_range)
             else:
-                new_xmin = min(xs) - self.sigma * 3
-                new_xmax = max(xs) + self.sigma * 3
+                # Calculate margin based on broadening type and axis unit
+                if self.broaden_in_energy and not is_energy_axis:
+                    # Case: Plotting in nm, but Sigma is in cm-1 (e.g. 3000)
+                    # We cannot use sigma directly for nm margin.
+                    # Use a heuristic margin: 50 nm or 10% of data span
+                    span = max(xs) - min(xs) if xs else 100
+                    margin = max(50.0, span * 0.1)
+                else:
+                    # Standard case: Sigma matches axis unit
+                    margin = self.sigma * 3
+
+                new_xmin = min(xs) - margin
+                new_xmax = max(xs) + margin
                 if new_xmax - new_xmin < 1.0:
                     new_xmin -= 10
                     new_xmax += 10
@@ -244,67 +281,77 @@ class SpectrumWidget(QWidget):
             # This ensures the curve remains visible when zooming out or clicking HOME
             data_min_x = min(xs)
             data_max_x = max(xs)
-            plot_min_x = data_min_x - max(self.sigma * 10, 500)
-            plot_max_x = data_max_x + max(self.sigma * 10, 500)
+            
+            # Recalculate plot margin for consistency
+            if self.broaden_in_energy and not is_energy_axis:
+                 plot_margin = max(100.0, (data_max_x - data_min_x) * 0.2)
+            else:
+                 plot_margin = max(self.sigma * 10, 500)
+                 
+            plot_min_x = data_min_x - plot_margin
+            plot_max_x = data_max_x + plot_margin
             
             # Use wavenumber grid if broadening in energy
-            is_energy = 'cm' in self.x_unit.lower() or 'freq' in self.x_unit.lower()
+            is_energy = is_energy_axis
             
             # Decide interpolation grid
-            if self.broaden_in_energy and not is_energy:
-                # Broaden in cm-1, but display is in nm
-                # Convert data points to cm-1
-                all_pts_cm = []
-                for x0, y0 in all_points:
-                    if x0 > 1e-6:
-                        all_pts_cm.append((1e7 / x0, y0))
-                
-                if not all_pts_cm: return
-                
-                # Create wavenumber grid
-                cms = [p[0] for p in all_pts_cm]
-                cm_min_x = min(cms) - max(self.sigma * 10, 500)
-                cm_max_x = max(cms) + max(self.sigma * 10, 500)
-                grid_cm = np.linspace(cm_min_x, cm_max_x, 5000)
-                curve_y_cm = np.zeros_like(grid_cm)
-                
-                # Broaden in cm-1
-                norm_factor = 1.0
-                if self.normalization_mode == 'area':
-                    norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
-                
-                for x0, y0 in all_pts_cm:
-                    term = np.exp(-((grid_cm - x0) / self.sigma)**2)
-                    curve_y_cm += y0 * term * norm_factor
-                
-                # Interpolate back to nm display grid
-                display_x = np.linspace(plot_min_x, plot_max_x, 3000)
-                # Filter grid_cm to avoid divide by zero if 0 in grid_cm? 
-                # (handled by min_x range usually)
-                valid_grid = grid_cm[grid_cm > 1.0]
-                valid_curve = curve_y_cm[grid_cm > 1.0]
-                # x_nm = 1e7 / valid_grid
-                # np.interp expects sorted x. x_nm will be sorted descending if valid_grid is ascending.
-                curve_y = np.interp(display_x, 1e7 / valid_grid[::-1], valid_curve[::-1])
-            else:
-                # Standard broadening in current axis space
-                display_x = np.linspace(plot_min_x, plot_max_x, 3000)
-                curve_y = np.zeros_like(display_x)
-                
-                norm_factor = 1.0
-                if self.normalization_mode == 'area':
-                    norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
-                
-                if self.show_gaussian:
-                    for x0, y0 in all_points:
-                        term = np.exp(-((display_x - x0) / self.sigma)**2)
-                        curve_y += y0 * term * norm_factor
+            curve_y = np.array([])
+            display_x = np.array([])
+            
+            if gaussian_points:
+                if self.broaden_in_energy and not is_energy:
+                    # Broaden in cm-1, but display is in nm
+                    # Convert data points to cm-1
+                    all_pts_cm = []
+                    for x0, y0 in gaussian_points:
+                        if x0 > 1e-6:
+                            all_pts_cm.append((1e7 / x0, y0))
+                    
+                    if all_pts_cm:
+                        # Create wavenumber grid
+                        cms = [p[0] for p in all_pts_cm]
+                        cm_min_x = min(cms) - max(self.sigma * 10, 500)
+                        cm_max_x = max(cms) + max(self.sigma * 10, 500)
+                        grid_cm = np.linspace(cm_min_x, cm_max_x, 10000)
+                        curve_y_cm = np.zeros_like(grid_cm)
+                        
+                        # Broaden in cm-1
+                        norm_factor = 1.0
+                        if self.normalization_mode == 'area':
+                            norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
+                        
+                        for x0, y0 in all_pts_cm:
+                            term = np.exp(-((grid_cm - x0) / self.sigma)**2)
+                            curve_y_cm += y0 * term * norm_factor
+                        
+                        # Interpolate back to nm display grid
+                        display_x = np.linspace(plot_min_x, plot_max_x, 10000)
+                        # Filter grid_cm to avoid divide by zero if 0 in grid_cm? 
+                        # (handled by min_x range usually)
+                        valid_grid = grid_cm[grid_cm > 1.0]
+                        valid_curve = curve_y_cm[grid_cm > 1.0]
+                        # x_nm = 1e7 / valid_grid
+                        # np.interp expects sorted x. x_nm will be sorted descending if valid_grid is ascending.
+                        curve_y = np.interp(display_x, 1e7 / valid_grid[::-1], valid_curve[::-1])
+                else:
+                    # Standard broadening in current axis space
+                    display_x = np.linspace(plot_min_x, plot_max_x, 10000)
+                    curve_y = np.zeros_like(display_x)
+                    
+                    norm_factor = 1.0
+                    if self.normalization_mode == 'area':
+                        norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
+                    
+                    if self.show_gaussian:
+                        for x0, y0 in gaussian_points:
+                            term = np.exp(-((display_x - x0) / self.sigma)**2)
+                            curve_y += y0 * term * norm_factor
             
             # APPLY SCALING
             curve_y *= self.scaling_factor
             
             # Plot Gaussian on Primary Axis
-            if self.show_gaussian:
+            if self.show_gaussian and len(display_x) > 0:
                 self.canvas.axes.plot(display_x, curve_y, 'r-', linewidth=2, label='Spectrum')
                 
             # Determine Axes for Sticks
@@ -314,20 +361,60 @@ class SpectrumWidget(QWidget):
                      self.ax2 = self.canvas.axes.twinx()
                  ax_sticks = self.ax2
                  ax_sticks.set_ylabel(self.y_unit_sticks)
+                 
+                 # Ensure Primary is Left, Secondary is Right (Standard)
+                 self.canvas.axes.yaxis.tick_left()
+                 self.canvas.axes.yaxis.set_label_position("left")
+                 self.ax2.yaxis.tick_right()
+                 self.ax2.yaxis.set_label_position("right")
+                 
             elif hasattr(self, 'ax2'):
+                 # Reset Primary to Left if no dual axis
+                 self.canvas.axes.yaxis.tick_left()
+                 self.canvas.axes.yaxis.set_label_position("left")
                  self.ax2.axis('off')
             
             # Plot Sticks
+            if self.show_sticks and stick_points:
+                st_xs = [p[0] for p in stick_points]
+                st_ys = [p[1] for p in stick_points]
+                ax_sticks.vlines(st_xs, 0, st_ys, colors='black', alpha=0.6, linewidth=1.5, label='Transitions')
+                
+            # Plot Peak Markers at the top (Red inverted triangles)
+            # Use data list to get ALL transitions including zero intensity ones
             if self.show_sticks:
-                all_xs = [p[0] for p in all_points]
-                all_ys = [p[1] for p in all_points]
-                ax_sticks.vlines(all_xs, 0, all_ys, colors='black', alpha=0.6, linewidth=1.5, label='Transitions')
+                all_xs = [item.get(self.x_key, 0.0) for item in self.data_list]
+                if all_xs:
+                    if self.selected_item:
+                        sel_x = self.selected_item.get(self.x_key)
+                        non_sel_xs = [x for x in all_xs if sel_x is None or abs(x - sel_x) > 1e-7]
+                    else:
+                        sel_x = None
+                        non_sel_xs = all_xs
+                    
+                    # Common Y positions (axis transform sets them to top)
+                    if non_sel_xs:
+                        self.canvas.axes.scatter(non_sel_xs, [0.97]*len(non_sel_xs), 
+                                               transform=self.canvas.axes.get_xaxis_transform(),
+                                               marker='v', color='red', alpha=0.3, s=50, 
+                                               clip_on=True, zorder=10)
+                    
+                    if sel_x is not None:
+                        self.canvas.axes.scatter([sel_x], [0.97], 
+                                               transform=self.canvas.axes.get_xaxis_transform(),
+                                               marker='v', color='blue', alpha=0.8, s=60, 
+                                               clip_on=True, zorder=11)
                 
             # Highlight Selected Item
             if self.selected_item:
                 sel_x = self.selected_item.get(self.x_key)
-                sel_y = self.selected_item.get(self.y_key)
-                if sel_x is not None and sel_y is not None:
+                
+                # Use stick key for highlight height
+                t_key = self.y_key_sticks if self.y_key_sticks else self.y_key
+                sel_y = self.selected_item.get(t_key, 0.0)
+                
+                if sel_x is not None:
+                    # Highlight vertical line (even for zero y)
                     ax_sticks.vlines([sel_x], 0, [sel_y], colors='blue', linewidth=2.5, zorder=5)
                     self.canvas.axes.axvline(sel_x, color='blue', linestyle='--', alpha=0.5, zorder=4)
             
@@ -337,9 +424,13 @@ class SpectrumWidget(QWidget):
             else:
                  g_max = np.max(curve_y) if self.show_gaussian and len(curve_y) > 0 else 1.0
                  g_min = np.min(curve_y) if self.show_gaussian and len(curve_y) > 0 else 0.0
-                 if not self.use_dual_axis and self.show_sticks:
-                      scale_max_sticks = max(ys) if ys else 1.0
+                 
+                 # Only consider sticks for primary scale if NOT dual axis
+                 if not self.use_dual_axis and self.show_sticks and stick_points:
+                      st_ys = [p[1] for p in stick_points]
+                      scale_max_sticks = max(st_ys) if st_ys else 1.0
                       g_max = max(g_max, scale_max_sticks)
+                      
                  if g_min >= 0:
                      new_ymin, new_ymax = 0, g_max * 1.1
                  else:
@@ -359,6 +450,65 @@ class SpectrumWidget(QWidget):
             else:
                 self.canvas.axes.set_ylim(new_ymin, new_ymax)
 
+            # Sync Dual Axis Limits to align Zeros
+            if self.use_dual_axis and hasattr(self, 'ax2') and stick_points:
+                # Get sticker data range
+                st_ys = [p[1] for p in stick_points]
+                s_min, s_max = min(st_ys), max(st_ys)
+                
+                # Case 1: Absorption (0 at bottom)
+                if new_ymin == 0 and new_ymax > 0:
+                    ax2_min = 0
+                    # Apply same top margin ratio as primary axis
+                    # Primary: 0 to g_max * 1.1 -> effective data is at 1/1.1 ~ 0.909 height
+                    # Stick: s_max should be roughly there too? 
+                    # Simple approach: set max to s_max * 1.1 to match margin style
+                    ax2_max = s_max * 1.1 if s_max > 0 else 1.0
+                    self.ax2.set_ylim(ax2_min, ax2_max)
+                    
+                # Case 2: CD / General (Zero inside)
+                elif new_ymin < 0 < new_ymax:
+                    # Align 0 position
+                    # Total range
+                    y_range = new_ymax - new_ymin
+                    if y_range == 0: y_range = 1.0
+                    
+                    # Fraction where 0 sits from bottom
+                    zero_frac = (0 - new_ymin) / y_range
+                    
+                    # We want 0 on ax2 to be at same fraction
+                    # We also want to fit s_min and s_max
+                    # Let's propose a range [-R_neg, R_pos]
+                    # such that R_neg / (R_neg + R_pos) = zero_frac
+                    
+                    # Required radius to fit data
+                    req_pos = s_max if s_max > 0 else 0
+                    req_neg = -s_min if s_min < 0 else 0
+                    
+                    # We need a total span H such that:
+                    # Top limit = H * (1 - zero_frac) >= req_pos
+                    # Bot limit = -H * zero_frac <= -req_neg  => H * zero_frac >= req_neg
+                    
+                    # So H >= req_pos / (1 - zero_frac)
+                    # And H >= req_neg / zero_frac
+                    
+                    if zero_frac > 0 and zero_frac < 1:
+                        h1 = req_pos / (1 - zero_frac) if (1-zero_frac) > 1e-6 else 0
+                        h2 = req_neg / zero_frac if zero_frac > 1e-6 else 0
+                        H = max(h1, h2) * 1.1 # Add 10% margin
+                        
+                        ax2_min = -H * zero_frac
+                        ax2_max = H * (1 - zero_frac)
+                        self.ax2.set_ylim(ax2_min, ax2_max)
+                    else:
+                        self.ax2.set_ylim(s_min, s_max) # Fallback
+
+                # Case 3: Zero not in range (Zoomed way in/out) - just auto
+                else:
+                     # Fit sticks simply
+                     margin = (s_max - s_min) * 0.1
+                     self.ax2.set_ylim(s_min - margin, s_max + margin)
+
             # Re-connect callbacks (ax.clear() removes them)
             self.canvas.axes.callbacks.connect('xlim_changed', self._on_axes_changed)
             self.canvas.axes.callbacks.connect('ylim_changed', self._on_axes_changed)
@@ -370,11 +520,10 @@ class SpectrumWidget(QWidget):
             
             self._initial_plot_done = True
             
-            # Use tight_layout to prevent clipping of labels/units
-            # This is applied just before drawing
-            try:
-                self.canvas.figure.tight_layout()
-            except: pass
+            # Constrained layout handles padding automatically
+            # try:
+            #     self.canvas.figure.tight_layout()
+            # except: pass
                 
             self.canvas.draw()
             
@@ -390,7 +539,11 @@ class SpectrumWidget(QWidget):
         self.plot_spectrum()
 
     def on_click(self, event):
-        if event.inaxes != self.canvas.axes: return
+        valid_axes = [self.canvas.axes]
+        if hasattr(self, 'ax2'):
+            valid_axes.append(self.ax2)
+            
+        if event.inaxes not in valid_axes: return
         
         # Double-click to reset zoom and selection
         if event.dblclick:
@@ -408,19 +561,23 @@ class SpectrumWidget(QWidget):
         click_x = event.xdata
         if click_x is None: return
 
-        # Relative tolerance: 1% of current view range
+        # Relative tolerance: 3% of current view range (increased for easier selection)
         xlim = self.canvas.axes.get_xlim()
         x_range = abs(xlim[1] - xlim[0])
-        tolerance = x_range * 0.01
+        tolerance = x_range * 0.03
 
         # Find nearest point
         best_item = None
         min_dist = float('inf')
+        
+        # Use active Y key for validity check
+        t_key = self.y_key_sticks if self.y_key_sticks else self.y_key
 
         for item in self.data_list:
             x = item.get(self.x_key, 0.0)
-            y = item.get(self.y_key, 0.0)
-            if abs(y) < 1e-12: continue
+            y = item.get(t_key, 0.0)
+            # Remove intensity check to allow selecting dark states
+            # if abs(y) < 1e-12: continue
 
             dist = abs(x - click_x)
             if dist < min_dist:
@@ -428,9 +585,11 @@ class SpectrumWidget(QWidget):
                 best_item = item
         
         if best_item and min_dist <= tolerance:
+            self.selected_item = best_item
+            self.plot_spectrum()
             self.clicked.emit(best_item)
         else:
             # Clicked on empty space: clear selection
             self.selected_item = None
-            self.clicked.emit(None)
             self.plot_spectrum()
+            self.clicked.emit(None)

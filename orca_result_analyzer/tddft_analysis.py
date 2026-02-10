@@ -17,9 +17,10 @@ class TDDFTDialog(QDialog):
     def __init__(self, parent, excitations):
         super().__init__(parent)
         self.setWindowTitle("TDDFT Spectrum")
-        self.resize(600, 700)
+        self.resize(700, 700)
         self.excitations = excitations
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+        self.prev_sigma_unit_idx = 0 # 0: cm-1, 1: eV
         
         main_layout = QVBoxLayout(self)
         
@@ -27,7 +28,7 @@ class TDDFTDialog(QDialog):
         if SpectrumWidget:
             # Data format for widget: List of dicts. 
             # Our excitations have 'energy_nm' and 'osc'.
-            self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=5.0)
+            self.spectrum = SpectrumWidget(self.excitations, x_key='energy_nm', y_key='osc', x_unit='Wavelength (nm)', sigma=3000.0)
             self.spectrum.show_legend = False
             main_layout.addWidget(self.spectrum)
             self.spectrum.clicked.connect(self.on_spectrum_click)
@@ -55,7 +56,7 @@ class TDDFTDialog(QDialog):
         self.combo_gauge = QComboBox()
         self.combo_gauge.addItems(["Length (Electric)", "Velocity"])
         self.combo_gauge.currentIndexChanged.connect(self.switch_spectrum_type)
-        self.combo_gauge.setEnabled(False)
+        self.combo_gauge.setEnabled(True)
         self.combo_gauge.setFixedWidth(130)
         row1_layout.addWidget(self.combo_gauge)
         row1_layout.addStretch()
@@ -63,16 +64,19 @@ class TDDFTDialog(QDialog):
         
         # Row 2: Sigma & Sticks
         row2_layout = QHBoxLayout()
-        row2_layout.addWidget(QLabel("Gaussian Sigma:"))
+        row2_layout.addWidget(QLabel("Broadening (FWHM):"))
+        # Default Broadening
         self.spin_sigma = QDoubleSpinBox()
-        self.spin_sigma.setRange(0.01, 5000.0)
-        self.spin_sigma.setValue(5.0)
+        self.spin_sigma.setRange(0.1, 10000.0)
+        self.spin_sigma.setValue(3000.0)
+        self.spin_sigma.setSingleStep(10.0)
         self.spin_sigma.valueChanged.connect(self.update_spectrum_sigma)
         row2_layout.addWidget(self.spin_sigma)
         
         self.combo_sigma_unit = QComboBox()
-        self.combo_sigma_unit.addItems(["nm", "cm⁻¹"])
-        self.combo_sigma_unit.currentIndexChanged.connect(self.update_spectrum_sigma)
+        self.combo_sigma_unit.addItems(["cm⁻¹", "eV"])
+        self.combo_sigma_unit.setCurrentIndex(0) # Default to cm-1
+        self.combo_sigma_unit.currentIndexChanged.connect(self.on_sigma_unit_changed)
         row2_layout.addWidget(self.combo_sigma_unit)
         
         row2_layout.addSpacing(20)
@@ -83,12 +87,18 @@ class TDDFTDialog(QDialog):
         row2_layout.addWidget(self.chk_sticks)
         
         row2_layout.addStretch()
+        
+        # Reset Button
+        self.btn_reset = QPushButton("Reset Defaults")
+        self.btn_reset.clicked.connect(self.reset_defaults)
+        row2_layout.addWidget(self.btn_reset)
+        
         settings_vbox.addLayout(row2_layout)
         
         # Row 3: Physical Broadening
         row3_layout = QHBoxLayout()
         self.chk_physical = QCheckBox("Physical (Area-preserving) Broadening")
-        self.chk_physical.setChecked(False)
+        self.chk_physical.setChecked(True)
         self.chk_physical.toggled.connect(self.switch_spectrum_type)
         row3_layout.addWidget(self.chk_physical)
         row3_layout.addStretch()
@@ -179,7 +189,7 @@ class TDDFTDialog(QDialog):
         
         self.btn_close = QPushButton("Close")
         self.btn_close.setFixedWidth(100)
-        self.btn_close.clicked.connect(self.accept)
+        self.btn_close.clicked.connect(self.close)
         action_layout.addWidget(self.btn_close)
         
         main_layout.addLayout(action_layout)
@@ -198,29 +208,72 @@ class TDDFTDialog(QDialog):
                 
                 settings = all_settings.get("tddft_settings", {})
                 
+                # Block signals during loading to prevent unintended conversion logic
+                self.spin_sigma.blockSignals(True)
+                self.combo_sigma_unit.blockSignals(True)
+                
                 if "sigma" in settings:
                     self.spin_sigma.setValue(float(settings["sigma"]))
                 
                 if "sigma_unit_idx" in settings:
-                    self.combo_sigma_unit.setCurrentIndex(int(settings["sigma_unit_idx"]))
+                    idx = int(settings["sigma_unit_idx"])
+                    self.combo_sigma_unit.setCurrentIndex(idx)
+                    self.prev_sigma_unit_idx = idx
+                    # Set initial step size
+                    self.spin_sigma.setSingleStep(0.1 if idx == 1 else 10.0)
 
                 if "show_sticks" in settings:
                     self.chk_sticks.setChecked(bool(settings["show_sticks"]))
                 
                 if "physical" in settings:
                     self.chk_physical.setChecked(bool(settings["physical"]))
+                
+                self.spin_sigma.blockSignals(False)
+                self.combo_sigma_unit.blockSignals(False)
                         
             except Exception as e:
+                self.spin_sigma.blockSignals(False)
+                self.combo_sigma_unit.blockSignals(False)
                 print(f"Error loading TDDFT settings: {e}")
 
     def update_spectrum_sigma(self):
         if not self.spectrum: return
-        val = self.spin_sigma.value()
-        unit_idx = self.combo_sigma_unit.currentIndex() # 0: nm, 1: cm-1
+        val = self.spin_sigma.value() # This is FWHM
+        unit_idx = self.combo_sigma_unit.currentIndex() # 0: cm-1, 1: eV
         
-        self.spectrum.sigma = val
-        self.spectrum.broaden_in_energy = (unit_idx == 1)
+        # Convert val to cm-1 if eV
+        # 1 eV = 8065.544 cm-1
+        fwhm_cm = val
+        if unit_idx == 1: # eV
+            fwhm_cm = val * 8065.544
+            
+        # Convert FWHM to Sigma (FWHM = 2 * sqrt(2 * ln 2) * sigma approx 2.355 * sigma)
+        self.spectrum.sigma = fwhm_cm / 2.355
+        self.spectrum.broaden_in_energy = True # Both cm-1 and eV are Energy
         self.spectrum.update()
+
+    def on_sigma_unit_changed(self):
+        curr_idx = self.combo_sigma_unit.currentIndex()
+        if curr_idx == self.prev_sigma_unit_idx: return
+        
+        val = self.spin_sigma.value()
+        # 1 eV = 8065.544 cm-1
+        if self.prev_sigma_unit_idx == 0 and curr_idx == 1: # cm-1 to eV
+            new_val = val / 8065.544
+        elif self.prev_sigma_unit_idx == 1 and curr_idx == 0: # eV to cm-1
+            new_val = val * 8065.544
+        else:
+            new_val = val
+            
+        self.spin_sigma.blockSignals(True)
+        self.spin_sigma.setValue(new_val)
+        # Update step size: 0.1 for eV, 10.0 for cm-1
+        self.spin_sigma.setSingleStep(0.1 if curr_idx == 1 else 10.0)
+        self.spin_sigma.blockSignals(False)
+        
+        self.prev_sigma_unit_idx = curr_idx
+        self.update_spectrum_sigma()
+        self.switch_spectrum_type()
 
     def save_settings(self):
         all_settings = {}
@@ -240,8 +293,14 @@ class TDDFTDialog(QDialog):
         all_settings["tddft_settings"] = tddft_settings
         
         try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
             with open(self.settings_file, 'w') as f:
                 json.dump(all_settings, f, indent=2)
+            
+            # log to status bar if possible
+            if hasattr(self.parent(), 'mw') and self.parent().mw:
+                self.parent().mw.statusBar().showMessage("TDDFT settings saved.", 3000)
         except Exception as e:
             print(f"Error saving TDDFT settings: {e}")
 
@@ -398,81 +457,128 @@ class TDDFTDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
     
+    def reset_defaults(self):
+        self.spin_sigma.blockSignals(True)
+        self.combo_sigma_unit.blockSignals(True)
+        self.chk_sticks.blockSignals(True)
+        self.chk_physical.blockSignals(True)
+        
+        self.spin_sigma.setValue(3000.0)
+        self.spin_sigma.setRange(0.1, 10000.0)
+        self.spin_sigma.setSingleStep(10.0)
+        self.combo_sigma_unit.setCurrentIndex(0) # cm-1
+        self.prev_sigma_unit_idx = 0
+        self.chk_sticks.setChecked(True)
+        self.chk_physical.setChecked(True)
+        
+        self.spin_sigma.blockSignals(False)
+        self.combo_sigma_unit.blockSignals(False)
+        self.chk_sticks.blockSignals(False)
+        self.chk_physical.blockSignals(False)
+        
+        self.switch_spectrum_type()
+
     def switch_spectrum_type(self):
         """
-        Switch between Absorption (Oscillator Strength) and CD (Rotatory Strength).
-        Robustly handles missing specific gauge keys by falling back to generic keys.
-        Apply physical conversion factors if requested.
+        Calculates processed_y (Intensity or Area) based on Physical/Gauge settings.
+        Correctly handles CD energy dependence (R * Energy).
         """
+        if not self.excitations: return
         if not self.spectrum: return
         
-        is_cd = self.radio_cd.isChecked()
         is_physical = self.chk_physical.isChecked()
-        
-        self.combo_gauge.setEnabled(True)
+        is_cd_mode = self.radio_cd.isChecked() # True if CD
         gauge_mode = self.combo_gauge.currentIndex() # 0: Length, 1: Velocity
+        
+        target_key = ''
+        y_unit_main = ''
+        y_unit_sticks = ''
+        
+        # --- 1. Key Selection & Units ---
+        sample = self.excitations[0] if self.excitations else {}
 
-        # Sample data to check keys
-        sample_data = self.excitations[0] if self.excitations and len(self.excitations) > 0 else {}
+        if not is_cd_mode: # Absorption
+            if gauge_mode == 1: # Velocity
+                target_key = 'osc_vel' if 'osc_vel' in sample else 'osc'
+            else: # Length
+                target_key = 'osc_len' if 'osc_len' in sample else 'osc'
 
-        # 1. Determine stick data key and units
-        if is_cd:
-            target_key = 'rot_len' if gauge_mode == 0 else 'rot_vel'
-            if target_key not in sample_data and 'rotatory_strength' in sample_data:
-                target_key = 'rotatory_strength'
+            if is_physical:
+                y_unit_main = 'ε (M⁻¹ cm⁻¹)'
+                y_unit_sticks = 'f (osc)'
+            else:
+                y_unit_main = 'Intensity (Arb.)'
+                y_unit_sticks = 'f (osc)'
+                
+        else: # CD
+            if gauge_mode == 1: # Velocity
+                target_key = 'rot_vel' if 'rot_vel' in sample else 'rotatory_strength'
+            else: # Length
+                target_key = 'rot_len' if 'rot_len' in sample else 'rotatory_strength'
             
-            y_unit_main = 'Molar Circular Dichroism (Δε) [L mol⁻¹ cm⁻¹]' if is_physical else 'CD Intensity (arb. units)'
-            y_unit_sticks = 'Rotatory Strength (R) [10⁻⁴⁰ esu² cm²]'
-        else:
-            target_key = 'osc_len' if gauge_mode == 0 else 'osc_vel'
-            if target_key not in sample_data and 'osc' in sample_data:
-                target_key = 'osc'
-            
-            y_unit_main = 'Molar Absorbance (ε) [L mol⁻¹ cm⁻¹]' if is_physical else 'Intensity (arb. units)'
-            y_unit_sticks = 'Oscillator Strength (f)'
+            if is_physical:
+                y_unit_main = 'Δε (M⁻¹ cm⁻¹)'
+                y_unit_sticks = 'R (10⁻⁴⁰ cgs)'
+            else:
+                y_unit_main = 'Intensity (Arb.)'
+                y_unit_sticks = 'R (10⁻⁴⁰ cgs)'
 
-        # 2. Prepare processed data list for the widget
+        # --- 2. Constants ---
+        # Absorption: Integral(epsilon) dE = 2.315e8 * f
+        ABS_FACTOR = 2.315e8
+        
+        # CD: Integral(DeltaEps) dE ~ R * Energy.
+        # Factor derived from R(cgs) relation. 
+        # R is usually 10^-40 cgs. The factor to map to DeltaEps integral is approx 0.04355
+        CD_FACTOR = 0.04355 
+
+        # --- 3. Process Data ---
         processed_data = []
         
-        # Physical Constants
-        # f -> epsilon: integral(eps) d_nu = 2.315e8 * f
-        EPS_FACTOR = 2.315e8
-        # R -> delta_eps: Delta_epsilon = (1/22.96) * nu * R * G(nu)
-        CD_FACTOR = 1.0 / 22.96
-
         for item in self.excitations:
             new_item = item.copy()
             val = item.get(target_key, 0.0)
+            if val is None: val = 0.0
             
             if is_physical:
-                if is_cd:
-                    # R (10^-40 cgs) -> Delta_epsilon
-                    # Need wavenumber (cm-1)
-                    wn = item.get('energy_cm', 0.0)
-                    if wn == 0 and item.get('energy_nm', 0) > 0:
-                        wn = 1e7 / item.get('energy_nm')
-                    
-                    # Target "Area" is val * wn * CD_FACTOR
-                    new_item['processed_y'] = val * wn * CD_FACTOR
+                if not is_cd_mode:
+                    # Absorption: Area is proportional to f (constant over energy)
+                    new_item['processed_y'] = val * ABS_FACTOR
                 else:
-                    # f -> epsilon
-                    # Target "Area" is f * EPS_FACTOR
-                    new_item['processed_y'] = val * EPS_FACTOR
+                    # CD: Area is proportional to R * Energy(wavenumber)
+                    # We need the energy in cm-1 for correct scaling
+                    e_cm = item.get('energy_cm', 0.0)
+                    if not isinstance(e_cm, (int, float)): e_cm = 0.0
+
+                    # Use nm to calculate cm-1 if missing
+                    if e_cm <= 0:
+                        e_nm = item.get('energy_nm', 0.0)
+                        if isinstance(e_nm, (int, float)) and e_nm > 0:
+                            e_cm = 1e7 / e_nm
+                        else:
+                            e_cm = 0.0
+                    
+                    # 修正点: R値にエネルギーを掛けてスケーリング
+                    new_item['processed_y'] = val * e_cm * CD_FACTOR
             else:
+                # Non-physical (Height = Value)
                 new_item['processed_y'] = val
             
             processed_data.append(new_item)
-
-        # 3. Update Widget
+            
+        # --- 4. Update Widget ---
         self.spectrum.data_list = processed_data
         self.spectrum.y_key = 'processed_y'
+        self.spectrum.y_key_sticks = target_key # Sticks always show raw f or R
+        
         self.spectrum.y_unit = y_unit_main
         self.spectrum.y_unit_sticks = y_unit_sticks
+        
         self.spectrum.normalization_mode = 'area' if is_physical else 'height'
+        self.spectrum.broaden_in_energy = True # Always broaden in Energy for physical correctness
         
-        # Ensure sigma settings are sync'd
+        self.spectrum.set_dual_axis(is_physical)
         self.update_spectrum_sigma()
-        
         self.spectrum.update()
 
     def on_spectrum_click(self, item):
