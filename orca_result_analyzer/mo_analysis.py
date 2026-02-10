@@ -50,13 +50,7 @@ class MODialog(QDialog):
             filename_base = os.path.splitext(os.path.basename(fpath))[0]
             out_dir = os.path.join(base_dir, f"{filename_base}_cubes")
             
-            # Ensure dir exists here or caller?
-            # Creating it here ensures get path is valid target
-            if not os.path.exists(out_dir):
-                try: 
-                    os.makedirs(out_dir)
-                except: pass
-            
+            # Just return the path, don't create dir here (lazy creation requested)
             # Sanitize display ID (which might contain "1 (a)")
             # Example: "1 (a)" -> "1_a"
             safe_id = str(display_id).replace(" ", "_").replace("(", "").replace(")", "").replace(":", "")
@@ -633,6 +627,13 @@ class MODialog(QDialog):
         out_path = self.get_cube_path(display_id)
         if not out_path:
              out_path = os.path.join(tempfile.gettempdir(), f"orca_mo_{display_id}.cube")
+        else:
+            # Lazy directory creation: create it now if it doesn't exist
+            out_dir = os.path.dirname(out_path)
+            if not os.path.exists(out_dir):
+                try:
+                    os.makedirs(out_dir)
+                except: pass
         
         self.last_cube_path = out_path
         

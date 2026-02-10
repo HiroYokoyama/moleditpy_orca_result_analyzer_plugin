@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QHeaderView, QCheckBox, 
                              QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
-                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView)
+                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView, QTreeWidgetItemIterator)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import math
@@ -28,7 +28,7 @@ class FreqSpectrumWindow(QWidget):
     Separate window for displaying the spectrum.
     """
     def __init__(self, parent_dialog, frequencies):
-        super().__init__()
+        super().__init__(parent_dialog)
         # We don't verify parent strictly to allow independent testing if needed, 
         # but logically it belongs to FrequencyDialog
         self.freq_dialog = parent_dialog 
@@ -36,26 +36,31 @@ class FreqSpectrumWindow(QWidget):
         self.scaling_factor = 1.0
         
         self.setWindowTitle("IR/Raman Spectrum")
-        self.resize(700, 500)
+        # Ensure it stays on top of the parent window
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        self.resize(800, 550)
         
         self.init_ui()
         
     def init_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
         
-        # Spectrum Widget
         # Spectrum Widget
         self.spectrum = SpectrumWidget(self.frequencies, x_key='freq', y_key='ir', x_unit='Frequency (cm-1)', y_unit='Intensity (a.u.)', sigma=20.0)
         self.spectrum.show_legend = False
         layout.addWidget(self.spectrum)
 
-        
-        # Controls
+        # 1. Main Controls (Sigma, Sticks, Inversion, Type)
         ctrl_layout = QHBoxLayout()
+        ctrl_layout.setSpacing(15)
+        
         ctrl_layout.addWidget(QLabel("Sigma:"))
         self.spin_sigma = QDoubleSpinBox()
         self.spin_sigma.setRange(1.0, 100.0)
         self.spin_sigma.setValue(20.0)
+        self.spin_sigma.setDecimals(1)
         self.spin_sigma.valueChanged.connect(self.spectrum.set_sigma)
         ctrl_layout.addWidget(self.spin_sigma)
         
@@ -70,13 +75,13 @@ class FreqSpectrumWindow(QWidget):
         ctrl_layout.addWidget(self.chk_invert_x)
         
         self.chk_invert_y = QCheckBox("Rev. Y")
-        self.chk_invert_y.setChecked(True) # Default for IR usually
+        self.chk_invert_y.setChecked(True)
         self.chk_invert_y.stateChanged.connect(self.toggle_invert)
         ctrl_layout.addWidget(self.chk_invert_y)
         
         ctrl_layout.addStretch()
         
-        # Spectrum Type
+        # Spectrum Type Group
         self.radio_ir = QRadioButton("IR")
         self.radio_ir.setChecked(True)
         self.radio_ir.toggled.connect(self.switch_spectrum_type)
@@ -88,91 +93,121 @@ class FreqSpectrumWindow(QWidget):
         
         layout.addLayout(ctrl_layout)
 
-        # X-Range Control
-        x_range_layout = QHBoxLayout()
+        # 2. Combined Range Controls (X and Y side-by-side)
+        range_layout = QHBoxLayout()
+        range_layout.setSpacing(10)
         
-        self.chk_auto_x = QCheckBox("Auto X")
+        # X Group
+        range_layout.addWidget(QLabel("<b>X Range:</b>"))
+        self.chk_auto_x = QCheckBox("Auto")
         self.chk_auto_x.setChecked(False)
         self.chk_auto_x.stateChanged.connect(self.toggle_auto_x)
-        x_range_layout.addWidget(self.chk_auto_x)
+        range_layout.addWidget(self.chk_auto_x)
         
         self.spin_x_min = QDoubleSpinBox()
-        self.spin_x_min.setRange(0, 5000)
+        self.spin_x_min.setRange(0, 10000)
+        self.spin_x_min.setDecimals(2)
         self.spin_x_min.setValue(400)
         self.spin_x_min.setSuffix(" cm⁻¹")
+        self.spin_x_min.setFixedWidth(110)
         self.spin_x_min.setEnabled(False)
         self.spin_x_min.valueChanged.connect(self.update_x_range)
-        x_range_layout.addWidget(self.spin_x_min)
+        range_layout.addWidget(self.spin_x_min)
+        
+        range_layout.addWidget(QLabel("-"))
         
         self.spin_x_max = QDoubleSpinBox()
-        self.spin_x_max.setRange(0, 5000)
+        self.spin_x_max.setRange(0, 10000)
+        self.spin_x_max.setDecimals(2)
         self.spin_x_max.setValue(4000)
+        self.spin_x_max.setSuffix(" cm⁻¹")
+        self.spin_x_max.setFixedWidth(110)
         self.spin_x_max.setEnabled(False)
         self.spin_x_max.valueChanged.connect(self.update_x_range)
-        x_range_layout.addWidget(self.spin_x_max)
+        range_layout.addWidget(self.spin_x_max)
         
-        self.toggle_auto_x() # Initialize state (enable spinners, set range)
+        range_layout.addSpacing(20)
+        range_layout.addWidget(QLabel("|"))
+        range_layout.addSpacing(20)
         
-        x_range_layout.addStretch()
-        layout.addLayout(x_range_layout)
-
-        # Graph Settings (Y-Range & Export)
-        graph_layout = QHBoxLayout()
-        
-        self.chk_auto_y = QCheckBox("Auto Y")
+        # Y Group
+        range_layout.addWidget(QLabel("<b>Y Range:</b>"))
+        self.chk_auto_y = QCheckBox("Auto")
         self.chk_auto_y.setChecked(True)
         self.chk_auto_y.stateChanged.connect(self.toggle_auto_y)
-        graph_layout.addWidget(self.chk_auto_y)
+        range_layout.addWidget(self.chk_auto_y)
         
         self.spin_y_min = QDoubleSpinBox()
-        self.spin_y_min.setRange(-1000, 10000)
+        self.spin_y_min.setRange(-1e5, 1e5)
+        self.spin_y_min.setDecimals(2)
         self.spin_y_min.setValue(0)
-        self.spin_y_min.setSuffix(" Y")
+        self.spin_y_min.setFixedWidth(90)
         self.spin_y_min.setEnabled(False)
         self.spin_y_min.valueChanged.connect(self.update_range)
-        graph_layout.addWidget(self.spin_y_min)
+        range_layout.addWidget(self.spin_y_min)
+        
+        range_layout.addWidget(QLabel("-"))
         
         self.spin_y_max = QDoubleSpinBox()
-        self.spin_y_max.setRange(-1000, 10000)
+        self.spin_y_max.setRange(-1e5, 1e5)
+        self.spin_y_max.setDecimals(2)
         self.spin_y_max.setValue(1.0)
+        self.spin_y_max.setFixedWidth(90)
         self.spin_y_max.setEnabled(False)
         self.spin_y_max.valueChanged.connect(self.update_range)
-        graph_layout.addWidget(self.spin_y_max)
+        range_layout.addWidget(self.spin_y_max)
         
-        graph_layout.addStretch()
+        range_layout.addStretch()
+        layout.addLayout(range_layout)
+        
+        # 3. Action Buttons
+        btn_layout = QHBoxLayout()
         
         btn_png = QPushButton("Save PNG")
         btn_png.clicked.connect(self.save_png)
-        graph_layout.addWidget(btn_png)
+        btn_layout.addWidget(btn_png)
         
         btn_csv = QPushButton("Save CSV")
         btn_csv.clicked.connect(self.save_csv)
-        graph_layout.addWidget(btn_csv)
+        btn_layout.addWidget(btn_csv)
         
         btn_sticks = QPushButton("Export Sticks")
         btn_sticks.clicked.connect(self.save_sticks)
-        graph_layout.addWidget(btn_sticks)
+        btn_layout.addWidget(btn_sticks)
+        
+        btn_layout.addStretch()
         
         btn_close = QPushButton("Close")
         btn_close.clicked.connect(self.close)
-        graph_layout.addWidget(btn_close)
+        btn_layout.addWidget(btn_close)
         
-        layout.addLayout(graph_layout)
+        layout.addLayout(btn_layout)
+        
+        # Connections (connected now that all variables are initialized)
+        self.spectrum.clicked.connect(self.on_spectrum_clicked)
+        self.spectrum.range_changed.connect(self.on_spectrum_range_changed)
         
         # Initial Update
+        self.toggle_auto_x() # Initialize state
         self.switch_spectrum_type()
-        
+
+    def on_spectrum_clicked(self, item):
+        if self.freq_dialog:
+            self.freq_dialog.select_mode_by_item(item)
+
     def set_scaling_factor(self, sf):
         self.scaling_factor = sf
         self.update_data()
-        
+
     def update_data(self):
         # Re-calc scaled data
         scaled_data = []
-        for f in self.frequencies:
+        for i, f in enumerate(self.frequencies):
             d = f.copy()
             if 'freq' in d:
                 d['freq'] = d['freq'] * self.scaling_factor
+            # Store original index for robust identification
+            d['_orig_idx'] = i 
             scaled_data.append(d)
         self.spectrum.set_data(scaled_data)
         
@@ -221,9 +256,19 @@ class FreqSpectrumWindow(QWidget):
         is_auto = self.chk_auto_x.isChecked()
         self.spin_x_min.setEnabled(not is_auto)
         self.spin_x_max.setEnabled(not is_auto)
+        
         if is_auto:
             self.spectrum.set_auto_x_range()
         else:
+            # If frequency plot, default to standard range on uncheck
+            is_freq = 'freq' in self.spectrum.x_unit.lower() or 'cm' in self.spectrum.x_unit.lower()
+            if is_freq:
+                self.spin_x_min.blockSignals(True)
+                self.spin_x_max.blockSignals(True)
+                self.spin_x_min.setValue(400)
+                self.spin_x_max.setValue(4000)
+                self.spin_x_min.blockSignals(False)
+                self.spin_x_max.blockSignals(False)
             self.update_x_range()
             
     def update_x_range(self):
@@ -231,6 +276,37 @@ class FreqSpectrumWindow(QWidget):
         xmin = self.spin_x_min.value()
         xmax = self.spin_x_max.value()
         self.spectrum.set_x_range(xmin, xmax)
+        
+    def on_spectrum_range_changed(self, xmin, xmax, ymin, ymax, is_manual):
+        # Update spin boxes to match zoom
+        self.spin_x_min.blockSignals(True)
+        self.spin_x_max.blockSignals(True)
+        self.spin_y_min.blockSignals(True)
+        self.spin_y_max.blockSignals(True)
+        
+        self.spin_x_min.setValue(xmin)
+        self.spin_x_max.setValue(xmax)
+        self.spin_y_min.setValue(ymin)
+        self.spin_y_max.setValue(ymax)
+        
+        if is_manual:
+            # Only uncheck Auto if it was a manual zoom/pan interaction
+            self.chk_auto_x.blockSignals(True)
+            self.chk_auto_y.blockSignals(True)
+            self.chk_auto_x.setChecked(False)
+            self.chk_auto_y.setChecked(False)
+            self.chk_auto_x.blockSignals(False)
+            self.chk_auto_y.blockSignals(False)
+            
+            self.spin_x_min.setEnabled(True)
+            self.spin_x_max.setEnabled(True)
+            self.spin_y_min.setEnabled(True)
+            self.spin_y_max.setEnabled(True)
+        
+        self.spin_x_min.blockSignals(False)
+        self.spin_x_max.blockSignals(False)
+        self.spin_y_min.blockSignals(False)
+        self.spin_y_max.blockSignals(False)
         
     def save_png(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save Graph", "", "Images (*.png)")
@@ -487,9 +563,52 @@ class FrequencyDialog(QDialog):
             self.spectrum_win.activateWindow()
             self.spectrum_win.raise_()
 
+    def select_mode_by_item(self, item):
+        if item is None:
+            if self.spectrum_win:
+                self.spectrum_win.spectrum.set_selected_item(None)
+            self.tree.clearSelection()
+            return
+            
+        # Find corresponding tree item using original index
+        target_idx = item.get('_orig_idx', -1)
+        
+        if target_idx < 0: return
+
+        # Update highlight in spectrum window if exists
+        if self.spectrum_win:
+            self.spectrum_win.spectrum.set_selected_item(item)
+
+        # Iterate tree to find the item with this index in column 0
+        it = QTreeWidgetItemIterator(self.tree)
+        while it.value():
+            tree_item = it.value()
+            try:
+                if int(tree_item.text(0)) == target_idx:
+                    self.tree.setCurrentItem(tree_item)
+                    self.tree.scrollToItem(tree_item, QAbstractItemView.ScrollHint.PositionAtCenter)
+                    break
+            except: pass
+            it += 1
+
     def on_mode_selected(self, current, previous):
         if not current: return
         idx = int(current.text(0))
+        
+        # Update spectrum highlight if window is open
+        if self.spectrum_win:
+             # Find the item dict
+             # In FreqSpectrumWindow we store them in self.frequencies
+             # But FreqSpectrumWindow uses its own copy with _orig_idx
+             # Actually it uses parent's self.frequencies.
+             # Wait, update_data creates new copies? No, it creates new scaled_data list.
+             # Let's find the item by index in scaled_data.
+             
+             # SpectrumWidget's data_list is what we need to search.
+             for item in self.spectrum_win.spectrum.data_list:
+                  if item.get('_orig_idx') == idx:
+                       self.spectrum_win.spectrum.set_selected_item(item)
+                       break
         
         was_playing = self.is_playing
         
