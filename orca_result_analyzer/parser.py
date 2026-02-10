@@ -1205,225 +1205,235 @@ class OrcaParser:
 
         
     def parse_tddft(self):
-        self.data["tddft"] = [] # List of {state, energy_ev, energy_nm, osc}
-        
-        # 1. Parse Summary Table (Absorption Spectrum)
-        found_block = False
-        start_idx = -1
+        """
+        Parse TD-DFT/TDA excited states and spectra (Absorption/CD).
+        Updated Version:
+        - Correctly parses both Length (Electric Dipole) and Velocity gauges.
+        - Stores data in 'osc_len', 'osc_vel', 'rot_len', 'rot_vel'.
+        - Handles '0-1A -> 1-1A' transition lines and auto-calculates eV from nm.
+        """
+        self.data["tddft"] = [] 
+        states_dict = {}  # state_id (int) -> dict
+
+        # Helper to ensure state dict exists with all gauge keys initialized
+        def get_state(idx):
+            if idx not in states_dict:
+                states_dict[idx] = {
+                    "state": idx,
+                    "energy_ev": 0.0,
+                    "energy_nm": 0.0,
+                    "energy_cm": 0.0,
+                    "osc": 0.0,       # Default (usually Length)
+                    "osc_len": 0.0,   # Length Gauge
+                    "osc_vel": 0.0,   # Velocity Gauge
+                    "rotatory_strength": 0.0, # Default (usually Length)
+                    "rot_len": 0.0,   # Length Gauge
+                    "rot_vel": 0.0,   # Velocity Gauge
+                    "transitions": []
+                }
+            return states_dict[idx]
+
+        # -------------------------------------------------------------------------
+        # PASS 1: Parse Detailed Excited States (Energy + Transitions)
+        # -------------------------------------------------------------------------
+        current_state_id = -1
         
         for i, line in enumerate(self.lines):
-            uu = line.upper()
-            if "ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS" in uu:
-                start_idx = i
-                found_block = True
-                break
-            if "ABSORPTION SPECTRUM" in uu and "ELECTRIC DIPOLE" in uu and not found_block:
-                start_idx = i
-                found_block = True
-                break
-                
-        if found_block:
+            line_strip = line.strip()
+            line_upper = line.upper()
+
+            # Detect State Header
+            match_state = re.search(r"STATE\s+(\d+)\s*:", line_upper)
+            if match_state:
+                try:
+                    current_state_id = int(match_state.group(1))
+                    state_entry = get_state(current_state_id)
+
+                    # Extract Energies
+                    match_ev = re.search(r"([-+]?\d*\.\d+)\s*eV", line, re.IGNORECASE)
+                    if match_ev: state_entry["energy_ev"] = float(match_ev.group(1))
+                    
+                    match_cm = re.search(r"([-+]?\d*\.\d+)\s*cm", line, re.IGNORECASE)
+                    if match_cm: state_entry["energy_cm"] = float(match_cm.group(1))
+                    
+                    match_nm = re.search(r"([-+]?\d*\.\d+)\s*nm", line, re.IGNORECASE)
+                    if match_nm: state_entry["energy_nm"] = float(match_nm.group(1))
+                except:
+                    current_state_id = -1
+
+            # Detect Transitions
+            elif current_state_id != -1:
+                if "-------" in line or "SPECTRUM" in line_upper:
+                    pass 
+                elif "->" in line and ":" in line:
+                    parts = line_strip.split(":")
+                    if len(parts) >= 2:
+                        trans_desc = parts[0].strip()
+                        coeff = parts[1].strip()
+                        t_str = f"{trans_desc} (coeff: {coeff})"
+                        if t_str not in get_state(current_state_id)["transitions"]:
+                            get_state(current_state_id)["transitions"].append(t_str)
+
+        # -------------------------------------------------------------------------
+        # PASS 2: Parse Summary Tables (All Gauges)
+        # -------------------------------------------------------------------------
+        
+        def parse_summary_table(start_idx, data_key):
             curr = start_idx + 1
-            while curr < len(self.lines):
-                if "----------------" in self.lines[curr]:
+            header_found = False
+            
+            # 1. ヘッダー検出 (テーブルの開始を確認するだけ)
+            while curr < len(self.lines) and curr < start_idx + 30:
+                line = self.lines[curr].strip()
+                if not line or "--------" in line:
                     curr += 1
-                    break
-                curr += 1
+                    continue
                 
+                u_line = line.upper()
+                # "TRANSITION" や "STATE" があり、かつ "ENERGY" や "WAVELENGTH" があればテーブルとみなす
+                if ("TRANSITION" in u_line or "STATE" in u_line) and ("ENERGY" in u_line or "WAVELENGTH" in u_line):
+                    header_found = True
+                    break
+                
+                # 古いフォーマット等の救済
+                parts = line.split()
+                if len(parts) >= 3 and parts[0].isdigit():
+                    header_found = True
+                    break
+                    
+                curr += 1
+            
+            if not header_found: return
+
+            # 2. データ行の解析
+            data_parsing_started = False
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line: 
+                if not line:
                     curr += 1
                     continue
-                if "----------------" in line: 
-                    curr += 1 
-                    continue
+                
+                # Check for "TOTAL" explicitly (always stop)
+                if "TOTAL" in line.upper(): 
+                    break
                     
-                if "SOC CORRECTED" in line.upper(): break
-                if "CD SPECTRUM" in line.upper(): break
-                if "VELOCITY" in line.upper(): break  # <--- これを追加
+                # Skip the first separator line encountered (header separator)
+                if "--------" in line: 
+                    if not data_parsing_started:
+                        curr += 1
+                        # If the very next line is also a separator, skip it too? 
+                        # Or if we just skipped one and haven't started data, we are now ready.
+                        # Let's set a flag to verify we found the header separator.
+                        data_parsing_started = True 
+                        continue
+                    else:
+                        break # End of table
                 
                 parts = line.split()
-                # Format 1: 0-1A -> 2-1A Ev Cm-1 Nm Osc ...
-                if len(parts) >= 7 and "->" in parts:
+                # If we encounter a valid data line (starts with digit), mark as started
+                if (len(parts) > 0 and parts[0].isdigit()) or "->" in parts:
+                    data_parsing_started = True 
+                
+                # --- パターンA: 矢印 "->" を含む標準フォーマット ---
+                # 例: 0-1A  ->  1-1A   2.780   22422   446.0   0.000 ...
+                # idx:  0    1     2      3       4       5       6
+                if "->" in parts:
                     try:
-                        # Parse State ID from "2-1A" -> 2
-                        target_state = parts[2]
-                        # Extract leading digits
-                        state_idx_str = ""
-                        for char in target_state:
-                            if char.isdigit(): state_idx_str += char
-                            else: break
+                        arrow_idx = parts.index("->")
+                        # 矢印の位置を基準に相対的に取得
+                        # arrow+1: Target State (1-1A)
+                        # arrow+2: Energy (eV)
+                        # arrow+3: Energy (cm-1)
+                        # arrow+4: Wavelength (nm)
+                        # arrow+5: Value (Strength)
                         
-                        state = int(state_idx_str) if state_idx_str else 0
-                        
-                        # Skip state 0 (invalid extraction)
-                        if state == 0:
-                            continue
-                        
-                        ev = float(parts[3])
-                        nm = float(parts[5])
-                        osc = float(parts[6])
-                        
-                        self.data["tddft"].append({
-                            "state": state,
-                            "energy_ev": ev,
-                            "energy_nm": nm,
-                            "osc": osc
-                        })
-                    except: pass
-                    
-                # Format 2: State  Energy(cm-1)  Wavelength(nm)  fosc
+                        if len(parts) > arrow_idx + 5:
+                            # 1. State ID
+                            target_state_str = parts[arrow_idx + 1]
+                            match = re.search(r"^(\d+)", target_state_str)
+                            if match:
+                                s_id = int(match.group(1))
+                                entry = get_state(s_id)
+                                
+                                # 2. Values (強度)
+                                entry[data_key] = float(parts[arrow_idx + 5])
+                                
+                                # 3. Energies (値が0なら埋める / 上書きする)
+                                # 詳細ブロック(PASS 1)が見つからなかった場合のためにここでeVを取得することが重要
+                                try: entry["energy_ev"] = float(parts[arrow_idx + 2])
+                                except: pass
+                                
+                                try: entry["energy_cm"] = float(parts[arrow_idx + 3])
+                                except: pass
+                                
+                                try: entry["energy_nm"] = float(parts[arrow_idx + 4])
+                                except: pass
+                    except: 
+                        pass # パース失敗行はスキップ
+
+                # --- パターンB: 矢印なしの短縮フォーマット ---
+                # 例: 1    2.78    446.0    0.001 ...
+                # idx:0     1        2        3
                 elif len(parts) >= 4 and parts[0].isdigit():
                     try:
-                        state = int(parts[0])
-                        # parts[1] = cm-1, parts[2] = nm, parts[3] = osc
-                        nm = float(parts[2])
-                        osc = float(parts[3])
-                        ev = 1239.84193 / nm if nm else 0
+                        s_id = int(parts[0])
+                        entry = get_state(s_id)
                         
-                        self.data["tddft"].append({
-                             "state": state,
-                             "energy_ev": ev,
-                             "energy_nm": nm,
-                             "osc": osc
-                        })
+                        # 固定レイアウトと仮定 (State, eV, nm, Value) ※cm-1がない場合が多い
+                        # データ数に応じて推測
+                        entry[data_key] = float(parts[3])
+                        
+                        if entry["energy_ev"] == 0:
+                            entry["energy_ev"] = float(parts[1])
+                        if entry["energy_nm"] == 0:
+                            entry["energy_nm"] = float(parts[2])
                     except: pass
-                     
+                
                 curr += 1
 
-                
-        # 2. Parse Detailed Transitions
-        # "EXCITED STATE 1" or "STATE 1:"
-        current_state = -1
-        transitions_map = {} # state_id -> list of strings
-        
-        for line in self.lines:
+        # Locate tables and parse SPECIFIC gauges
+        for i, line in enumerate(self.lines):
             line_upper = line.upper()
             
-            # Detect State Header
-            # Support "EXCITED STATE   1" and "STATE  1:"
-            new_state = -1
+            # Absorption Spectrum
+            if "ABSORPTION SPECTRUM" in line_upper:
+                if "ELECTRIC DIPOLE" in line_upper:
+                    # Parse as 'osc_len' AND default 'osc'
+                    parse_summary_table(i, "osc_len")
+                    parse_summary_table(i, "osc")
+                elif "VELOCITY DIPOLE" in line_upper:
+                    # Parse as 'osc_vel'
+                    parse_summary_table(i, "osc_vel")
             
-            match_state = re.search(r"(?:EXCITED\s+)?STATE\s+(\d+)[:\s]", line_upper)
-            if match_state:
-                new_state = int(match_state.group(1))
-                
-                # Try to parse Energy and Osc from header line
-                # Format: STATE 1: E= 0.090595 au ...
-                
-                # But let's grab Energy at least.
-                # Format: STATE 1: E= 0.090595 au      2.465 eV    19883.2 cm**-1 ...
-                # Use a more robust float regex that handles signs and no leading zero
-                float_re = r"[-+]?\d*\.\d+"
-                
-                cached_ev = 0.0
-                cached_nm = 0.0
-                cached_au = 0.0
-                cached_cm = 0.0
-                
-                # 1. Try eV
-                match_ev = re.search(fr"({float_re})\s*eV", line)
-                if match_ev:
-                    cached_ev = float(match_ev.group(1))
-                
-                # 2. Try au
-                match_au = re.search(fr"({float_re})\s*au", line)
-                if match_au:
-                    cached_au = float(match_au.group(1))
+            # CD Spectrum
+            if "CD SPECTRUM" in line_upper:
+                if "ELECTRIC DIPOLE" in line_upper:
+                    # Parse as 'rot_len' AND default 'rotatory_strength'
+                    parse_summary_table(i, "rot_len")
+                    parse_summary_table(i, "rotatory_strength")
+                elif "VELOCITY DIPOLE" in line_upper:
+                    # Parse as 'rot_vel'
+                    parse_summary_table(i, "rot_vel")
 
-                # 3. Try cm**-1
-                match_cm = re.search(fr"({float_re})\s*cm", line)
-                if match_cm:
-                    cached_cm = float(match_cm.group(1))
-
-                # Backfill if necessary
-                if cached_ev == 0.0 and cached_au != 0.0:
-                    cached_ev = cached_au * 27.211386
-                elif cached_ev == 0.0 and cached_cm != 0.0:
-                    cached_ev = cached_cm / 8065.544
-
-                if cached_nm == 0.0 and cached_ev > 0:
-                     cached_nm = 1239.84193 / cached_ev
-
-                     
-                # Try to find Osc from summary map later?
-                # No, we need to store what we find here to backfill if summary missed it.
-                
-            if new_state != -1:
-                 current_state = new_state
-                 if current_state not in transitions_map:
-                     transitions_map[current_state] = []
-                     
-                 # Store supplementary info if we found it
-                 if 'detailed_info' not in self.data: self.data['detailed_info'] = {}
-                 if cached_ev > 0:
-                     self.data['detailed_info'][current_state] = {'ev': cached_ev, 'nm': cached_nm}
-            elif current_state != -1:
-                 # Capture lines until next state or end marker
-                 if not line.strip():
-                     continue
-
-                 # Stop conditions - end of TDDFT section markers
-                 line_upper = line.upper()
-                 if "----------" in line:
-                     if len(transitions_map[current_state]) > 0:
-                         current_state = -1
-                     continue
-                 
-                 # Additional stop markers
-                 if "STORING" in line_upper and "AMPLITUDE" in line_upper:
-                     current_state = -1
-                     continue
-                 if "ABSORPTION SPECTRUM" in line_upper:
-                     current_state = -1
-                     continue
-                 if "CD SPECTRUM" in line_upper:
-                     current_state = -1
-                     continue
-                 if "SOC CORRECTED" in line_upper:
-                     current_state = -1
-                     continue
-                 if "TIMINGS" in line_upper:
-                     current_state = -1
-                     continue
-
-                 # Only store lines that look like transitions (contain ->)
-                 # or lines with orbital notation (numbers, letters, :)
-                 if "->" in line or ":" in line:
-                     transitions_map[current_state].append(line.strip())
-
-        # Merge transitions into tddft list
-        # First, update existing states from ABSORPTION SPECTRUM table
-        for item in self.data["tddft"]:
-            state_id = item['state']
-            if state_id in transitions_map:
-                item['transitions'] = transitions_map[state_id]
-            
-        # Then, add any states that only exist in STATE headers (no ABSORPTION SPECTRUM)
-        existing_states = set(item['state'] for item in self.data["tddft"])
-        for state_id, transitions in transitions_map.items():
-            if state_id not in existing_states:
-                # State exists in detailed block but was missed in summary
-                # Check if we have cached info from headers
-                ev = 0.0
-                nm = 0.0
-                if 'detailed_info' in self.data and state_id in self.data['detailed_info']:
-                    info = self.data['detailed_info'][state_id]
-                    ev = info.get('ev', 0.0)
-                    nm = info.get('nm', 0.0)
-                
-                new_item = {
-                    "state": state_id,
-                    "energy_ev": ev,
-                    "energy_nm": nm,
-                    "osc": 0.0, # Osc often not in detail header, user might accept 0 or we parse lines
-                    "transitions": transitions
-                }
-                self.data["tddft"].append(new_item)
+        # -------------------------------------------------------------------------
+        # FINALIZATION: Fix Missing Units & Sort
+        # -------------------------------------------------------------------------
+        all_items = list(states_dict.values())
         
-        # Sort by state ID to keep things tidy
-        self.data["tddft"].sort(key=lambda x: x['state'])
+        # 1. Auto-Calculate Missing eV from nm
+        for item in all_items:
+            if item["energy_ev"] == 0.0:
+                if item["energy_nm"] > 0.1:
+                    item["energy_ev"] = 1239.84193 / item["energy_nm"]
+                elif item["energy_cm"] > 0.1:
+                    item["energy_ev"] = item["energy_cm"] / 8065.54425
+
+        # 2. Filter & Sort
+        valid_items = [item for item in all_items if item["energy_ev"] > 0]
+        valid_items.sort(key=lambda x: x["energy_ev"])
+        
+        self.data["tddft"] = valid_items
+        #print(self.data["tddft"])
 
     def parse_thermal(self):
         self.data["thermal"] = {}

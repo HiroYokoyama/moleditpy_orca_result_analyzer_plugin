@@ -6,6 +6,7 @@ from matplotlib.figure import Figure
 
 class MplCanvas(FigureCanvasQTAgg):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
+        # We manually call tight_layout() in plot_spectrum() to avoid clashing with constrained_layout.
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
         super().__init__(fig)
@@ -21,9 +22,12 @@ class SpectrumWidget(QWidget):
         self.y_key = y_key
         self.x_unit = x_unit
         self.y_unit = y_unit
+        self.y_unit_sticks = "Intensity" # Default for dual axis stick labels
         self.sigma = sigma
         self.invert_x = invert_x
         self.invert_y = invert_y
+        self.normalization_mode = 'height' # 'height' or 'area'
+        self.broaden_in_energy = False    # If True, broaden in cm-1
         
         self.x_range = None
         self.y_range = None
@@ -243,13 +247,58 @@ class SpectrumWidget(QWidget):
             plot_min_x = data_min_x - max(self.sigma * 10, 500)
             plot_max_x = data_max_x + max(self.sigma * 10, 500)
             
-            display_x = np.linspace(plot_min_x, plot_max_x, 3000)
-            curve_y = np.zeros_like(display_x)
+            # Use wavenumber grid if broadening in energy
+            is_energy = 'cm' in self.x_unit.lower() or 'freq' in self.x_unit.lower()
             
-            if self.show_gaussian:
+            # Decide interpolation grid
+            if self.broaden_in_energy and not is_energy:
+                # Broaden in cm-1, but display is in nm
+                # Convert data points to cm-1
+                all_pts_cm = []
                 for x0, y0 in all_points:
-                    term = np.exp(-0.5 * ((display_x - x0) / self.sigma)**2)
-                    curve_y += y0 * term
+                    if x0 > 1e-6:
+                        all_pts_cm.append((1e7 / x0, y0))
+                
+                if not all_pts_cm: return
+                
+                # Create wavenumber grid
+                cms = [p[0] for p in all_pts_cm]
+                cm_min_x = min(cms) - max(self.sigma * 10, 500)
+                cm_max_x = max(cms) + max(self.sigma * 10, 500)
+                grid_cm = np.linspace(cm_min_x, cm_max_x, 5000)
+                curve_y_cm = np.zeros_like(grid_cm)
+                
+                # Broaden in cm-1
+                norm_factor = 1.0
+                if self.normalization_mode == 'area':
+                    norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
+                
+                for x0, y0 in all_pts_cm:
+                    term = np.exp(-((grid_cm - x0) / self.sigma)**2)
+                    curve_y_cm += y0 * term * norm_factor
+                
+                # Interpolate back to nm display grid
+                display_x = np.linspace(plot_min_x, plot_max_x, 3000)
+                # Filter grid_cm to avoid divide by zero if 0 in grid_cm? 
+                # (handled by min_x range usually)
+                valid_grid = grid_cm[grid_cm > 1.0]
+                valid_curve = curve_y_cm[grid_cm > 1.0]
+                # x_nm = 1e7 / valid_grid
+                # np.interp expects sorted x. x_nm will be sorted descending if valid_grid is ascending.
+                curve_y = np.interp(display_x, 1e7 / valid_grid[::-1], valid_curve[::-1])
+            else:
+                # Standard broadening in current axis space
+                display_x = np.linspace(plot_min_x, plot_max_x, 3000)
+                curve_y = np.zeros_like(display_x)
+                
+                norm_factor = 1.0
+                if self.normalization_mode == 'area':
+                    norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
+                
+                if self.show_gaussian:
+                    for x0, y0 in all_points:
+                        term = np.exp(-((display_x - x0) / self.sigma)**2)
+                        curve_y += y0 * term * norm_factor
             
             # APPLY SCALING
             curve_y *= self.scaling_factor
@@ -264,7 +313,7 @@ class SpectrumWidget(QWidget):
                  if not hasattr(self, 'ax2'):
                      self.ax2 = self.canvas.axes.twinx()
                  ax_sticks = self.ax2
-                 ax_sticks.set_ylabel("Oscillator Strength")
+                 ax_sticks.set_ylabel(self.y_unit_sticks)
             elif hasattr(self, 'ax2'):
                  self.ax2.axis('off')
             
@@ -320,6 +369,13 @@ class SpectrumWidget(QWidget):
             self.canvas.axes.grid(True, alpha=0.3)
             
             self._initial_plot_done = True
+            
+            # Use tight_layout to prevent clipping of labels/units
+            # This is applied just before drawing
+            try:
+                self.canvas.figure.tight_layout()
+            except: pass
+                
             self.canvas.draw()
             
             # Emit range changed to sync UI

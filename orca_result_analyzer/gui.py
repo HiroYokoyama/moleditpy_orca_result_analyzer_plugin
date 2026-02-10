@@ -112,12 +112,20 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.lbl_file_path.setWordWrap(True)
         file_info_layout.addWidget(self.lbl_file_path)
         
-        # Version Label
+        # Updated Time Label
+        self.lbl_updated = QLabel("Updated: ---")
+        self.lbl_updated.setStyleSheet("color: #555; font-size: 9pt; background: transparent; border: none; padding: 0;")
+        file_info_layout.addWidget(self.lbl_updated)
+    
+        # ORCA Version Label
         version_str = self.parser.data.get("version", "Unknown") if self.parser else "Unknown"
         self.lbl_version = QLabel(f"ORCA Version: {version_str}")
         self.lbl_version.setStyleSheet("color: #555; font-size: 9pt; background: transparent; border: none; padding: 0;")
         file_info_layout.addWidget(self.lbl_version)
         
+        # Initial call to update labels
+        self.update_file_info_labels()
+
         file_frame_layout.addLayout(file_info_layout, 1)
         
         # Buttons Layout (Open + Reload)
@@ -397,13 +405,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             if hasattr(self.mw, 'update_window_title'):
                 self.mw.update_window_title()
 
-            #self.setWindowTitle(f"ORCA Analyzer - {os.path.basename(path)}")
-            self.lbl_file_path.setText(path)
-            
-            # Update Version
-            v = self.parser.data.get("version", "Unknown")
-            if hasattr(self, 'lbl_version'):
-                 self.lbl_version.setText(f"ORCA Version: {v}")
+            # Update File Info Labels
+            self.update_file_info_labels()
             
             # Auto-load 3D structure
             self.load_structure_3d()
@@ -415,6 +418,30 @@ class OrcaResultAnalyzerDialog(QDialog):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")
+
+    def update_file_info_labels(self):
+        """Update the file info labels (Path, Time, Versions)"""
+        if not hasattr(self, 'lbl_file_path'): return
+
+        self.lbl_file_path.setText(self.file_path)
+        
+        # Updated Time
+        mtime_str = "---"
+        if self.file_path and os.path.exists(self.file_path):
+            try:
+                from datetime import datetime
+                dt = datetime.fromtimestamp(os.path.getmtime(self.file_path))
+                mtime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except: pass
+        
+        if hasattr(self, 'lbl_updated'):
+            self.lbl_updated.setText(f"Updated: {mtime_str}")
+            
+        # ORCA Version
+        v = self.parser.data.get("version", "Unknown") if self.parser else "Unknown"
+        if hasattr(self, 'lbl_version'):
+            self.lbl_version.setText(f"ORCA Version: {v}")
+
 
     def reload_file(self):
         if self.file_path and os.path.exists(self.file_path):

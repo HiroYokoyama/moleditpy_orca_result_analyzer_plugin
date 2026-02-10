@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QRadioButton, QDoubleSpinBox, QCheckBox, QPushButton, 
-                             QFileDialog, QMessageBox, QGroupBox)
+                             QFileDialog, QMessageBox, QGroupBox, QComboBox)
 import os
 import json
 import csv
@@ -17,7 +17,7 @@ class TDDFTDialog(QDialog):
     def __init__(self, parent, excitations):
         super().__init__(parent)
         self.setWindowTitle("TDDFT Spectrum")
-        self.resize(900, 700)
+        self.resize(600, 700)
         self.excitations = excitations
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         
@@ -37,33 +37,63 @@ class TDDFTDialog(QDialog):
             
         # 1. Spectrum Settings Section
         settings_group = QGroupBox("Spectrum Settings")
-        settings_layout = QHBoxLayout(settings_group)
+        settings_vbox = QVBoxLayout(settings_group)
         
-        settings_layout.addWidget(QLabel("Spectrum Type:"))
+        # Row 1: Type & Gauge
+        row1_layout = QHBoxLayout()
+        row1_layout.addWidget(QLabel("Spectrum Type:"))
         self.radio_abs = QRadioButton("Absorption")
         self.radio_abs.setChecked(True)
         self.radio_abs.toggled.connect(self.switch_spectrum_type)
-        settings_layout.addWidget(self.radio_abs)
+        row1_layout.addWidget(self.radio_abs)
         
         self.radio_cd = QRadioButton("CD")
         self.radio_cd.toggled.connect(self.switch_spectrum_type)
-        settings_layout.addWidget(self.radio_cd)
+        row1_layout.addWidget(self.radio_cd)
         
-        settings_layout.addWidget(QLabel(" | Sigma (nm):"))
+        row1_layout.addWidget(QLabel(" | Gauge:"))
+        self.combo_gauge = QComboBox()
+        self.combo_gauge.addItems(["Length (Electric)", "Velocity"])
+        self.combo_gauge.currentIndexChanged.connect(self.switch_spectrum_type)
+        self.combo_gauge.setEnabled(False)
+        self.combo_gauge.setFixedWidth(130)
+        row1_layout.addWidget(self.combo_gauge)
+        row1_layout.addStretch()
+        settings_vbox.addLayout(row1_layout)
+        
+        # Row 2: Sigma & Sticks
+        row2_layout = QHBoxLayout()
+        row2_layout.addWidget(QLabel("Gaussian Sigma:"))
         self.spin_sigma = QDoubleSpinBox()
-        self.spin_sigma.setRange(1.0, 100.0)
+        self.spin_sigma.setRange(0.01, 5000.0)
         self.spin_sigma.setValue(5.0)
-        if self.spectrum:
-            self.spin_sigma.valueChanged.connect(self.spectrum.set_sigma)
-        settings_layout.addWidget(self.spin_sigma)
+        self.spin_sigma.valueChanged.connect(self.update_spectrum_sigma)
+        row2_layout.addWidget(self.spin_sigma)
         
-        self.chk_sticks = QCheckBox("Show Sticks")
+        self.combo_sigma_unit = QComboBox()
+        self.combo_sigma_unit.addItems(["nm", "cm⁻¹"])
+        self.combo_sigma_unit.currentIndexChanged.connect(self.update_spectrum_sigma)
+        row2_layout.addWidget(self.combo_sigma_unit)
+        
+        row2_layout.addSpacing(20)
+        self.chk_sticks = QCheckBox("Show Transitions (Sticks)")
         self.chk_sticks.setChecked(True)
         if self.spectrum:
             self.chk_sticks.stateChanged.connect(self.spectrum.set_sticks)
-        settings_layout.addWidget(self.chk_sticks)
+        row2_layout.addWidget(self.chk_sticks)
         
-        settings_layout.addStretch()
+        row2_layout.addStretch()
+        settings_vbox.addLayout(row2_layout)
+        
+        # Row 3: Physical Broadening
+        row3_layout = QHBoxLayout()
+        self.chk_physical = QCheckBox("Physical (Area-preserving) Broadening")
+        self.chk_physical.setChecked(False)
+        self.chk_physical.toggled.connect(self.switch_spectrum_type)
+        row3_layout.addWidget(self.chk_physical)
+        row3_layout.addStretch()
+        settings_vbox.addLayout(row3_layout)
+        
         main_layout.addWidget(settings_group)
         
         # 2. Axis Controls Section
@@ -80,7 +110,7 @@ class TDDFTDialog(QDialog):
         x_row.addWidget(QLabel("Range (nm):"))
         self.spin_x_min = QDoubleSpinBox()
         self.spin_x_min.setRange(0, 50000)
-        self.spin_x_min.setValue(200)
+        self.spin_x_min.setValue(100)
         self.spin_x_min.setEnabled(False)
         self.spin_x_min.setFixedWidth(80)
         self.spin_x_min.valueChanged.connect(self.update_x_range)
@@ -154,6 +184,7 @@ class TDDFTDialog(QDialog):
         
         main_layout.addLayout(action_layout)
         self.load_settings()
+        self.switch_spectrum_type()
         
     def closeEvent(self, event):
         self.save_settings()
@@ -170,17 +201,26 @@ class TDDFTDialog(QDialog):
                 if "sigma" in settings:
                     self.spin_sigma.setValue(float(settings["sigma"]))
                 
+                if "sigma_unit_idx" in settings:
+                    self.combo_sigma_unit.setCurrentIndex(int(settings["sigma_unit_idx"]))
+
                 if "show_sticks" in settings:
                     self.chk_sticks.setChecked(bool(settings["show_sticks"]))
-                    
-                if "type" in settings:
-                    if settings["type"] == "cd":
-                        self.radio_cd.setChecked(True)
-                    else:
-                        self.radio_abs.setChecked(True)
+                
+                if "physical" in settings:
+                    self.chk_physical.setChecked(bool(settings["physical"]))
                         
             except Exception as e:
                 print(f"Error loading TDDFT settings: {e}")
+
+    def update_spectrum_sigma(self):
+        if not self.spectrum: return
+        val = self.spin_sigma.value()
+        unit_idx = self.combo_sigma_unit.currentIndex() # 0: nm, 1: cm-1
+        
+        self.spectrum.sigma = val
+        self.spectrum.broaden_in_energy = (unit_idx == 1)
+        self.spectrum.update()
 
     def save_settings(self):
         all_settings = {}
@@ -192,8 +232,9 @@ class TDDFTDialog(QDialog):
             
         tddft_settings = {
             "sigma": self.spin_sigma.value(),
+            "sigma_unit_idx": self.combo_sigma_unit.currentIndex(),
             "show_sticks": self.chk_sticks.isChecked(),
-            "type": "cd" if self.radio_cd.isChecked() else "abs"
+            "physical": self.chk_physical.isChecked()
         }
         
         all_settings["tddft_settings"] = tddft_settings
@@ -275,46 +316,79 @@ class TDDFTDialog(QDialog):
         if not path:
             return
 
+        import datetime
+
         try:
             with open(path, 'w', encoding='utf-8') as f:
+                # --- Header ---
+                f.write("=" * 80 + "\n")
+                f.write("             ORCA TD-DFT / TDA EXCITATION SPECTRUM ANALYSIS\n")
+                f.write("=" * 80 + "\n")
+                f.write(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("-" * 80 + "\n")
-                f.write("         TD-DFT EXCITATION SPECTRA REPORT\n")
+                f.write("UNITS & DEFINITIONS:\n")
+                f.write("  Energy      : eV, nm, cm^-1\n")
+                f.write("  f (Osc)     : Oscillator Strength (Dimensionless)\n")
+                f.write("  R (Rot)     : Rotatory Strength   (10^-40 esu^2 cm^2)\n")
+                f.write("  Gauge       : L = Length (Dipole), V = Velocity\n")
                 f.write("-" * 80 + "\n\n")
 
                 for item in self.excitations:
                     state = item.get('state', '?')
                     
-                    # ▼▼▼ 修正1: State 0 はスキップする ▼▼▼
+                    # Skip Ground State if labeled '0'
                     if str(state) == '0':
                         continue
 
+                    # --- Prepare Energy Values ---
                     energy_ev = item.get('energy_ev', 0.0)
                     energy_nm = item.get('energy_nm', 0.0)
-                    
-                    # ▼▼▼ 修正2: データが0または未定義なら nm から計算する ▼▼▼
                     energy_cm = item.get('energy_cm', 0.0)
+                    
+                    # Auto-fill missing energy units
                     if energy_cm == 0.0 and energy_nm > 0:
                         energy_cm = 10000000.0 / energy_nm
-                    
-                    osc = item.get('osc', 0.0)
-                    rot = item.get('rotatory_strength', None)
+                    if energy_ev == 0.0 and energy_nm > 0:
+                        energy_ev = 1239.84193 / energy_nm
 
-                    # STATE行
-                    f.write(f"STATE {state:>3} :  E= {energy_ev:>8.4f} eV   {energy_nm:>8.2f} nm   {energy_cm:>8.1f} cm-1\n")
-                    f.write(f"             Oscillator Strength = {osc:>10.6f}\n")
+                    # --- Prepare Strength Values (Length vs Velocity) ---
+                    # Oscillator Strength
+                    # 変更: デフォルトを 0.0 ではなく None にして区別する
+                    f_len = item.get('osc_len', item.get('osc'))
+                    f_vel = item.get('osc_vel') 
                     
-                    if rot is not None:
-                        f.write(f"             Rotatory Strength   = {rot:>10.6f}\n")
+                    # Rotatory Strength
+                    r_len = item.get('rot_len', item.get('rotatory_strength'))
+                    r_vel = item.get('rot_vel')
+
+                    # Helper for formatting (None -> "N/A")
+                    def fmt_val(v):
+                        return f"{v:>9.6f}" if v is not None else "      N/A"
+
+                    # --- Writing the Block ---
+                    f.write(f"STATE {state:>3}  --------------------------------------------------------\n")
+                    f.write(f"  Energy : {energy_ev:>8.4f} eV  |  {energy_nm:>8.2f} nm  |  {energy_cm:>8.1f} cm^-1\n")
                     
-                    # 遷移情報
+                    f.write(f"  f (Osc): L={fmt_val(f_len)}  |  V={fmt_val(f_vel)}\n")
+
+                    # Rotatory Strength (CD計算データがある場合のみ行自体を表示)
+                    if r_len is not None or r_vel is not None:
+                        f.write(f"  R (Rot): L={fmt_val(r_len)}  |  V={fmt_val(r_vel)}\n")
+                    
+                    f.write("\n  Major Transitions:\n")
+                    
+                    # Transition Details
                     transitions = item.get('transitions', [])
                     if isinstance(transitions, list):
+                        if not transitions:
+                            f.write("    (No transition details available)\n")
                         for trans in transitions:
-                            f.write(f"     {trans}\n")
+                            # Clean up formatting if needed
+                            f.write(f"    {trans}\n")
                     else:
-                        f.write(f"     {transitions}\n")
+                        f.write(f"    {transitions}\n")
 
-                    f.write("\n")
+                    f.write("\n") # Empty line between states
 
             if hasattr(self.parent(), 'mw') and self.parent().mw:
                 self.parent().mw.statusBar().showMessage(f"Report saved to {path}", 5000)
@@ -325,31 +399,115 @@ class TDDFTDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
     
     def switch_spectrum_type(self):
+        """
+        Switch between Absorption (Oscillator Strength) and CD (Rotatory Strength).
+        Robustly handles missing specific gauge keys by falling back to generic keys.
+        Apply physical conversion factors if requested.
+        """
         if not self.spectrum: return
+        
         is_cd = self.radio_cd.isChecked()
+        is_physical = self.chk_physical.isChecked()
+        
+        self.combo_gauge.setEnabled(True)
+        gauge_mode = self.combo_gauge.currentIndex() # 0: Length, 1: Velocity
+
+        # Sample data to check keys
+        sample_data = self.excitations[0] if self.excitations and len(self.excitations) > 0 else {}
+
+        # 1. Determine stick data key and units
         if is_cd:
-            # Switch to CD (Rotatory Strength)
-            self.spectrum.y_key = 'rotatory_strength'
-            self.spectrum.y_unit = 'CD Intensity (10⁻⁴⁰ esu² cm²)'
+            target_key = 'rot_len' if gauge_mode == 0 else 'rot_vel'
+            if target_key not in sample_data and 'rotatory_strength' in sample_data:
+                target_key = 'rotatory_strength'
+            
+            y_unit_main = 'Molar Circular Dichroism (Δε) [L mol⁻¹ cm⁻¹]' if is_physical else 'CD Intensity (arb. units)'
+            y_unit_sticks = 'Rotatory Strength (R) [10⁻⁴⁰ esu² cm²]'
         else:
-            # Switch to Absorption (Oscillator Strength)
-            self.spectrum.y_key = 'osc'
-            self.spectrum.y_unit = 'Oscillator Strength'
+            target_key = 'osc_len' if gauge_mode == 0 else 'osc_vel'
+            if target_key not in sample_data and 'osc' in sample_data:
+                target_key = 'osc'
+            
+            y_unit_main = 'Molar Absorbance (ε) [L mol⁻¹ cm⁻¹]' if is_physical else 'Intensity (arb. units)'
+            y_unit_sticks = 'Oscillator Strength (f)'
+
+        # 2. Prepare processed data list for the widget
+        processed_data = []
+        
+        # Physical Constants
+        # f -> epsilon: integral(eps) d_nu = 2.315e8 * f
+        EPS_FACTOR = 2.315e8
+        # R -> delta_eps: Delta_epsilon = (1/22.96) * nu * R * G(nu)
+        CD_FACTOR = 1.0 / 22.96
+
+        for item in self.excitations:
+            new_item = item.copy()
+            val = item.get(target_key, 0.0)
+            
+            if is_physical:
+                if is_cd:
+                    # R (10^-40 cgs) -> Delta_epsilon
+                    # Need wavenumber (cm-1)
+                    wn = item.get('energy_cm', 0.0)
+                    if wn == 0 and item.get('energy_nm', 0) > 0:
+                        wn = 1e7 / item.get('energy_nm')
+                    
+                    # Target "Area" is val * wn * CD_FACTOR
+                    new_item['processed_y'] = val * wn * CD_FACTOR
+                else:
+                    # f -> epsilon
+                    # Target "Area" is f * EPS_FACTOR
+                    new_item['processed_y'] = val * EPS_FACTOR
+            else:
+                new_item['processed_y'] = val
+            
+            processed_data.append(new_item)
+
+        # 3. Update Widget
+        self.spectrum.data_list = processed_data
+        self.spectrum.y_key = 'processed_y'
+        self.spectrum.y_unit = y_unit_main
+        self.spectrum.y_unit_sticks = y_unit_sticks
+        self.spectrum.normalization_mode = 'area' if is_physical else 'height'
+        
+        # Ensure sigma settings are sync'd
+        self.update_spectrum_sigma()
+        
         self.spectrum.update()
 
     def on_spectrum_click(self, item):
         """Handle click on spectrum peak"""
+        if item is None:
+            return
         state = item.get('state', '?')
         energy_ev = item.get('energy_ev', 0.0)
         energy_nm = item.get('energy_nm', 0.0)
-        osc = item.get('osc', 0.0)
+        
+        is_cd = self.radio_cd.isChecked()
+        gauge_mode = self.combo_gauge.currentIndex() # 0: Length, 1: Velocity
         
         msg = f"Transition to Excited State {state}\n"
         msg += f"Energy: {energy_ev:.4f} eV ({energy_nm:.2f} nm)\n"
-        msg += f"Oscillator Strength: {osc:.6f}\n"
+        msg += "-" * 30 + "\n"
+
+        # Show Oscillator Strengths
+        osc_len = item.get('osc_len', item.get('osc', 0.0))
+        osc_vel = item.get('osc_vel', 0.0)
         
-        if 'rotatory_strength' in item:
-             msg += f"Rotatory Strength: {item['rotatory_strength']:.6f}\n"
+        # Show Rotatory Strengths
+        rot_len = item.get('rot_len', item.get('rotatory_strength', 0.0))
+        rot_vel = item.get('rot_vel', 0.0)
+
+        if not is_cd:
+            msg += f"Oscillator Strength (f):\n"
+            msg += f"  - Length   : {osc_len:.6f}" + (" *" if gauge_mode == 0 else "") + "\n"
+            msg += f"  - Velocity : {osc_vel:.6f}" + (" *" if gauge_mode == 1 else "") + "\n"
+        else:
+            msg += f"Rotatory Strength (R) [10⁻⁴⁰ esu² cm²]:\n"
+            msg += f"  - Length   : {rot_len:.6f}" + (" *" if gauge_mode == 0 else "") + "\n"
+            msg += f"  - Velocity : {rot_vel:.6f}" + (" *" if gauge_mode == 1 else "") + "\n"
+        
+        msg += "-" * 30 + "\n"
 
 
 
