@@ -49,7 +49,7 @@ class FreqSpectrumWindow(QWidget):
         layout.setSpacing(10)
         
         # Spectrum Widget
-        self.spectrum = SpectrumWidget(self.frequencies, x_key='freq', y_key='ir', x_unit='Frequency (cm-1)', y_unit='Intensity (a.u.)', sigma=20.0)
+        self.spectrum = SpectrumWidget(self.frequencies, x_key='freq', y_key='ir', x_unit='Frequency (cm-1)', y_unit='Intensity (km/mol)', sigma=20.0)
         self.spectrum.show_legend = False
         layout.addWidget(self.spectrum)
 
@@ -69,6 +69,11 @@ class FreqSpectrumWindow(QWidget):
         self.chk_sticks.setChecked(True)
         self.chk_sticks.stateChanged.connect(self.spectrum.set_sticks)
         ctrl_layout.addWidget(self.chk_sticks)
+        
+        self.chk_markers = QCheckBox("Markers")
+        self.chk_markers.setChecked(True)
+        self.chk_markers.stateChanged.connect(self.spectrum.set_markers)
+        ctrl_layout.addWidget(self.chk_markers)
         
         self.chk_invert_x = QCheckBox("Rev. X")
         self.chk_invert_x.setChecked(True)
@@ -223,14 +228,14 @@ class FreqSpectrumWindow(QWidget):
         if is_raman:
             self.spectrum.y_key = 'raman'
             self.spectrum.x_unit = "Raman Shift (cm-1)"
-            self.spectrum.y_unit = "Raman Intensity (a.u.)"
+            self.spectrum.y_unit = "Activity (Å⁴/amu)"
             # Default Raman: Normal X, Normal Y
             self.chk_invert_x.setChecked(False)
             self.chk_invert_y.setChecked(False)
         else:
             self.spectrum.y_key = 'ir'
             self.spectrum.x_unit = "Frequency (cm-1)"
-            self.spectrum.y_unit = "Intensity (a.u.)"
+            self.spectrum.y_unit = "Intensity (km/mol)"
             # Default IR: Inverted X (High->Low) AND Inverted Y (Transmittance-style)
             self.chk_invert_x.setChecked(True)
             self.chk_invert_y.setChecked(True)
@@ -399,7 +404,7 @@ class FrequencyDialog(QDialog):
         
         # List
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Mode", "Freq (cm⁻¹)", "IR", "Raman"])
+        self.tree.setHeaderLabels(["Mode", "Freq (cm⁻¹)", "IR (km/mol)", "Raman (Å⁴/amu)"])
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.currentItemChanged.connect(self.on_mode_selected)
         list_layout.addWidget(self.tree)
@@ -649,18 +654,12 @@ class FrequencyDialog(QDialog):
             
             scale = self.spin_vec_scale.value()
             
-            # Use add_arrows if available (simpler, often better vis)
-            if hasattr(self.mw.plotter, 'add_arrows'):
-                 self.vector_actor = self.mw.plotter.add_arrows(
-                    points, vectors, mag=scale, color=self.vector_color, show_scalar_bar=False
-                 )
-            else:
-                # Use add_mesh with glyphs for robustness across plotter implementations
-                poly = pv.PolyData(points)
-                poly.point_data['vectors'] = vectors
-                geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
-                arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
-                self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
+            # Use add_mesh with glyphs to ensure resolution and custom appearance are respected
+            poly = pv.PolyData(points)
+            poly.point_data['vectors'] = vectors
+            geom = pv.Arrow(shaft_resolution=self.vector_res, tip_resolution=self.vector_res)
+            arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
+            self.vector_actor = self.mw.plotter.add_mesh(arrows, color=self.vector_color, name='vib_vectors')
                 
             self.mw.plotter.render()
         except Exception as e:

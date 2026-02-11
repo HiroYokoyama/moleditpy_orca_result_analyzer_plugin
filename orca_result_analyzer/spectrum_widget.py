@@ -39,6 +39,7 @@ class SpectrumWidget(QWidget):
         
         self.show_sticks = True
         self.show_gaussian = True
+        self.show_markers = True
         self.show_legend = True
         
         layout = QVBoxLayout(self)
@@ -114,6 +115,11 @@ class SpectrumWidget(QWidget):
     def set_gaussian(self, state):
         from PyQt6.QtCore import Qt
         self.show_gaussian = (state == Qt.CheckState.Checked.value or state == True)
+        self.plot_spectrum()
+
+    def set_markers(self, state):
+        from PyQt6.QtCore import Qt
+        self.show_markers = (state == Qt.CheckState.Checked.value or state == True)
         self.plot_spectrum()
         
     def save_png(self, path):
@@ -382,7 +388,7 @@ class SpectrumWidget(QWidget):
                 
             # Plot Peak Markers at the top (Red inverted triangles)
             # Use data list to get ALL transitions including zero intensity ones
-            if self.show_sticks:
+            if self.show_markers:
                 all_xs = [item.get(self.x_key, 0.0) for item in self.data_list]
                 if all_xs:
                     if self.selected_item:
@@ -392,17 +398,20 @@ class SpectrumWidget(QWidget):
                         sel_x = None
                         non_sel_xs = all_xs
                     
-                    # Common Y positions (axis transform sets them to top)
+                    # Common Y positions (axis transform sets them to top/bottom)
+                    marker_y = 0.03 if self.invert_y else 0.97
+                    marker_shape = '^' if self.invert_y else 'v'
+                    
                     if non_sel_xs:
-                        self.canvas.axes.scatter(non_sel_xs, [0.97]*len(non_sel_xs), 
+                        self.canvas.axes.scatter(non_sel_xs, [marker_y]*len(non_sel_xs), 
                                                transform=self.canvas.axes.get_xaxis_transform(),
-                                               marker='v', color='red', alpha=0.3, s=50, 
+                                               marker=marker_shape, color='red', alpha=0.3, s=50, 
                                                clip_on=True, zorder=10)
                     
                     if sel_x is not None:
-                        self.canvas.axes.scatter([sel_x], [0.97], 
+                        self.canvas.axes.scatter([sel_x], [marker_y], 
                                                transform=self.canvas.axes.get_xaxis_transform(),
-                                               marker='v', color='blue', alpha=0.8, s=60, 
+                                               marker=marker_shape, color='blue', alpha=0.8, s=60, 
                                                clip_on=True, zorder=11)
                 
             # Highlight Selected Item

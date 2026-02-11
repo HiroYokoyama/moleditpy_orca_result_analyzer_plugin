@@ -87,6 +87,12 @@ class TDDFTDialog(QDialog):
             self.chk_sticks.stateChanged.connect(self.spectrum.set_sticks)
         row2_layout.addWidget(self.chk_sticks)
         
+        self.chk_markers = QCheckBox("Markers")
+        self.chk_markers.setChecked(True)
+        if self.spectrum:
+            self.chk_markers.stateChanged.connect(self.spectrum.set_markers)
+        row2_layout.addWidget(self.chk_markers)
+        
         row2_layout.addStretch()
         
         # Reset Button

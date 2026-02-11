@@ -1080,6 +1080,15 @@ class NMRDialog(QDialog):
         
         self.apply_filter()
 
+        # User Request: Auto-enable coupling when switching to any nucleus (if coupling exists)
+        # We do this AFTER apply_filter (which calls recalc) so we know if coupons exist for THIS nucleus.
+        if nucleus != "All" and hasattr(self, 'chk_real_spectrum') and self.chk_real_spectrum.isEnabled():
+            self.chk_real_spectrum.blockSignals(True)
+            self.chk_real_spectrum.setChecked(True)
+            self.chk_real_spectrum.blockSignals(False)
+            # Since we blocked signals, manually trigger one plot update if we just checked it
+            self.plot_spectrum()
+
     def update_x_range_defaults(self, nucleus):
         """Set appropriate default X range based on nucleus type"""
         if not hasattr(self, 'spin_x_max') or not hasattr(self, 'spin_x_min'):
@@ -1249,9 +1258,7 @@ class NMRDialog(QDialog):
             elif has_relevant_coupling:
                 self.chk_real_spectrum.setEnabled(True)
                 self.chk_real_spectrum.setToolTip("Simulate multiplets using J-couplings (requires nmrsim)")
-                # Auto-check if available (enforcing "Available = On" policy for nucleus switch)
-                if not self.chk_real_spectrum.isChecked():
-                     self.chk_real_spectrum.setChecked(True)
+                # Auto-check logic removed from here to prevent forcing it on every redraw
             else:
                 self.chk_real_spectrum.setChecked(False)
                 self.chk_real_spectrum.setEnabled(False)
