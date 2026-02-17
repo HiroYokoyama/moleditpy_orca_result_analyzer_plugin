@@ -351,9 +351,6 @@ class MODialog(QDialog):
                 h = spin_homo_idx[spin]
 
             display_id = str(mo_idx_val)
-            try:
-                 display_id = str(int(mo_idx_val) + 1)
-            except: pass
             
             label_id = display_id
             if spin == 'alpha':

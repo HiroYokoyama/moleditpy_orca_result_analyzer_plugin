@@ -271,11 +271,8 @@ class EnergyDiagramDialog(QDialog):
         
         patterns = []
         
-        # New Convention: "15a_..." or "15b_..."
-        # index is 0-based logic. Filename uses 1-based index.
-        # Ensure we use 1-based index for finding file.
-        idx_1b = int(index) + 1
-        target_idx = idx_1b
+        # index is 0-based logic.
+        target_idx = int(index)
         
 
         if spin_suffix == "_A":
@@ -323,7 +320,7 @@ class EnergyDiagramDialog(QDialog):
              reply = QMessageBox.question(
                  self, 
                  "Confirm Analysis", 
-                 f"Generate cube file for Orbital {label} (Index {index+1})?\nThis may take some time.",
+                 f"Generate cube file for Orbital {label} (Index {index})?\nThis may take some time.",
                  QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
              )
              
@@ -354,8 +351,7 @@ class EnergyDiagramDialog(QDialog):
                         
                         # Show Tooltip with Index (User Request)
                         # Use 1-based index
-                        idx_1b = index + 1
-                        tip_text = f"Index: {idx_1b}"
+                        tip_text = f"Index: {index}"
                         if label: tip_text += f"\\n{label}"
                         if spin_suffix: tip_text += f" ({spin_suffix.replace('_', '')})"
                         
@@ -716,7 +712,7 @@ class EnergyDiagramDialog(QDialog):
                     
                     # Store Hit Zone
                     r = QRect(int(x1), int(y)-7, int(level_w + 80), 14)
-                    gen_label = label_txt if label_txt else f"MO_{i_orig+1}"
+                    gen_label = label_txt if label_txt else f"MO_{i_orig}"
                     
                     spin_suffix = ""
                     if self.is_uhf:
