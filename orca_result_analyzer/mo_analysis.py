@@ -30,14 +30,20 @@ except ImportError:
     EnergyDiagramDialog = None
 
 class MODialog(QDialog):
-    def __init__(self, parent, mos):
+    def __init__(self, parent, mo_data, result_dir=None):
         super().__init__(parent)
+        self.mw = None
+        if hasattr(parent, 'mw'): self.mw = parent.mw
+        elif hasattr(parent, 'context'): self.mw = parent.context.get_main_window()
+        
+        self.mo_data = mo_data
         self.setWindowTitle("MO Analysis & Visualization")
         self.resize(550, 750) 
-        self.mos = mos
+        self.mos = mo_data
         self.parent_dlg = parent
         self.last_cube_path = None
         self.generation_queue = [] # Init queue
+        self.energy_dlg = None # Track Energy Diagram
         self.setup_ui()
 
     def get_cube_path(self, display_id):
@@ -476,7 +482,11 @@ class MODialog(QDialog):
         text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
         QApplication.clipboard().setText(text)
         if self.mw and hasattr(self.mw, 'statusBar'):
-            self.mw.statusBar().showMessage("ORCA Input block copied to clipboard.", 5000)
+            sb = self.mw.statusBar()
+            if sb:
+                sb.showMessage("ORCA Input block copied to clipboard.", 5000)
+            else:
+                print("ORCA Input block copied to clipboard.")
         else:
             print("ORCA Input block copied to clipboard.")
 
@@ -877,10 +887,7 @@ class MODialog(QDialog):
 
         
         # Access Main Window
-        mw = None
-        if hasattr(self.parent_dlg, 'mw'): mw = self.parent_dlg.mw
-        elif hasattr(self.parent_dlg, 'context'): mw = self.parent_dlg.context.get_main_window()
-        
+        mw = self.mw
         if not mw: return
         
         cp = self.get_color_hex('p')
@@ -895,6 +902,12 @@ class MODialog(QDialog):
 
     def closeEvent(self, event):
         """Clean up 3D actors when closing"""
+        # Clean up tracked sub-dialogs
+        if hasattr(self, 'energy_dlg') and self.energy_dlg:
+            try: self.energy_dlg.close()
+            except: pass
+            self.energy_dlg = None
+            
         if hasattr(self.parent_dlg, 'mw'):
              plotter = self.parent_dlg.mw.plotter
              plotter.remove_actor("mo_iso_p")
@@ -934,10 +947,14 @@ class MODialog(QDialog):
                     it += 1
             # print(f"Data exported to {filename}")
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
-            if hasattr(self.parent_dlg, 'mw') and self.parent_dlg.mw:
-                self.parent_dlg.mw.statusBar().showMessage(f"Data exported to {filename}", 5000)
-            elif hasattr(self.parent_dlg, 'context'):
-                 self.parent_dlg.context.get_main_window().statusBar().showMessage(f"Data exported to {filename}", 5000)
+            if self.mw and hasattr(self.mw, 'statusBar'):
+                sb = self.mw.statusBar()
+                if sb:
+                    sb.showMessage(f"Data exported to {filename}", 5000)
+                else:
+                    print(f"Data exported to {filename}")
+            else:
+                print(f"Data exported to {filename}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
             
@@ -1009,8 +1026,11 @@ class MODialog(QDialog):
                      res_dir = cube_dir
 
         # Make modeless
-        self.diag_dlg = EnergyDiagramDialog(diag_data, parent=self, result_dir=res_dir)
-        self.diag_dlg.show()
+        if hasattr(self, 'energy_dlg') and self.energy_dlg:
+            self.energy_dlg.close()
+            
+        self.energy_dlg = EnergyDiagramDialog(diag_data, parent=self, result_dir=res_dir)
+        self.energy_dlg.show()
         
     def load_file_by_path(self, path):
         """Called from Diagram to load valid existing file"""

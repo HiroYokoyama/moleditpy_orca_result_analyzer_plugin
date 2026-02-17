@@ -305,6 +305,26 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         self.update_button_states()
         
+    def close_all_sub_dialogs(self):
+        """Close all tracked analysis dialogs to prevent orphaned windows."""
+        dialog_attrs = ['mo_dlg', 'freq_dlg', 'traj_dlg', 'forces_dlg', 
+                        'thermal_dlg', 'tddft_dlg', 'dipole_dlg', 
+                        'charges_dlg', 'nmr_dlg', 'scf_dlg']
+        for attr in dialog_attrs:
+            if hasattr(self, attr):
+                dlg = getattr(self, attr)
+                if dlg is not None:
+                    try:
+                        dlg.close()
+                    except:
+                        pass
+                setattr(self, attr, None)
+
+    def closeEvent(self, event):
+        """Ensure all sub-dialogs close when the main analyzer window is closed."""
+        self.close_all_sub_dialogs()
+        super().closeEvent(event)
+
     def open_file(self):
         # Get last directory from current file
         start_dir = os.path.dirname(self.file_path) if self.file_path else ""
@@ -318,16 +338,7 @@ class OrcaResultAnalyzerDialog(QDialog):
     def load_file(self, path):
         """Load a file and update UI"""
         # Close existing dialogs to prevent confusion
-        dialog_attrs = ['mo_dlg', 'freq_dlg', 'traj_dlg', 'forces_dlg', 
-                        'thermal_dlg', 'tddft_dlg', 'dipole_dlg', 
-                        'charges_dlg', 'nmr_dlg', 'scf_dlg']
-        for attr in dialog_attrs:
-            if hasattr(self, attr):
-                dlg = getattr(self, attr)
-                if dlg is not None:
-                     try: dlg.close()
-                     except: pass
-                setattr(self, attr, None)
+        self.close_all_sub_dialogs()
 
         try:
 
@@ -634,19 +645,21 @@ class OrcaResultAnalyzerDialog(QDialog):
              QMessageBox.warning(self, "No Info", "No cartesian gradients or optimization steps found.")
              return
         
-        if hasattr(self, 'force_dlg') and self.force_dlg is not None:
-             self.force_dlg.close()
+        if hasattr(self, 'forces_dlg') and self.forces_dlg is not None:
+             self.forces_dlg.close()
         # Open Force Viewer with trajectory support
-        self.force_dlg = ForceViewerDialog(self, grads, parser=self.parser)
-        self.force_dlg.show()
+        self.forces_dlg = ForceViewerDialog(self, grads, parser=self.parser)
+        self.forces_dlg.show()
         
     def show_thermal(self):
         data = self.parser.data.get("thermal", {})
         if not data:
             QMessageBox.warning(self, "No Info", "No thermochemistry section found.")
             return
-        dlg = ThermalTableDialog(self, data)
-        dlg.exec()
+        if hasattr(self, 'thermal_dlg') and self.thermal_dlg is not None:
+            self.thermal_dlg.close()
+        self.thermal_dlg = ThermalTableDialog(self, data)
+        self.thermal_dlg.show()
 
     def show_tddft(self):
         excitations = self.parser.data.get("tddft", [])
@@ -675,10 +688,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not charges:
             QMessageBox.warning(self, "No Info", "No atomic charges found.")
             return
-        if hasattr(self, 'charge_dlg') and self.charge_dlg is not None:
-             self.charge_dlg.close()
-        self.charge_dlg = ChargeDialog(self, charges)
-        self.charge_dlg.show()
+        if hasattr(self, 'charges_dlg') and self.charges_dlg is not None:
+             self.charges_dlg.close()
+        self.charges_dlg = ChargeDialog(self, charges)
+        self.charges_dlg.show()
 
     def show_nmr(self):
         data = self.parser.data.get("nmr_shielding", [])
@@ -686,8 +699,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No NMR chemical shielding data found.")
             return
-        dlg = NMRDialog(self, data, couplings=couplings, file_path=self.file_path)
-        dlg.show()
+        if hasattr(self, 'nmr_dlg') and self.nmr_dlg is not None:
+             self.nmr_dlg.close()
+        self.nmr_dlg = NMRDialog(self, data, couplings=couplings, file_path=self.file_path)
+        self.nmr_dlg.show()
 
     def show_scf_trace(self):
         data = self.parser.data.get("scf_traces", [])
