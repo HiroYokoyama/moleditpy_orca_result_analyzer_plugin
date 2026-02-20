@@ -398,6 +398,7 @@ class FrequencyDialog(QDialog):
         self.scaling_a = 1.0
         self.scaling_b = 0.0
         self.default_presets = {
+            "Unscaled": {"a": 1.0, "b": 0.0},
             "B3LYP/6-31G*": {"a": 0.9614, "b": 0.0},
         }
         self.custom_presets = {} # Only user-added ones
@@ -605,17 +606,29 @@ class FrequencyDialog(QDialog):
         self.combo_preset.blockSignals(True)
         current = self.combo_preset.currentText()
         self.combo_preset.clear()
+        
+        # 1. Unscaled at top
+        if "Unscaled" in self.default_presets:
+            self.combo_preset.addItem("Unscaled")
+        
+        # 2. Manual
         self.combo_preset.addItem("Manual")
         
-        # Add defaults
+        # 3. Other defaults (except Unscaled if already added)
         for name in sorted(self.default_presets.keys()):
-            self.combo_preset.addItem(name)
-        # Add customs
+            if name != "Unscaled":
+                self.combo_preset.addItem(name)
+        
+        # 4. Customs
         for name in sorted(self.custom_presets.keys()):
             self.combo_preset.addItem(name)
             
         if current in [self.combo_preset.itemText(i) for i in range(self.combo_preset.count())]:
             self.combo_preset.setCurrentText(current)
+        else:
+            # Default to Unscaled if current is invalid
+            self.combo_preset.setCurrentText("Unscaled")
+            
         self.combo_preset.blockSignals(False)
 
     def save_custom_preset(self):
