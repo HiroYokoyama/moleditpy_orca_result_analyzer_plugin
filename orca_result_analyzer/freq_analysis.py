@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QHeaderView, QCheckBox, 
                              QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
-                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView, QTreeWidgetItemIterator)
+                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView, 
+                             QTreeWidgetItemIterator, QComboBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import math
@@ -34,7 +35,8 @@ class FreqSpectrumWindow(QWidget):
         # but logically it belongs to FrequencyDialog
         self.freq_dialog = parent_dialog 
         self.frequencies = frequencies
-        self.scaling_factor = 1.0
+        self.scaling_a = 1.0
+        self.scaling_b = 0.0
         
         self.setWindowTitle("IR/Raman Spectrum")
         # Ensure it stays on top of the parent window
@@ -42,7 +44,24 @@ class FreqSpectrumWindow(QWidget):
         self.resize(800, 550)
         
         self.init_ui()
+        self.load_settings()
         
+    def load_settings(self):
+        if not self.freq_dialog: return
+        settings_file = self.freq_dialog.settings_file
+        if os.path.exists(settings_file):
+            try:
+                import json
+                with open(settings_file, 'r') as f:
+                    all_settings = json.load(f)
+                settings = all_settings.get("freq_settings", {})
+                if "spec_sigma" in settings: self.spin_sigma.setValue(float(settings["spec_sigma"]))
+                if "spec_sticks" in settings: self.chk_sticks.setChecked(bool(settings["spec_sticks"]))
+                if "spec_markers" in settings: self.chk_markers.setChecked(bool(settings["spec_markers"]))
+                if "spec_auto_x" in settings: self.chk_auto_x.setChecked(bool(settings["spec_auto_x"]))
+                if "spec_auto_y" in settings: self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
+            except: pass
+
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -201,8 +220,9 @@ class FreqSpectrumWindow(QWidget):
         if self.freq_dialog:
             self.freq_dialog.select_mode_by_item(item)
 
-    def set_scaling_factor(self, sf):
-        self.scaling_factor = sf
+    def set_scaling_params(self, a, b):
+        self.scaling_a = a
+        self.scaling_b = b
         self.update_data()
 
     def update_data(self):
@@ -211,7 +231,7 @@ class FreqSpectrumWindow(QWidget):
         for i, f in enumerate(self.frequencies):
             d = f.copy()
             if 'freq' in d:
-                d['freq'] = d['freq'] * self.scaling_factor
+                d['freq'] = d['freq'] * self.scaling_a + self.scaling_b
             # Store original index for robust identification
             d['_orig_idx'] = i 
             scaled_data.append(d)
@@ -229,8 +249,8 @@ class FreqSpectrumWindow(QWidget):
             self.spectrum.y_key = 'raman'
             self.spectrum.x_unit = "Raman Shift (cm-1)"
             self.spectrum.y_unit = "Activity (Å⁴/amu)"
-            # Default Raman: Normal X, Normal Y
-            self.chk_invert_x.setChecked(False)
+            # Default Raman: Reversed X (standard), Normal Y
+            self.chk_invert_x.setChecked(True)
             self.chk_invert_y.setChecked(False)
         else:
             self.spectrum.y_key = 'ir'
@@ -374,6 +394,14 @@ class FrequencyDialog(QDialog):
         self.vector_color = "orange"
         self.vector_res = 20
         
+        # Scaling Params (ax + b)
+        self.scaling_a = 1.0
+        self.scaling_b = 0.0
+        self.default_presets = {
+            "B3LYP/6-31G*": {"a": 0.9614, "b": 0.0},
+        }
+        self.custom_presets = {} # Only user-added ones
+        
         self.spectrum_win = None
         
         self.setWindowTitle("Vibrational Frequencies")
@@ -389,16 +417,41 @@ class FrequencyDialog(QDialog):
         list_group = QGroupBox("Frequency Modes")
         list_layout = QVBoxLayout(list_group)
         
-        # Scaling Factor
+        # Preset row
+        preset_layout = QHBoxLayout()
+        preset_layout.addWidget(QLabel("Preset:"))
+        self.combo_preset = QComboBox()
+        self.update_preset_combo()
+        self.combo_preset.activated.connect(self.apply_preset)
+        preset_layout.addWidget(self.combo_preset)
+        
+        btn_save_preset = QPushButton("Save...")
+        btn_save_preset.setFixedWidth(50)
+        btn_save_preset.clicked.connect(self.save_custom_preset)
+        preset_layout.addWidget(btn_save_preset)
+        preset_layout.addStretch()
+        list_layout.addLayout(preset_layout)
+        
+        # Scaling Params row (ax + b)
         sf_layout = QHBoxLayout()
-        sf_layout.addWidget(QLabel("Frequency Scaling:"))
-        self.spin_sf = QDoubleSpinBox()
-        self.spin_sf.setRange(0.1, 2.0)
-        self.spin_sf.setSingleStep(0.001)
-        self.spin_sf.setDecimals(4)
-        self.spin_sf.setValue(1.0)
-        self.spin_sf.valueChanged.connect(self.update_data)
-        sf_layout.addWidget(self.spin_sf)
+        sf_layout.addWidget(QLabel("Scaling (<i>ax</i> + <i>b</i>): <i>a</i>"))
+        self.spin_sf_a = QDoubleSpinBox()
+        self.spin_sf_a.setRange(-2.0, 2.0)
+        self.spin_sf_a.setSingleStep(0.001)
+        self.spin_sf_a.setDecimals(4)
+        self.spin_sf_a.setValue(1.0)
+        self.spin_sf_a.valueChanged.connect(self.update_data)
+        sf_layout.addWidget(self.spin_sf_a)
+        
+        sf_layout.addWidget(QLabel(" <i>b</i>"))
+        self.spin_sf_b = QDoubleSpinBox()
+        self.spin_sf_b.setRange(-1000, 1000)
+        self.spin_sf_b.setSingleStep(0.1)
+        self.spin_sf_b.setDecimals(2)
+        self.spin_sf_b.setValue(0.0)
+        self.spin_sf_b.valueChanged.connect(self.update_data)
+        sf_layout.addWidget(self.spin_sf_b)
+        
         sf_layout.addStretch()
         list_layout.addLayout(sf_layout)
         
@@ -513,7 +566,8 @@ class FrequencyDialog(QDialog):
         
     def populate_list(self):
         self.tree.clear()
-        sf = self.spin_sf.value()
+        a = self.spin_sf_a.value()
+        b = self.spin_sf_b.value()
         
         # Determine if we should hide first 6 (translation/rotation)
         # Usually they are 0.00 or very small imaginary.
@@ -542,30 +596,81 @@ class FrequencyDialog(QDialog):
         for i, f in enumerate(self.frequencies):
             if i < start_idx: continue
             
-            freq_val = f['freq'] * sf
+            freq_val = f['freq'] * a + b
             # Always show both IR and Raman in columns
             item = QTreeWidgetItem([str(i), f"{freq_val:.2f}", f"{f.get('ir', 0.0):.2f}", f"{f.get('raman', 0.0):.2f}"])
             self.tree.addTopLevelItem(item)
 
+    def update_preset_combo(self):
+        self.combo_preset.blockSignals(True)
+        current = self.combo_preset.currentText()
+        self.combo_preset.clear()
+        self.combo_preset.addItem("Manual")
+        
+        # Add defaults
+        for name in sorted(self.default_presets.keys()):
+            self.combo_preset.addItem(name)
+        # Add customs
+        for name in sorted(self.custom_presets.keys()):
+            self.combo_preset.addItem(name)
+            
+        if current in [self.combo_preset.itemText(i) for i in range(self.combo_preset.count())]:
+            self.combo_preset.setCurrentText(current)
+        self.combo_preset.blockSignals(False)
+
+    def save_custom_preset(self):
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Save Scaling Preset", "Preset Name:")
+        if ok and name:
+            if name in self.default_presets:
+                QMessageBox.warning(self, "Error", "Cannot overwrite default preset.")
+                return
+            self.custom_presets[name] = {
+                "a": self.spin_sf_a.value(),
+                "b": self.spin_sf_b.value()
+            }
+            self.update_preset_combo()
+            self.combo_preset.setCurrentText(name)
+            self.save_settings()
+
+    def apply_preset(self, index=None):
+        preset = self.combo_preset.currentText()
+        is_manual = (preset == "Manual")
+        self.spin_sf_a.setEnabled(is_manual)
+        self.spin_sf_b.setEnabled(is_manual)
+        
+        if is_manual: return
+        
+        p = self.default_presets.get(preset) or self.custom_presets.get(preset)
+        if p:
+            self.spin_sf_a.blockSignals(True)
+            self.spin_sf_b.blockSignals(True)
+            self.spin_sf_a.setValue(p["a"])
+            self.spin_sf_b.setValue(p["b"])
+            self.spin_sf_a.blockSignals(False)
+            self.spin_sf_b.blockSignals(False)
+            self.update_data()
+
     def update_data(self):
         # Update list values (scaling)
-        sf = self.spin_sf.value()
+        a = self.spin_sf_a.value()
+        b = self.spin_sf_b.value()
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
              item = root.child(i)
              idx = int(item.text(0))
              old_f = self.frequencies[idx]['freq']
-             item.setText(1, f"{old_f * sf:.2f}")
+             item.setText(1, f"{old_f * a + b:.2f}")
              
         # Update spectrum window if it's open
         if self.spectrum_win is not None:
-             self.spectrum_win.set_scaling_factor(sf)
+             self.spectrum_win.set_scaling_params(a, b)
 
     def open_spectrum(self):
         if self.spectrum_win is None:
             self.spectrum_win = FreqSpectrumWindow(self, self.frequencies)
-            # Apply current scaling factor
-            self.spectrum_win.set_scaling_factor(self.spin_sf.value())
+            # Apply current scaling params
+            self.spectrum_win.set_scaling_params(self.spin_sf_a.value(), self.spin_sf_b.value())
             self.spectrum_win.show()
         else:
             self.spectrum_win.show()
@@ -948,9 +1053,21 @@ class FrequencyDialog(QDialog):
                 
                 settings = all_settings.get("freq_settings", {})
                 
-                if "sf" in settings: self.spin_sf.setValue(float(settings["sf"]))
+                if "sf_a" in settings: self.spin_sf_a.setValue(float(settings["sf_a"]))
+                elif "sf" in settings: self.spin_sf_a.setValue(float(settings["sf"])) # backward compat
+                
+                if "sf_b" in settings: self.spin_sf_b.setValue(float(settings["sf_b"]))
+                
+                # Load custom presets
+                if "custom_presets" in settings:
+                    self.custom_presets.update(settings["custom_presets"])
+                self.update_preset_combo()
+                
+                if "preset" in settings: 
+                    self.combo_preset.setCurrentText(settings["preset"])
+                    self.apply_preset()
+                
                 if "show_vec" in settings: self.chk_vector.setChecked(bool(settings["show_vec"]))
-                # if "vec_scale" in settings: self.spin_vec_scale.setValue(float(settings["vec_scale"])) # Reset scale
                 if "vec_res" in settings: self.spin_vec_res.setValue(int(settings["vec_res"]))
                 if "vec_color" in settings: 
                     self.vector_color = settings["vec_color"]
@@ -971,14 +1088,30 @@ class FrequencyDialog(QDialog):
             except: pass
             
         freq_settings = {
-            "sf": self.spin_sf.value(),
+            "sf_a": self.spin_sf_a.value(),
+            "sf_b": self.spin_sf_b.value(),
+            "preset": self.combo_preset.currentText(),
+            "custom_presets": self.custom_presets,
             "show_vec": self.chk_vector.isChecked(),
-            # "vec_scale": self.spin_vec_scale.value(), # Do not save
             "vec_res": self.spin_vec_res.value(),
             "vec_color": self.vector_color,
             "amp": self.spin_amp.value(),
             "fps": self.spin_fps.value()
         }
+        
+        # Save spectrum window settings if it was ever opened
+        if self.spectrum_win:
+            freq_settings.update({
+                "spec_sigma": self.spectrum_win.spin_sigma.value(),
+                "spec_sticks": self.spectrum_win.chk_sticks.isChecked(),
+                "spec_markers": self.spectrum_win.chk_markers.isChecked(),
+                "spec_auto_x": self.spectrum_win.chk_auto_x.isChecked(),
+                "spec_auto_y": self.spectrum_win.chk_auto_y.isChecked(),
+            })
+        elif "freq_settings" in all_settings:
+            # Preserve spectrum settings if window is not currently open
+            prev_spec = {k: v for k, v in all_settings["freq_settings"].items() if k.startswith("spec_")}
+            freq_settings.update(prev_spec)
         
         all_settings["freq_settings"] = freq_settings
         
