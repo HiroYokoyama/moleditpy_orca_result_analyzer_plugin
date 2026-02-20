@@ -138,42 +138,72 @@ class SpectrumWidget(QWidget):
             
         if not points: return False
         
-        
         xs = [p[0] for p in points]
-        
-        # Calculate margin based on broadening type and axis unit
         is_energy_axis = 'cm' in self.x_unit.lower() or 'freq' in self.x_unit.lower()
         
-        if self.broaden_in_energy and not is_energy_axis:
-            # Case: Plotting in nm, but Sigma is in cm-1
-            span = max(xs) - min(xs) if xs else 100
-            margin = max(50.0, span * 0.1)
+        # Determine Range for CSV
+        if self.x_range:
+            min_x, max_x = min(self.x_range), max(self.x_range)
         else:
-            # Standard case
-            margin = self.sigma * 3
+            if self.broaden_in_energy and not is_energy_axis:
+                span = max(xs) - min(xs) if xs else 100
+                margin = max(50.0, span * 0.1)
+            else:
+                margin = self.sigma * 5 # A bit wider for CSV than plot default
+            min_x = min(xs) - margin
+            max_x = max(xs) + margin
 
-        min_x = min(xs) - margin
-        max_x = max(xs) + margin
-        if max_x - min_x < 1.0:
-            min_x -= 10
-            max_x += 10
-            
-        # 1000 points resolution for CSV
-        display_x = np.linspace(min_x, max_x, 1000)
+        # 5000 points resolution for CSV
+        display_x = np.linspace(min_x, max_x, 5000)
         curve_y = np.zeros_like(display_x)
         
-        for x0, y0 in points:
-            term = np.exp(-0.5 * ((display_x - x0) / self.sigma)**2)
-            curve_y += y0 * term
+        # Broadening Logic (Must match plot_spectrum exactly)
+        norm_factor = 1.0
+        if self.normalization_mode == 'area':
+            norm_factor = 1.0 / (np.sqrt(np.pi) * self.sigma)
+            
+        if self.broaden_in_energy and not is_energy_axis:
+            # UV-Vis case: Sigma in cm-1, Display in nm
+            all_pts_cm = [(1e7 / x0, y0) for x0, y0 in points if x0 > 1e-6]
+            if all_pts_cm:
+                cms = [p[0] for p in all_pts_cm]
+                cm_min = min(cms) - max(self.sigma * 10, 500)
+                cm_max = max(cms) + max(self.sigma * 10, 500)
+                grid_cm = np.linspace(cm_min, cm_max, 10000)
+                curve_cm = np.zeros_like(grid_cm)
+                for x0, y0 in all_pts_cm:
+                    term = np.exp(-((grid_cm - x0) / self.sigma)**2)
+                    curve_cm += y0 * term * norm_factor
+                
+                valid_mask = grid_cm > 1.0
+                curve_y = np.interp(display_x, 1e7 / grid_cm[valid_mask][::-1], curve_cm[valid_mask][::-1])
+        else:
+            # Standard case
+            for x0, y0 in points:
+                term = np.exp(-((display_x - x0) / self.sigma)**2)
+                curve_y += y0 * term * norm_factor
+        
+        # Apply scaling
+        scaling = getattr(self, 'scaling_factor', 1.0)
+        curve_y *= scaling
+        
+        # Clean up very small values (avoid E-555 etc)
+        # We set values smaller than 1e-15 * max_intensity to zero
+        max_val = np.max(curve_y) if len(curve_y) > 0 else 0
+        threshold = max(1e-12, max_val * 1e-15)
+        curve_y[curve_y < threshold] = 0.0
             
         try:
             with open(path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(["X_Value", "Broadened_Intensity"])
+                x_label = self.x_unit if self.x_unit else "X"
+                y_label = self.y_unit if self.y_unit else "Intensity"
+                writer.writerow([x_label, y_label])
                 for i in range(len(display_x)):
                     writer.writerow([display_x[i], curve_y[i]])
             return True
         except Exception as e:
+            print(f"Error saving CSV: {e}")
             return False
 
     def save_sticks_csv(self, path):
