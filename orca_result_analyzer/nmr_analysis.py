@@ -637,42 +637,49 @@ class NMRDialog(QDialog):
         btn_unmerge.clicked.connect(self.unmerge_selected_peaks)
         spec_settings.addWidget(btn_unmerge)
         
-        if nmrsim:
-            # new line for Real Spectrum controls
-            real_spec_layout = QHBoxLayout()
-            
-            self.chk_real_spectrum = QCheckBox("Simulate Coupling")
-            self.chk_real_spectrum.setToolTip("Simulate multiplets using J-couplings (requires nmrsim)")
-            self.chk_real_spectrum.stateChanged.connect(self.toggle_simulation_controls)
-            self.chk_real_spectrum.stateChanged.connect(self.plot_spectrum)
-            real_spec_layout.addWidget(self.chk_real_spectrum)
-            
-            # Broadening control
-            self.lbl_width = QLabel(" Width (Hz):")
-            real_spec_layout.addWidget(self.lbl_width)
-            
-            self.spin_real_width = QDoubleSpinBox()
-            self.spin_real_width.setRange(0.01, 100.0)
-            self.spin_real_width.setValue(1.0)
-            self.spin_real_width.setSingleStep(0.5)
-            self.spin_real_width.setFixedWidth(100)
-            self.spin_real_width.valueChanged.connect(lambda val: self.plot_spectrum())
-            real_spec_layout.addWidget(self.spin_real_width)
-            
-            real_spec_layout.addWidget(QLabel(" Spectrometer (MHz):"))
-            self.spin_mhz = QDoubleSpinBox()
-            self.spin_mhz.setRange(10.0, 2000.0)
-            self.spin_mhz.setValue(400.0)
-            self.spin_mhz.setSingleStep(10.0)
-            self.spin_mhz.setFixedWidth(100)
-            self.spin_mhz.valueChanged.connect(lambda val: self.plot_spectrum())
-            real_spec_layout.addWidget(self.spin_mhz)
-            
-            # Initial state check
-            self.toggle_simulation_controls()
-            
-            real_spec_layout.addStretch()
-            spec_layout.addLayout(real_spec_layout)
+        # new line for Real Spectrum controls
+        real_spec_layout = QHBoxLayout()
+        
+        self.chk_real_spectrum = QCheckBox("Simulate Coupling")
+        sim_tooltip = "Simulate multiplets using J-couplings"
+        if not nmrsim:
+            sim_tooltip += " (Requires nmrsim library)"
+            self.chk_real_spectrum.setEnabled(False)
+        self.chk_real_spectrum.setToolTip(sim_tooltip)
+        self.chk_real_spectrum.stateChanged.connect(self.toggle_simulation_controls)
+        self.chk_real_spectrum.stateChanged.connect(self.plot_spectrum)
+        real_spec_layout.addWidget(self.chk_real_spectrum)
+        
+        # Broadening control
+        self.lbl_width = QLabel(" Width (Hz):")
+        real_spec_layout.addWidget(self.lbl_width)
+        
+        self.spin_real_width = QDoubleSpinBox()
+        self.spin_real_width.setRange(0.01, 100.0)
+        self.spin_real_width.setValue(1.0)
+        self.spin_real_width.setSingleStep(0.5)
+        self.spin_real_width.setFixedWidth(100)
+        if not nmrsim:
+            self.spin_real_width.setEnabled(False)
+        self.spin_real_width.valueChanged.connect(lambda val: self.plot_spectrum())
+        real_spec_layout.addWidget(self.spin_real_width)
+        
+        real_spec_layout.addWidget(QLabel(" Spectrometer (MHz):"))
+        self.spin_mhz = QDoubleSpinBox()
+        self.spin_mhz.setRange(10.0, 2000.0)
+        self.spin_mhz.setValue(400.0)
+        self.spin_mhz.setSingleStep(10.0)
+        self.spin_mhz.setFixedWidth(100)
+        if not nmrsim:
+            self.spin_mhz.setEnabled(False)
+        self.spin_mhz.valueChanged.connect(lambda val: self.plot_spectrum())
+        real_spec_layout.addWidget(self.spin_mhz)
+        
+        # Initial state check
+        self.toggle_simulation_controls()
+        
+        real_spec_layout.addStretch()
+        spec_layout.addLayout(real_spec_layout)
 
         # X-Axis Range row
         x_range_layout = QHBoxLayout()
@@ -1262,7 +1269,7 @@ class NMRDialog(QDialog):
             else:
                 self.chk_real_spectrum.setChecked(False)
                 self.chk_real_spectrum.setEnabled(False)
-                self.chk_real_spectrum.setToolTip("No significant couplings found for displayed atoms")
+                self.chk_real_spectrum.setToolTip("No coupling information was found for displayed atoms")
             
             self.chk_real_spectrum.blockSignals(False)
             
@@ -1653,7 +1660,7 @@ class NMRDialog(QDialog):
         """Enable/Disable simulation spinboxes based on checkbox state"""
         if not hasattr(self, 'chk_real_spectrum'): return
         
-        is_sim_active = self.chk_real_spectrum.isChecked() and self.chk_real_spectrum.isEnabled()
+        is_sim_active = self.chk_real_spectrum.isChecked() and self.chk_real_spectrum.isEnabled() and nmrsim is not None
         
         if hasattr(self, 'spin_real_width'):
             self.spin_real_width.setEnabled(is_sim_active)
