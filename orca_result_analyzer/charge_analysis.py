@@ -329,10 +329,10 @@ class ChargeDialog(QDialog):
         """Reset atom colors to default CPK colors"""
         try:
             mw = self.parent_dlg.mw
-            if hasattr(mw, 'main_window_view_3d'):
+            if hasattr(mw, 'view_3d_manager'):
                 data = self.all_charges.get(self.current_type, [])
                 for item in data:
-                    mw.main_window_view_3d.update_atom_color_override(item['atom_idx'], None)
+                    mw.view_3d_manager.update_atom_color_override(item['atom_idx'], None)
             
             # Remove scalar bar if exists
             if hasattr(self, '_charge_scalar_bar'):
@@ -352,8 +352,8 @@ class ChargeDialog(QDialog):
             
             # Redraw molecule with default CPK colors
             if hasattr(self.parent_dlg.mw, 'current_mol') and self.parent_dlg.mw.current_mol:
-                if hasattr(self.parent_dlg.mw, 'draw_molecule_3d'):
-                    self.parent_dlg.mw.draw_molecule_3d(self.parent_dlg.mw.current_mol)
+                if hasattr(self.parent_dlg.mw, 'view_3d_manager'):
+                    self.parent_dlg.mw.view_3d_manager.draw_molecule_3d(self.parent_dlg.mw.current_mol)
             
             # Render
             if hasattr(self.parent_dlg.mw, 'plotter'):
@@ -486,17 +486,17 @@ class ChargeDialog(QDialog):
 
         try:
             mw = self.parent_dlg.mw
-            if hasattr(mw, 'main_window_view_3d'):
+            if hasattr(mw, 'view_3d_manager'):
                 for item in data:
                     idx = item['atom_idx']
                     q = item['charge']
                     color = get_color(q)
-                    mw.main_window_view_3d.update_atom_color_override(idx, color)
+                    mw.view_3d_manager.update_atom_color_override(idx, color)
             
             # Redraw molecule once after all colors are set
             if hasattr(self.parent_dlg.mw, 'current_mol') and self.parent_dlg.mw.current_mol:
-                if hasattr(self.parent_dlg.mw, 'draw_molecule_3d'):
-                    self.parent_dlg.mw.draw_molecule_3d(self.parent_dlg.mw.current_mol)
+                if hasattr(self.parent_dlg.mw, 'view_3d_manager'):
+                    self.parent_dlg.mw.view_3d_manager.draw_molecule_3d(self.parent_dlg.mw.current_mol)
                 
             # Add charge labels if checkbox is enabled
             if self.chk_show_labels.isChecked():

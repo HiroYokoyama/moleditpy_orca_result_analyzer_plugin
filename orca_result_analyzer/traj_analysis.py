@@ -506,12 +506,14 @@ class TrajectoryResultDialog(QDialog):
                 
         final_mol = mol.GetMol()
         
-        # Update current molecule in Main Window context
+        # Update current molecule in Main Window context (V3 manager architecture)
         if hasattr(self.gl_widget, 'current_mol'):
             self.gl_widget.current_mol = final_mol
-        
-        if hasattr(self.gl_widget, 'draw_molecule_3d'):
-             self.gl_widget.draw_molecule_3d(final_mol)
+
+        if hasattr(self.gl_widget, 'view_3d_manager') and hasattr(self.gl_widget.view_3d_manager, 'draw_molecule_3d'):
+            self.gl_widget.view_3d_manager.draw_molecule_3d(final_mol)
+        elif hasattr(self.gl_widget, 'draw_molecule_3d'):
+            self.gl_widget.draw_molecule_3d(final_mol)
              
     def on_scroll(self, event):
         if event.button == 'up':
@@ -566,8 +568,8 @@ class TrajectoryResultDialog(QDialog):
             # Minimize 2D editor
             if hasattr(mw, 'splitter'):
                 try:
-                    total = mw.splitter.width()
-                    mw.splitter.setSizes([0, total])
+                    total = mw.init_manager.splitter.width()
+                    mw.init_manager.splitter.setSizes([0, total])
                 except: pass
                 
             # Reset Camera

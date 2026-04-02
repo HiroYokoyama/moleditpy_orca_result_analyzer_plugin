@@ -429,8 +429,8 @@ class ForceViewerDialog(QDialog):
         elif hasattr(self.parent_dlg, 'mw'):
             mw = self.parent_dlg.mw
         
-        if mw and hasattr(mw, 'draw_molecule_3d'):
-            mw.draw_molecule_3d(final_mol)
+        if mw and hasattr(mw, 'view_3d_manager'):
+            mw.view_3d_manager.draw_molecule_3d(final_mol)
     
     def populate_force_table(self):
         """Populate the force and gradient table from current gradient data"""
@@ -503,8 +503,8 @@ class ForceViewerDialog(QDialog):
             
             # Get coordinates for the current view
             current_coords = []
-            if self.current_step_idx == len(self.traj_steps):
-                # Final structure
+            if self.current_step_idx < 0 or self.current_step_idx == len(self.traj_steps):
+                # Final / current structure (sentinel -1 or slider at max)
                 if self.parser and "coords" in self.parser.data:
                     current_coords = self.parser.data["coords"]
             else:

@@ -335,13 +335,13 @@ class FreqSpectrumWindow(QWidget):
         self.spin_y_max.blockSignals(False)
         
     def save_png(self):
-        default_path = get_default_export_path(self.freq_dialog.mw.current_file_path, suffix="_vib_spectrum", extension=".png")
+        default_path = get_default_export_path(self.freq_dialog.mw.init_manager.current_file_path, suffix="_vib_spectrum", extension=".png")
         path, _ = QFileDialog.getSaveFileName(self, "Save Graph", default_path, "Images (*.png)")
         if path:
             self.spectrum.save_png(path)
             
     def save_csv(self):
-        default_path = get_default_export_path(self.freq_dialog.mw.current_file_path, suffix="_vib_data", extension=".csv")
+        default_path = get_default_export_path(self.freq_dialog.mw.init_manager.current_file_path, suffix="_vib_data", extension=".csv")
         path, _ = QFileDialog.getSaveFileName(self, "Save Data", default_path, "CSV Files (*.csv)")
         if path:
             success = self.spectrum.save_csv(path)
@@ -354,7 +354,7 @@ class FreqSpectrumWindow(QWidget):
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
                 
     def save_sticks(self):
-        default_path = get_default_export_path(self.freq_dialog.mw.current_file_path, suffix="_vib_sticks", extension=".csv")
+        default_path = get_default_export_path(self.freq_dialog.mw.init_manager.current_file_path, suffix="_vib_sticks", extension=".csv")
         path, _ = QFileDialog.getSaveFileName(self, "Export Sticks", default_path, "CSV Files (*.csv)")
         if path:
             success = self.spectrum.save_sticks_csv(path)
@@ -839,7 +839,7 @@ class FrequencyDialog(QDialog):
                 nz = bz + vz * factor
                 conf.SetAtomPosition(i, Point3D(nx, ny, nz))
             
-            self.mw.draw_molecule_3d(mol)
+            self.mw.view_3d_manager.draw_molecule_3d(mol)
             
             # Update vectors if enabled
             if self.chk_vector.isChecked():
@@ -896,7 +896,7 @@ class FrequencyDialog(QDialog):
             conf = mol.GetConformer()
             for i, (bx, by, bz) in enumerate(self.base_coords):
                 conf.SetAtomPosition(i, Point3D(bx, by, bz))
-            self.mw.draw_molecule_3d(mol)
+            self.mw.view_3d_manager.draw_molecule_3d(mol)
         except Exception as e:
             print(f"Error in reset_geometry: {e}")
             import traceback
@@ -940,7 +940,7 @@ class FrequencyDialog(QDialog):
         transparent = chk_trans.isChecked()
         use_hq = chk_hq.isChecked()
         
-        default_path = get_default_export_path(self.mw.current_file_path, suffix="_vib_anim", extension=".gif")
+        default_path = get_default_export_path(self.mw.init_manager.current_file_path, suffix="_vib_anim", extension=".gif")
         path, _ = QFileDialog.getSaveFileName(self, "Save GIF", default_path, "GIF Files (*.gif)")
         if not path: return
         if not path.lower().endswith('.gif'): path += '.gif'
@@ -982,8 +982,8 @@ class FrequencyDialog(QDialog):
                     nz = bz + vz * factor
                     conf.SetAtomPosition(j, Point3D(nx, ny, nz))
                 
-                if hasattr(mw, 'draw_molecule_3d'):
-                     mw.draw_molecule_3d(mol)
+                if hasattr(mw, 'view_3d_manager') and hasattr(mw.view_3d_manager, 'draw_molecule_3d'):
+                     mw.view_3d_manager.draw_molecule_3d(mol)
                 QApplication.processEvents()
                 mw.plotter.render()
                 

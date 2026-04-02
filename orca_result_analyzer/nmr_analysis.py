@@ -196,12 +196,12 @@ class NMRDialog(QDialog):
         indices = set()
         
         # Check standard 3D selection
-        if hasattr(mw, 'selected_atoms_3d') and mw.selected_atoms_3d:
-            indices.update(mw.selected_atoms_3d)
+        if hasattr(mw, 'selected_atoms_3d') and mw.edit_3d_manager.selected_atoms_3d:
+            indices.update(mw.edit_3d_manager.selected_atoms_3d)
             
         # Check measurement selection
-        if hasattr(mw, 'selected_atoms_for_measurement') and mw.selected_atoms_for_measurement:
-            for item in mw.selected_atoms_for_measurement:
+        if hasattr(mw, 'selected_atoms_for_measurement') and mw.edit_3d_manager.selected_atoms_for_measurement:
+            for item in mw.edit_3d_manager.selected_atoms_for_measurement:
                 if isinstance(item, int):
                     indices.add(item)
                     
@@ -1748,7 +1748,7 @@ class NMRDialog(QDialog):
                 # Ensure we don't have double spheres (Green + Yellow).
                 # We clear the global selection so ONLY our internal Yellow spheres are visible.
                 if hasattr(mw, 'selected_atoms_3d'):
-                    mw.selected_atoms_3d.clear()
+                    mw.edit_3d_manager.selected_atoms_3d.clear()
                 
                 # CRITICAL: Update our sync tracker so the polling loop knows WE did this
                 # and doesn't interpret the empty set as a user unselection.
@@ -1756,7 +1756,7 @@ class NMRDialog(QDialog):
 
                 # Sync to MW if we are the originator (internal sync)
                 if hasattr(mw, 'update_3d_selection_display'):
-                    mw.update_3d_selection_display()
+                    mw.edit_3d_manager.update_3d_selection_display()
                 elif hasattr(mw, 'update_selection_visuals'):
                     mw.update_selection_visuals()
 
@@ -1826,14 +1826,14 @@ class NMRDialog(QDialog):
         # [Commented out to avoid doubled spheres]
         if hasattr(self.parent_dlg, 'mw'):
             mw = self.parent_dlg.mw
-            # We clear mw.selected_atoms_3d to avoid greenish spheres from "polluting" the view
+            # We clear mw.edit_3d_manager.selected_atoms_3d to avoid greenish spheres from "polluting" the view
             # The NMR dialog handles its own yellow highlights (internal logic)
             if hasattr(mw, 'selected_atoms_3d'):
-                mw.selected_atoms_3d.clear()
+                mw.edit_3d_manager.selected_atoms_3d.clear()
             
             # Re-enable MW visual update so its internal highlights are also cleared
             if hasattr(mw, 'update_3d_selection_display'):
-                mw.update_3d_selection_display()
+                mw.edit_3d_manager.update_3d_selection_display()
             elif hasattr(mw, 'update_selection_visuals'):
                 mw.update_selection_visuals()
         
@@ -2117,14 +2117,14 @@ class NMRDialog(QDialog):
              return
 
         indices = list(atom_indices)
-        valid_indices = [i for i in indices if i < len(mw.atom_positions_3d)]
+        valid_indices = [i for i in indices if i < len(mw.view_3d_manager.atom_positions_3d)]
         
         if not valid_indices:
             return
             
         try:
             # Get positions
-            selected_positions = mw.atom_positions_3d[valid_indices]
+            selected_positions = mw.view_3d_manager.atom_positions_3d[valid_indices]
             
             # Highlight sphere size: 40% (1.4x) relative to VDW radii per user request
             radii = []

@@ -45,10 +45,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.init_ui()
         
         # Update main window title to reflect ORCA result
-        if hasattr(self.mw, 'current_file_path'):
-            self.mw.current_file_path = self.file_path
-        if hasattr(self.mw, 'update_window_title'):
-             self.mw.update_window_title()
+        if hasattr(self.mw, 'init_manager'):
+            self.mw.init_manager.current_file_path = self.file_path
+        if hasattr(self.mw, 'state_manager') and hasattr(self.mw.state_manager, 'update_window_title'):
+             self.mw.state_manager.update_window_title()
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -411,10 +411,10 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.file_path = path
             
             # --- Sync with Main Window Title ---
-            if hasattr(self.mw, 'current_file_path'):
-                self.mw.current_file_path = path
-            if hasattr(self.mw, 'update_window_title'):
-                self.mw.update_window_title()
+            if hasattr(self.mw, 'init_manager'):
+                self.mw.init_manager.current_file_path = path
+            if hasattr(self.mw, 'state_manager') and hasattr(self.mw.state_manager, 'update_window_title'):
+                self.mw.state_manager.update_window_title()
 
             # Update File Info Labels
             self.update_file_info_labels()
@@ -567,23 +567,23 @@ class OrcaResultAnalyzerDialog(QDialog):
             # Set as current molecule for export functionality
             if hasattr(self.mw, 'current_mol'):
                 self.mw.current_mol = final_mol
-            
-            if hasattr(self.mw, 'draw_molecule_3d'):
-                self.mw.draw_molecule_3d(final_mol)
-                
+
+            if hasattr(self.mw, 'view_3d_manager') and hasattr(self.mw.view_3d_manager, 'draw_molecule_3d'):
+                self.mw.view_3d_manager.draw_molecule_3d(final_mol)
+
             # Reset 3D camera to fit molecule
             if hasattr(self.mw, 'plotter') and self.mw.plotter:
                 try:
                     self.mw.plotter.reset_camera()
                 except: pass
-                
+
             # Minimize 2D editor to focus on 3D view
-            if hasattr(self.mw, 'splitter'):
+            if hasattr(self.mw, 'init_manager') and hasattr(self.mw.init_manager, 'splitter'):
                 try:
                     # splitter has 2D editor at index 0, 3D view at index 1
                     # Completely hide 2D, show only 3D
-                    total = self.mw.splitter.width()
-                    self.mw.splitter.setSizes([0, total])
+                    total = self.mw.init_manager.splitter.width()
+                    self.mw.init_manager.splitter.setSizes([0, total])
                 except: pass
         except Exception as e:
             # self.logger.error(f"Error loading 3D: {e}")

@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "1.7.3"
+PLUGIN_VERSION = "2.0.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -119,3 +119,12 @@ def initialize(context):
 
     #context.add_menu_action("Analysis/ORCA Result Analyzer", menu_action) 
 
+
+def run(mw):
+    if not hasattr(mw, 'plugin_manager'):
+        return
+
+    from PyQt6.QtWidgets import QFileDialog
+    path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log);;All Files (*)")
+    if path:
+        mw.plugin_manager.open_file(path)
