@@ -56,10 +56,15 @@ class TrajectoryResultDialog(QDialog):
         if len(self.scan_points) < len(self.all_steps) and len(self.scan_points) > 0:
             self.steps = self.scan_points
             self.showing_scan_points = True
-            self.show_relative = True # Default to relative for scan
-        else:
-            self.steps = self.all_steps
-            self.show_relative = False # Default to absolute for full trajectory
+        # Detection for NEB / Path analysis
+        is_neb = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.all_steps)
+        
+        self.show_relative = self.showing_scan_points or is_neb
+        
+        # Default X-axis to Coordinate for NEB (always) or if scan coord values are present.
+        # NEB path distance is always the meaningful x-axis even when dist=0.0 on the first image.
+        has_coord_values = any(s.get('scan_coord') is not None or s.get('dist') is not None for s in self.all_steps)
+        self.show_coord_x = is_neb or has_coord_values
         self.use_log_scale = False
         self.is_playing = False
         self.timer = QTimer()
@@ -86,7 +91,8 @@ class TrajectoryResultDialog(QDialog):
         self.annot = self.canvas.axes.annotate("", xy=(0,0), xytext=(20,20),
                             textcoords="offset points",
                             bbox=dict(boxstyle="round", fc="w", alpha=0.9),
-                            arrowprops=dict(arrowstyle="->"))
+                            arrowprops=dict(arrowstyle="->"),
+                            zorder=1000)
         self.annot.set_visible(False)
         
         self.init_ui()
@@ -214,6 +220,29 @@ class TrajectoryResultDialog(QDialog):
         toggle_layout.addWidget(self.chk_log)
         toggle_layout.addWidget(QLabel("Unit:"))
         toggle_layout.addWidget(self.combo_unit)
+
+        line2 = QLabel(" | ")
+        line2.setStyleSheet("color: gray;")
+        toggle_layout.addWidget(line2)
+
+        toggle_layout.addWidget(QLabel("X-Axis:"))
+        self.x_axis_grp = QButtonGroup(self)
+        self.radio_idx = QRadioButton("Step")
+        self.radio_coord = QRadioButton("Coordinate")
+        self.x_axis_grp.addButton(self.radio_idx)
+        self.x_axis_grp.addButton(self.radio_coord)
+        
+        if self.show_coord_x:
+            self.radio_coord.setChecked(True)
+        else:
+            self.radio_idx.setChecked(True)
+            
+        self.radio_idx.toggled.connect(self.on_x_axis_mode_changed)
+        self.radio_coord.toggled.connect(self.on_x_axis_mode_changed)
+        
+        toggle_layout.addWidget(self.radio_idx)
+        toggle_layout.addWidget(self.radio_coord)
+
         toggle_layout.addStretch()
         self.layout().addLayout(toggle_layout)
         
@@ -331,7 +360,7 @@ class TrajectoryResultDialog(QDialog):
         return final_points
 
     def on_traj_mode_changed(self):
-        # Radio button toggles both ways, only trigger on selection
+        # Only trigger on the newly checked button
         if not self.sender().isChecked(): return
         
         self.showing_scan_points = self.radio_scan.isChecked()
@@ -341,14 +370,32 @@ class TrajectoryResultDialog(QDialog):
             
         if self.showing_scan_points:
             self.steps = self.scan_points
-            self.radio_rel.setChecked(True) # This triggers on_toggle_mode
+            self.show_relative = True
         else:
             self.steps = self.all_steps
-            self.radio_abs.setChecked(True) # This triggers on_toggle_mode
+            # NEB stays relative; plain optimization goes absolute
+            is_neb = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.steps)
+            self.show_relative = is_neb
+        
+        # Update energy radio silently (no signal -> no double plot)
+        self.radio_rel.blockSignals(True)
+        self.radio_abs.blockSignals(True)
+        self.radio_rel.setChecked(self.show_relative)
+        self.radio_abs.setChecked(not self.show_relative)
+        self.radio_rel.blockSignals(False)
+        self.radio_abs.blockSignals(False)
+        # Update log scale enable state
+        self.chk_log.setEnabled(self.show_relative)
+        if not self.show_relative:
+            self.chk_log.setChecked(False)
+            self.use_log_scale = False
             
         self.slider.setRange(0, len(self.steps) - 1)
         self.recalc_energies()
         self.plot_data()
+        self.canvas.axes.relim()
+        self.canvas.axes.autoscale_view()
+        self.canvas.draw()
         self.on_step_changed(0)
         
     def on_toggle_mode(self):
@@ -370,6 +417,19 @@ class TrajectoryResultDialog(QDialog):
     def on_log_changed(self):
         self.use_log_scale = self.chk_log.isChecked()
         self.plot_data()
+
+    def on_x_axis_mode_changed(self):
+        # Trigger fires for both the newly-checked and newly-unchecked button;
+        # only act on the newly-checked one.
+        sender = self.sender()
+        if sender and not sender.isChecked():
+            return
+
+        self.show_coord_x = self.radio_coord.isChecked()
+        # plot_data handles relim / autoscale / draw / highlight_point internally.
+        # on_step_changed is still needed to refresh the info label text.
+        self.plot_data()
+        self.on_step_changed(self.slider.value())
         
     def on_unit_changed(self, unit):
         self.current_unit = unit
@@ -392,7 +452,25 @@ class TrajectoryResultDialog(QDialog):
     def plot_data(self):
         self.canvas.axes.clear()
         
-        x = list(range(len(self.energies)))
+        if self.show_coord_x:
+            # Try to get scan values or NEB distances.
+            # Use explicit None checks so that 0.0 (first NEB image) is not skipped.
+            x = []
+            for i, s in enumerate(self.steps):
+                v = s.get('scan_coord')
+                if v is None:
+                    v = s.get('dist')
+                if v is None:
+                    v = float(i)
+                x.append(v)
+
+            xlabel = "Scan Coordinate"
+            if self.steps and self.steps[0].get('type') in ['neb_image', 'neb_step']:
+                xlabel = "Path Distance (Angstrom)"
+        else:
+            x = list(range(len(self.steps)))
+            xlabel = "Step"
+
         y = self.display_energies
         
         if self.show_relative:
@@ -408,10 +486,13 @@ class TrajectoryResultDialog(QDialog):
              self.canvas.axes.semilogy(x, plot_y, 'b-', label='Energy', picker=5)
              self.scatter = self.canvas.axes.scatter(x, plot_y, c='red', s=40, picker=5, zorder=5)
         else:
-             self.canvas.axes.plot(x, y, 'b-', label='Energy', picker=5)
-             self.scatter = self.canvas.axes.scatter(x, y, c='red', s=40, picker=5, zorder=5)
+             # Force data arrays as lists to ensure matplotlib correctly interprets them
+             x_arr = list(x)
+             y_arr = list(y)
+             self.canvas.axes.plot(x_arr, y_arr, 'b-', label='Energy', picker=5)
+             self.scatter = self.canvas.axes.scatter(x_arr, y_arr, c='red', s=40, picker=5, zorder=5)
         
-        self.canvas.axes.set_xlabel("Step")
+        self.canvas.axes.set_xlabel(xlabel)
         self.canvas.axes.set_ylabel(ylabel)
         self.canvas.axes.set_title("Energy Profile")
         self.canvas.axes.grid(True, which="both", ls="-", alpha=0.3)
@@ -424,7 +505,8 @@ class TrajectoryResultDialog(QDialog):
         self.annot = self.canvas.axes.annotate("", xy=(0,0), xytext=(20,20),
                             textcoords="offset points",
                             bbox=dict(boxstyle="round", fc="w", alpha=0.9),
-                            arrowprops=dict(arrowstyle="->"))
+                            arrowprops=dict(arrowstyle="->"),
+                            zorder=1000)
         self.annot.set_visible(False)
         
         self.highlight_point(self.slider.value())
@@ -445,11 +527,16 @@ class TrajectoryResultDialog(QDialog):
         else:
             y = self.display_energies[idx]
             
-        # Log Scale Safety
-        if self.use_log_scale and y <= 1e-6:
-             y = 1e-6
+        if self.show_coord_x:
+            # Explicit None checks so that 0.0 is not treated as missing.
+            x_val = self.steps[idx].get('scan_coord')
+            if x_val is None:
+                x_val = self.steps[idx].get('dist')
+            if x_val is None:
+                x_val = float(idx)
+        else:
+            x_val = idx
             
-        x_val = idx # Use idx for x-coordinate
         # Red circle
         self._highlight_marker, = self.canvas.axes.plot(x_val, y, 'ro', markersize=12, markeredgecolor='black', markeredgewidth=2, zorder=10)
         # Vertical Line
@@ -467,10 +554,17 @@ class TrajectoryResultDialog(QDialog):
         val = self.display_energies[idx]
         abs_h = step['energy']
         
+        coord_info = ""
+        cv = step.get('scan_coord')
+        if cv is None:
+            cv = step.get('dist')
+        if cv is not None:
+            coord_info = f" | Coord: {cv:.6f}"
+
         if self.show_relative:
-            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.8f} {self.current_unit} (Abs: {abs_h:.10f} Eh)")
+            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)}{coord_info} | {val:.8f} {self.current_unit} (Abs: {abs_h:.10f} Eh)")
         else:
-            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)} | {val:.8f} {self.current_unit}")
+            self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)}{coord_info} | {val:.8f} {self.current_unit}")
         
         # NEB Safety: If no atoms (PATH SUMMARY), skip structure update
         if not step.get('atoms'):
@@ -547,7 +641,22 @@ class TrajectoryResultDialog(QDialog):
                 if not silent: QMessageBox.warning(self, "Error", "No valid steps found in XYZ file.")
                 return
             
+            # Merge dist from existing steps into new steps if lengths match
+            # (Preserves Path Summary distances even if XYZ lacks them)
+            if len(steps) == len(self.steps):
+                for i, s in enumerate(steps):
+                    if s.get('dist') is None:
+                        d = self.steps[i].get('dist')
+                        s['dist'] = d
+                        s['scan_coord'] = d
+
             self.steps = steps
+            # Keep all_steps and scan_points consistent with the new data
+            self.all_steps = steps
+            self.scan_points = self.compute_scan_points(steps)
+            # Recalculate global minimum
+            self.global_min_e = min(s['energy'] for s in steps) if steps else 0
+            
             self.slider.blockSignals(True)
             self.slider.setMaximum(len(self.steps)-1)
             self.slider.setValue(0)
@@ -558,6 +667,20 @@ class TrajectoryResultDialog(QDialog):
                 self.btn_play.setEnabled(True)
                 self.btn_save_gif.setEnabled(HAS_PIL)
             
+            # Re-detect coordinate availability for external data.
+            # NEB is always coord-based even when XYZ frames lack a dist label in comments.
+            is_neb_trj = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.steps)
+            has_coords = any(s.get('scan_coord') is not None or s.get('dist') is not None for s in self.steps)
+            self.show_coord_x = is_neb_trj or has_coords
+
+            # Update X-axis radio buttons
+            self.radio_coord.blockSignals(True)
+            self.radio_idx.blockSignals(True)
+            self.radio_coord.setChecked(self.show_coord_x)
+            self.radio_idx.setChecked(not self.show_coord_x)
+            self.radio_coord.blockSignals(False)
+            self.radio_idx.blockSignals(False)
+            
             self.recalc_energies()
             self.plot_data()
             self.on_step_changed(0)
@@ -565,8 +688,23 @@ class TrajectoryResultDialog(QDialog):
             # Request UI update on Main Window (Minimize 2D, Reset Camera)
             mw = self.gl_widget
             
-            # Minimize 2D editor
-            if hasattr(mw, 'splitter'):
+            # Treat ORCA molecules as XYZ-derived (fixed geometry)
+            mw.is_xyz_derived = True
+            
+            # Enter 3D mode which enables export/analysis buttons and hides 2D panel
+            if hasattr(mw, 'ui_manager'):
+                if hasattr(mw.ui_manager, '_enter_3d_viewer_ui_mode'):
+                    try:
+                        mw.ui_manager._enter_3d_viewer_ui_mode()
+                    except: pass
+                elif hasattr(mw.ui_manager, '_enable_3d_features'):
+                    try:
+                        mw.ui_manager._enable_3d_features(True)
+                        if hasattr(mw.ui_manager, 'minimize_2d_panel'):
+                            mw.ui_manager.minimize_2d_panel()
+                    except: pass
+            elif hasattr(mw, 'init_manager') and hasattr(mw.init_manager, 'splitter'):
+                # Fallback for manual splitter manipulation if ui_manager is missing
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
@@ -602,10 +740,16 @@ class TrajectoryResultDialog(QDialog):
                 self.annot.xy = pos
                 val = self.display_energies[idx]
                 abs_h = self.steps[idx]['energy']
+                cv = self.steps[idx].get('scan_coord')
+                if cv is None:
+                    cv = self.steps[idx].get('dist')
+                
+                coord_txt = f"Coord: {cv:.6f}\n" if cv is not None else ""
+                
                 if self.show_relative:
-                    text = f"Step {idx}\n{val:.8f} {self.current_unit}\n(Abs: {abs_h:.10f} Eh)"
+                    text = f"Step {idx}\n{coord_txt}{val:.8f} {self.current_unit}\n(Abs: {abs_h:.10f} Eh)"
                 else:
-                    text = f"Step {idx}\n{val:.8f} {self.current_unit}"
+                    text = f"Step {idx}\n{coord_txt}{val:.8f} {self.current_unit}"
                 self.annot.set_text(text)
                 self.annot.set_visible(True)
                 self.canvas.draw_idle()

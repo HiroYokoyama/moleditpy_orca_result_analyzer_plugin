@@ -571,20 +571,26 @@ class OrcaResultAnalyzerDialog(QDialog):
             if hasattr(self.mw, 'view_3d_manager') and hasattr(self.mw.view_3d_manager, 'draw_molecule_3d'):
                 self.mw.view_3d_manager.draw_molecule_3d(final_mol)
 
+            # Sync with main window features
+            if hasattr(self.mw, 'ui_manager'):
+                # Treat ORCA molecules as XYZ-derived (fixed geometry)
+                self.mw.is_xyz_derived = True
+                
+                # Enter 3D mode which enables export/analysis buttons and hides 2D panel
+                if hasattr(self.mw.ui_manager, '_enter_3d_viewer_ui_mode'):
+                    self.mw.ui_manager._enter_3d_viewer_ui_mode()
+                elif hasattr(self.mw.ui_manager, '_enable_3d_features'):
+                     self.mw.ui_manager._enable_3d_features(True)
+                     if hasattr(self.mw.ui_manager, 'minimize_2d_panel'):
+                         self.mw.ui_manager.minimize_2d_panel()
+            
             # Reset 3D camera to fit molecule
-            if hasattr(self.mw, 'plotter') and self.mw.plotter:
+            if hasattr(self.mw, 'view_3d_manager') and hasattr(self.mw.view_3d_manager, 'plotter'):
                 try:
-                    self.mw.plotter.reset_camera()
-                except: pass
-
-            # Minimize 2D editor to focus on 3D view
-            if hasattr(self.mw, 'init_manager') and hasattr(self.mw.init_manager, 'splitter'):
-                try:
-                    # splitter has 2D editor at index 0, 3D view at index 1
-                    # Completely hide 2D, show only 3D
-                    total = self.mw.init_manager.splitter.width()
-                    self.mw.init_manager.splitter.setSizes([0, total])
-                except: pass
+                    self.mw.view_3d_manager.plotter.reset_camera()
+                    self.mw.view_3d_manager.plotter.render()
+                except:
+                    pass
         except Exception as e:
             # self.logger.error(f"Error loading 3D: {e}")
             # print(f"Error loading 3D: {e}")
@@ -625,8 +631,8 @@ class OrcaResultAnalyzerDialog(QDialog):
     def show_trajectory(self):
         data = self.parser.data.get("scan_steps", [])
         if not data:
-             QMessageBox.warning(self, "No Info", "No trajectory steps (Optimization / Scan) found.")
-             return
+            QMessageBox.warning(self, "No Info", "No trajectory steps (Optimization / Scan) found.")
+            return
         if hasattr(self, 'traj_dlg') and self.traj_dlg is not None:
              self.traj_dlg.close()
         charge = self.parser.data.get("charge", 0)

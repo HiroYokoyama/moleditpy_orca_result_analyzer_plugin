@@ -23,7 +23,9 @@ class OrcaParser:
             "nmr_shielding": [],
             "nmr_couplings": [],
             "charges": {}, # Type -> List
-            "version": None
+            "version": None,
+            "scan_steps": [],
+            "all_steps": []
         }
 
     def parse_xyz_content(self, content):
@@ -81,15 +83,26 @@ class OrcaParser:
                 i += 1 + natoms
                 continue
 
+            # Try robust extraction of Energy and Distance/Coord from comment
             energy = 0.0
-            # Try to find energy in comment (e.g. "Energy: -123.456" or just "-123.456")
-            # ORCA NEB format might have standard comment
-            # Look for floating point number
-            # Common formats: "Energy: -123.4", "Step 1 -123.4", "-123.4"
-            # Let's try to find a float that looks like an energy
-            floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
-            if floats:
-                try: energy = float(floats[-1]) # Take the last one? often energy is at end
+            dist_val = None
+            
+            # 1. Look for Energy Label: "Energy: -123.4" or "Energy -123.4" or "E -123.4"
+            e_match = re.search(r"(?:Energy|E)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)", comment, re.IGNORECASE)
+            if e_match:
+                try: energy = float(e_match.group(1))
+                except: pass
+            else:
+                # Fallback: Just take the last float (usually energy)
+                floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
+                if floats:
+                    try: energy = float(floats[-1])
+                    except: pass
+            
+            # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
+            d_match = re.search(r"(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)", comment, re.IGNORECASE)
+            if d_match:
+                try: dist_val = float(d_match.group(1))
                 except: pass
             
             i += 1
@@ -108,6 +121,8 @@ class OrcaParser:
             steps.append({
                 'type': 'neb_step',
                 'energy': energy,
+                'dist': dist_val,
+                'scan_coord': dist_val,
                 'atoms': atoms,
                 'coords': coords
             })
@@ -135,6 +150,7 @@ class OrcaParser:
         self.parse_nmr()
         self.parse_basis_set()
         self.parse_scf_trace()
+        self.parse_scan_results_table()
         
     def parse_basic(self):
         """Parse basic info: SCF Energy, Convergence, Geometry."""
@@ -166,6 +182,11 @@ class OrcaParser:
                 except: pass
             if "SCF CONVERGED" in uu or "OPTIMIZATION CONVERGED" in uu or "HURRAY" in uu:
                 self.data["converged"] = True
+            
+            if "RELAXED SURFACE SCAN" in uu:
+                self.data["is_scan"] = True
+            if "NUDGED ELASTIC BAND" in uu or " NEB " in uu:
+                self.data["is_neb"] = True
                 
             if "CURRENT TRAJECTORY WILL BE WRITTEN TO" in uu:
                 # Robust regex extraction
@@ -193,7 +214,9 @@ class OrcaParser:
 
     def parse_trajectory(self):
         """Parse Optimization, Scan, and NEB Trajectories."""
-        self.data["scan_steps"] = []
+        # Already initialized in parse_all, but keep for robustness if called standalone
+        if "scan_steps" not in self.data:
+            self.data["scan_steps"] = []
         
         # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE" or "NEB"
         # And capture Energy + Geometry
@@ -234,7 +257,7 @@ class OrcaParser:
             uu_line = line.upper()
             
             # --- NEB Parsing ---
-            if "PATH SUMMARY" in uu_line and "----" in self.lines[i+1]:
+            if "PATH SUMMARY" in uu_line and i > 0 and "----" in self.lines[i-1]:
                  # Found the summary table
                  # Skip header lines
                  # Line i: ---------------------------
@@ -298,8 +321,14 @@ class OrcaParser:
                 
                 en = 0.0
                 conv_info = {}
+                coord_val = None
                 for k in range(i, next_marker):
                     uu = self.lines[k].strip().upper()
+                    if "ACTUAL SCAN COORDINATE" in uu:
+                         try:
+                             # Format: Actual scan coordinate      ...   1.500000
+                             coord_val = float(self.lines[k].split()[-1])
+                         except: pass
                     if "FINAL SINGLE POINT ENERGY" in uu:
                          try: en = float(self.lines[k].split()[-1])
                          except: pass
@@ -374,6 +403,7 @@ class OrcaParser:
                         'scan_step_id': current_scan_step,
                         'step': step_idx,
                         'energy': en,
+                        'scan_coord': coord_val,
                         'atoms': atoms,
                         'coords': coords,
                         'convergence': conv_info,
@@ -1996,6 +2026,72 @@ class OrcaParser:
     #     return hessian_data
         
         
+    
+    def parse_scan_results_table(self):
+        """
+        Parses the specific 1D scan summary table from the ORCA output.
+        """
+        data_start = -1
+        # Search from reverse for the summary table
+        for i, line in enumerate(reversed(self.lines)):
+            if "Actual Energy" in line:
+                data_start = len(self.lines) - 1 - i + 1
+                break
+        
+        if data_start == -1: return
+
+        table_vals = []
+        for i in range(data_start, len(self.lines)):
+            line = self.lines[i].strip()
+            # Stop on blank line only after we've collected some data
+            if not line:
+                if table_vals:
+                    break
+                continue
+            
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    coord = float(parts[0])
+                    en = float(parts[-1])
+                    table_vals.append({'coord': coord, 'energy': en})
+                except:
+                    # Non-numeric line after data = end of table
+                    if table_vals:
+                        break
+        
+        if not table_vals: return
+        
+        if "scan_steps" not in self.data:
+            self.data["scan_steps"] = []
+            
+        steps = self.data["scan_steps"]
+        if not steps:
+            # Reconstruct entire trajectory from the summary table
+            for idx, v in enumerate(table_vals):
+                steps.append({
+                    'type': 'scan_step_summary',
+                    'scan_step_id': idx,
+                    'step': idx,
+                    'energy': v['energy'],
+                    'scan_coord': v['coord'],
+                    'atoms': [], 'coords': []
+                })
+        else:
+            # Map coordinates to existing optimization steps
+            sids = [s.get('scan_step_id') for s in steps if s.get('scan_step_id') is not None]
+            if sids:
+                offset = min(sids)
+                for s in steps:
+                    sid = s.get('scan_step_id')
+                    if sid is not None:
+                        idx = sid - offset
+                        if 0 <= idx < len(table_vals):
+                            s['scan_coord'] = table_vals[idx]['coord']
+            else:
+                for idx, s in enumerate(steps[:len(table_vals)]):
+                    s['scan_coord'] = table_vals[idx]['coord']
+
     def parse_basis_set(self):
         """Parse Basis Set information needed for MO visualization"""
         self.data["basis_set_shells"] = []
