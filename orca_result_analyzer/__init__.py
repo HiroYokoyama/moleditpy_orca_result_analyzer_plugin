@@ -1,7 +1,7 @@
 import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.1.0"
+PLUGIN_VERSION = "2.1.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -121,10 +121,56 @@ def initialize(context):
 
 
 def run(mw):
-    if not hasattr(mw, 'plugin_manager'):
+    from PyQt6.QtWidgets import QFileDialog, QApplication
+    path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log);;All Files (*)")
+    if not path:
         return
 
-    from PyQt6.QtWidgets import QFileDialog
-    path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log);;All Files (*)")
-    if path:
-        mw.plugin_manager.open_file(path)
+    from moleditpy.plugins.plugin_interface import PluginContext
+    context = PluginContext(mw.plugin_manager, PLUGIN_NAME)
+
+    global _analyzer_window
+    QApplication.processEvents()
+
+    content = ""
+    encodings = ['utf-8', 'utf-16', 'latin-1', 'cp1252']
+    for enc in encodings:
+        try:
+            with open(path, 'r', encoding=enc) as f:
+                content = f.read()
+            break
+        except UnicodeError:
+            continue
+        except Exception as e:
+            QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
+            return
+
+    if not content:
+        try:
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except Exception as e:
+            QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
+            return
+
+    from . import parser as parser_mod
+    importlib.reload(parser_mod)
+    from .parser import OrcaParser
+    parser = OrcaParser()
+    parser.load_from_memory(content, path)
+
+    if _analyzer_window is not None:
+        try:
+            _analyzer_window.close()
+        except Exception:
+            pass
+        _analyzer_window = None
+
+    from .gui import OrcaResultAnalyzerDialog
+    _analyzer_window = OrcaResultAnalyzerDialog(mw, parser, path, context)
+    _analyzer_window.show()
+    _analyzer_window.raise_()
+    _analyzer_window.activateWindow()
+    QApplication.processEvents()
+    _analyzer_window.load_structure_3d()
+    QApplication.processEvents()

@@ -189,7 +189,7 @@ class NMRDialog(QDialog):
         # We removed the mw.scene.mode check because it refers to the 2D editor mode.
         # 3D selection should be allowed unless we are in a specific conflicting mode like Measurement.
 
-        if getattr(mw, 'measurement_mode', False):
+        if getattr(mw.edit_3d_manager, 'measurement_mode', False) if hasattr(mw, 'edit_3d_manager') else False:
             # Measurement mode uses a different selection list
             pass
 
