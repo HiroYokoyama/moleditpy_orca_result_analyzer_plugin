@@ -1,10 +1,11 @@
 import os
 import json
+import logging
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, 
                              QDoubleSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QPushButton, QApplication, QGroupBox, QMessageBox,
                               QFileDialog, QCheckBox, QButtonGroup, QAbstractItemView)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QObject, QEvent
 import pyvista as pv
 import numpy as np
 from .utils import get_default_export_path
@@ -12,7 +13,8 @@ from .utils import get_default_export_path
 try:
     import nmrsim
     from nmrsim import Multiplet, Spectrum
-except ImportError:
+except ImportError as e:
+    logging.warning("NMR: nmrsim not available — multiplet simulation disabled (%s)", e)
     nmrsim = None
     Multiplet = None
     Spectrum = None
@@ -31,6 +33,30 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 from .nmr_custom_ref_dialog import CustomReferenceDialog
 from . import PLUGIN_VERSION
+
+
+class _ClickFilter(QObject):
+    """Qt event filter: detects non-drag left clicks on the 3D plotter widget."""
+
+    def __init__(self, callback, parent=None):
+        super().__init__(parent)
+        self._callback = callback
+        self._press_pos = None
+
+    def eventFilter(self, obj, event):
+        t = event.type()
+        if t == QEvent.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._press_pos = event.position().toPoint()
+        elif t == QEvent.Type.MouseButtonRelease:
+            if event.button() == Qt.MouseButton.LeftButton and self._press_pos is not None:
+                rel = event.position().toPoint()
+                dx = rel.x() - self._press_pos.x()
+                dy = rel.y() - self._press_pos.y()
+                if dx * dx + dy * dy <= 25:  # ≤5 px → click, not drag
+                    self._callback(rel.x(), rel.y(), obj)
+                self._press_pos = None
+        return False  # never consume — camera interaction still works
 
 
 class NMRDialog(QDialog):
@@ -170,10 +196,99 @@ class NMRDialog(QDialog):
         self.sel_timer = QTimer(self)
         self.sel_timer.timeout.connect(self._check_external_selection)
         self.sel_timer.start(200) # Check every 200ms
-        
+
         # Custom 3D highlight actors and names
         self._nmr_sphere_actors = []
         self._nmr_label_names = [] # Explicitly track label names for removal
+
+        # Qt event filter for direct atom click detection (no measurement mode required)
+        self._click_filter = None
+        self._enable_plotter_picking()
+
+    def _enable_plotter_picking(self):
+        """Install Qt event filter on the 3D plotter widget for atom click detection."""
+        try:
+            mw = self.parent_dlg.mw if hasattr(self.parent_dlg, 'mw') else None
+            if not mw:
+                logging.warning("NMR: parent_dlg has no 'mw' attribute — plotter picking disabled")
+                return
+            v3d = getattr(mw, 'view_3d_manager', None)
+            if not v3d:
+                logging.warning("NMR: mw has no 'view_3d_manager' — plotter picking disabled")
+                return
+            plotter = getattr(v3d, 'plotter', None)
+            if not plotter:
+                logging.warning("NMR: view_3d_manager has no 'plotter' — plotter picking disabled")
+                return
+            self._click_filter = _ClickFilter(self._on_plotter_click, parent=self)
+            plotter.installEventFilter(self._click_filter)
+        except Exception as e:
+            logging.error("NMR: _enable_plotter_picking failed: %s", e)
+
+    def _disable_plotter_picking(self):
+        """Remove the event filter from the 3D plotter widget."""
+        try:
+            mw = self.parent_dlg.mw if hasattr(self.parent_dlg, 'mw') else None
+            if mw:
+                v3d = getattr(mw, 'view_3d_manager', None)
+                plotter = getattr(v3d, 'plotter', None) if v3d else None
+                if plotter and self._click_filter:
+                    plotter.removeEventFilter(self._click_filter)
+        except Exception:
+            pass
+        self._click_filter = None
+
+    def _on_plotter_click(self, x, y, widget):
+        """Called when a non-drag left click is detected on the 3D plotter widget."""
+        try:
+            import vtk
+            mw = self.parent_dlg.mw if hasattr(self.parent_dlg, 'mw') else None
+            if not mw:
+                logging.warning("NMR click: parent_dlg has no 'mw'")
+                return
+            v3d = getattr(mw, 'view_3d_manager', None)
+            if not v3d:
+                logging.warning("NMR click: mw has no 'view_3d_manager'")
+                return
+            plotter = getattr(v3d, 'plotter', None)
+            if not plotter:
+                logging.warning("NMR click: view_3d_manager has no 'plotter'")
+                return
+
+            atom_actor = getattr(v3d, 'atom_actor', None)
+            if atom_actor is None:
+                logging.warning("NMR click: view_3d_manager has no 'atom_actor'")
+                return
+
+            atom_positions = getattr(v3d, 'atom_positions_3d', None)
+            if atom_positions is None:
+                logging.warning("NMR click: view_3d_manager has no 'atom_positions_3d'")
+                return
+
+            # Convert Qt (top-left origin) → VTK (bottom-left origin)
+            vtk_y = widget.height() - y
+
+            picker = vtk.vtkCellPicker()
+            picker.SetTolerance(0.005)
+            picker.Pick(x, vtk_y, 0, plotter.renderer)
+            picked_actor = picker.GetActor()
+
+            if picked_actor is None or picked_actor is not atom_actor:
+                return
+
+            # Find closest atom to pick position
+            pick_pos = picker.GetPickPosition()
+            if len(atom_positions) == 0:
+                return
+
+            diffs = atom_positions - np.array(pick_pos)
+            dists = (diffs ** 2).sum(axis=1)
+            best_idx = int(np.argmin(dists))
+
+            # Select NMR peaks matching this atom
+            self.select_peaks_by_atom_indices([best_idx])
+        except Exception as e:
+            logging.error("NMR click handler error: %s", e)
 
     def _check_external_selection(self):
         """Poll main window for 3D selection changes"""
@@ -195,13 +310,15 @@ class NMRDialog(QDialog):
 
         indices = set()
         
+        e3d = getattr(mw, 'edit_3d_manager', None)
+
         # Check standard 3D selection
-        if hasattr(mw, 'selected_atoms_3d') and mw.edit_3d_manager.selected_atoms_3d:
-            indices.update(mw.edit_3d_manager.selected_atoms_3d)
-            
+        if e3d and e3d.selected_atoms_3d:
+            indices.update(e3d.selected_atoms_3d)
+
         # Check measurement selection
-        if hasattr(mw, 'selected_atoms_for_measurement') and mw.edit_3d_manager.selected_atoms_for_measurement:
-            for item in mw.edit_3d_manager.selected_atoms_for_measurement:
+        if e3d and e3d.selected_atoms_for_measurement:
+            for item in e3d.selected_atoms_for_measurement:
                 if isinstance(item, int):
                     indices.add(item)
                     
@@ -1747,18 +1864,21 @@ class NMRDialog(QDialog):
             if not is_external_sync:
                 # Ensure we don't have double spheres (Green + Yellow).
                 # We clear the global selection so ONLY our internal Yellow spheres are visible.
-                if hasattr(mw, 'selected_atoms_3d'):
-                    mw.edit_3d_manager.selected_atoms_3d.clear()
+                e3d = getattr(mw, 'edit_3d_manager', None)
+                if e3d:
+                    e3d.selected_atoms_3d.clear()
                 
                 # CRITICAL: Update our sync tracker so the polling loop knows WE did this
                 # and doesn't interpret the empty set as a user unselection.
                 self._last_synced_mw_selection = frozenset()
 
                 # Sync to MW if we are the originator (internal sync)
-                if hasattr(mw, 'update_3d_selection_display'):
-                    mw.edit_3d_manager.update_3d_selection_display()
-                elif hasattr(mw, 'update_selection_visuals'):
-                    mw.update_selection_visuals()
+                e3d = getattr(mw, 'edit_3d_manager', None)
+                if e3d:
+                    try:
+                        e3d.update_3d_selection_display()
+                    except Exception:
+                        pass
 
             # Draw yellow highlights for NMR selection
             self.draw_custom_nmr_highlights_3d(all_peak_indices)
@@ -1767,27 +1887,29 @@ class NMRDialog(QDialog):
             # print(f"Highlighting {len(self.selected_peak_indices)} peaks with {len(atom_coords)} atoms")
             
             # Render once after all labels added
-            if hasattr(self.parent_dlg.mw, 'plotter'):
-                self.parent_dlg.mw.plotter.render()
+            v3d = getattr(self.parent_dlg.mw, 'view_3d_manager', None)
+            if v3d and hasattr(v3d, 'plotter'):
+                v3d.plotter.render()
         
     
     def add_atom_label(self, atom_idx, atom_sym):
         """Add a single atom label to 3D viewer"""
         # Check if parent has plotter
-        if not hasattr(self.parent_dlg, 'mw') or not hasattr(self.parent_dlg.mw, 'plotter'):
+        v3d = getattr(self.parent_dlg.mw, 'view_3d_manager', None) if hasattr(self.parent_dlg, 'mw') else None
+        if not v3d or not hasattr(v3d, 'plotter'):
             return
-        
+
         # Get coordinates
         coords = self.parent_dlg.parser.data.get('coords', [])
         if not coords or atom_idx >= len(coords):
             return
-        
+
         try:
             pos = coords[atom_idx]
             label_pos = [pos[0], pos[1], pos[2] + 0.4]  # Offset above atom
-            
+
             label_name = f"nmr_label_{atom_idx}"
-            actor = self.parent_dlg.mw.plotter.add_point_labels(
+            actor = v3d.plotter.add_point_labels(
                 [label_pos],
                 [f"{atom_sym}{atom_idx}"],
                 font_size=12,
@@ -1826,16 +1948,13 @@ class NMRDialog(QDialog):
         # [Commented out to avoid doubled spheres]
         if hasattr(self.parent_dlg, 'mw'):
             mw = self.parent_dlg.mw
-            # We clear mw.edit_3d_manager.selected_atoms_3d to avoid greenish spheres from "polluting" the view
-            # The NMR dialog handles its own yellow highlights (internal logic)
-            if hasattr(mw, 'selected_atoms_3d'):
-                mw.edit_3d_manager.selected_atoms_3d.clear()
-            
-            # Re-enable MW visual update so its internal highlights are also cleared
-            if hasattr(mw, 'update_3d_selection_display'):
-                mw.edit_3d_manager.update_3d_selection_display()
-            elif hasattr(mw, 'update_selection_visuals'):
-                mw.update_selection_visuals()
+            e3d = getattr(mw, 'edit_3d_manager', None)
+            if e3d:
+                e3d.selected_atoms_3d.clear()
+                try:
+                    e3d.update_3d_selection_display()
+                except Exception:
+                    pass
         
         # Redraw spectrum
         if hasattr(self, 'canvas'):
@@ -1926,7 +2045,8 @@ class NMRDialog(QDialog):
                     m = Multiplet(shift * spectrometer_freq, intensity, couplings_list)
                     m.w = width_hz
                     all_multiplets.append(m)
-                except: pass
+                except Exception as e:
+                    logging.error("NMR: Multiplet creation failed for shift=%.3f: %s", shift, e)
 
         # --- プロット範囲計算 ---
         if self.chk_auto_x.isChecked():
@@ -1959,7 +2079,8 @@ class NMRDialog(QDialog):
                 y_total = np.interp(x_hz_grid, x_sim, y_sim, left=0, right=0)
                 if np.max(y_total) >= 1e-9:
                     nmrsim_success = True
-            except: pass
+            except Exception as e:
+                logging.error("NMR: nmrsim Spectrum simulation failed: %s", e)
         
         if not nmrsim_success:
              all_peaks = []
@@ -2049,10 +2170,11 @@ class NMRDialog(QDialog):
     
     def clear_atom_labels(self):
         """Remove all atom labels and custom selection spheres from 3D viewer"""
-        if not hasattr(self.parent_dlg, 'mw') or not hasattr(self.parent_dlg.mw, 'plotter'):
+        v3d = getattr(self.parent_dlg.mw, 'view_3d_manager', None) if hasattr(self.parent_dlg, 'mw') else None
+        if not v3d or not hasattr(v3d, 'plotter'):
             return
-            
-        plotter = self.parent_dlg.mw.plotter
+
+        plotter = v3d.plotter
         
         # 1. Clear custom NMR selection spheres by name (most reliable in PyVista)
         try:
@@ -2093,11 +2215,12 @@ class NMRDialog(QDialog):
             
     def draw_custom_nmr_highlights_3d(self, atom_indices):
         """Draw yellow highlight spheres for selected atoms in 3D viewer"""
-        if not hasattr(self.parent_dlg, 'mw') or not hasattr(self.parent_dlg.mw, 'plotter'):
+        mw = self.parent_dlg.mw if hasattr(self.parent_dlg, 'mw') else None
+        v3d = getattr(mw, 'view_3d_manager', None) if mw else None
+        if not v3d or not hasattr(v3d, 'plotter'):
             return
-            
-        plotter = self.parent_dlg.mw.plotter
-        mw = self.parent_dlg.mw
+
+        plotter = v3d.plotter
         
         # ALWAYS clear existing custom highlights first to prevent stacking/phantom spheres
         try:
@@ -2109,7 +2232,7 @@ class NMRDialog(QDialog):
         self._nmr_sphere_actors = []
         
         # If no indices provided, just render the cleared state and return
-        if not atom_indices or not hasattr(mw, 'atom_positions_3d'):
+        if not atom_indices or not hasattr(v3d, 'atom_positions_3d'):
              try:
                  plotter.render()
              except:
@@ -2162,6 +2285,7 @@ class NMRDialog(QDialog):
     def closeEvent(self, event):
         """Clean up labels when dialog closes"""
         self.save_settings()
+        self._disable_plotter_picking()
         self.clear_atom_labels()
         super().closeEvent(event)
 
