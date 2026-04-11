@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
+import logging
 
 class MplCanvas(FigureCanvasQTAgg):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
@@ -242,23 +243,25 @@ class SpectrumWidget(QWidget):
     def set_dual_axis(self, enable):
         self.use_dual_axis = enable
         # Clear twin axis if disabling
-        if not enable and hasattr(self, 'ax2'):
+        if not enable and getattr(self, 'ax2', None) is not None:
             try: 
                 self.ax2.remove()
                 del self.ax2
-            except: pass
+            except Exception as _e:
+                logging.warning("[spectrum_widget.py:249] silenced: %s", _e)
         self.plot_spectrum()
 
     def plot_spectrum(self):
         self._is_plotting = True
         try:
             self.canvas.axes.clear()
-            if hasattr(self, 'ax2'):
+            if getattr(self, 'ax2', None) is not None:
                  try: self.ax2.clear()
-                 except: pass
+                 except Exception as _e:
+                     logging.warning("[spectrum_widget.py:258] silenced: %s", _e)
             
-            if not hasattr(self, 'scaling_factor'): self.scaling_factor = 1.0
-            if not hasattr(self, 'use_dual_axis'): self.use_dual_axis = False
+            if getattr(self, 'scaling_factor', None) is None: self.scaling_factor = 1.0
+            if getattr(self, 'use_dual_axis', None) is None: self.use_dual_axis = False
             
             # Filter valid data for Gaussian Curve
             gaussian_points = []
@@ -393,7 +396,7 @@ class SpectrumWidget(QWidget):
             # Determine Axes for Sticks
             ax_sticks = self.canvas.axes
             if self.use_dual_axis:
-                 if not hasattr(self, 'ax2'):
+                 if getattr(self, 'ax2', None) is None:
                      self.ax2 = self.canvas.axes.twinx()
                  ax_sticks = self.ax2
                  ax_sticks.set_ylabel(self.y_unit_sticks)
@@ -404,7 +407,7 @@ class SpectrumWidget(QWidget):
                  self.ax2.yaxis.tick_right()
                  self.ax2.yaxis.set_label_position("right")
                  
-            elif hasattr(self, 'ax2'):
+            elif getattr(self, 'ax2', None) is not None:
                  # Reset Primary to Left if no dual axis
                  self.canvas.axes.yaxis.tick_left()
                  self.canvas.axes.yaxis.set_label_position("left")
@@ -422,7 +425,7 @@ class SpectrumWidget(QWidget):
                 all_xs = [item.get(self.x_key, 0.0) for item in self.data_list]
                 if all_xs:
                     if self.selected_item:
-                        sel_x = self.selected_item.get(self.x_key)
+                        sel_x = self.selected_item.get(self.x_key, None)
                         non_sel_xs = [x for x in all_xs if sel_x is None or abs(x - sel_x) > 1e-7]
                     else:
                         sel_x = None
@@ -446,7 +449,7 @@ class SpectrumWidget(QWidget):
                 
             # Highlight Selected Item
             if self.selected_item:
-                sel_x = self.selected_item.get(self.x_key)
+                sel_x = self.selected_item.get(self.x_key, None)
                 
                 # Use stick key for highlight height
                 t_key = self.y_key_sticks if self.y_key_sticks else self.y_key
@@ -491,7 +494,7 @@ class SpectrumWidget(QWidget):
 
 
             # Sync Dual Axis Limits to align Zeros
-            if self.use_dual_axis and hasattr(self, 'ax2') and stick_points:
+            if self.use_dual_axis and getattr(self, 'ax2', None) is not None and stick_points:
                 # Get stick data range
                 st_ys = [p[1] for p in stick_points]
                 if not st_ys:
@@ -581,7 +584,7 @@ class SpectrumWidget(QWidget):
 
     def on_click(self, event):
         valid_axes = [self.canvas.axes]
-        if hasattr(self, 'ax2'):
+        if getattr(self, 'ax2', None) is not None:
             valid_axes.append(self.ax2)
             
         if event.inaxes not in valid_axes: return
@@ -616,7 +619,7 @@ class SpectrumWidget(QWidget):
 
         for item in self.data_list:
             x = item.get(self.x_key, 0.0)
-            y = item.get(t_key, 0.0)
+            item.get(t_key, 0.0)
             # Remove intensity check to allow selecting dark states
             # if abs(y) < 1e-12: continue
 

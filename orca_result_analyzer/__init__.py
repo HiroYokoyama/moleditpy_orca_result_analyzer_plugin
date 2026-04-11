@@ -1,15 +1,12 @@
-import os
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.2.0"
+PLUGIN_VERSION = "2.3.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
-from .gui import OrcaResultAnalyzerDialog
-from .parser import OrcaParser
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
 import importlib
-import os
+import logging
 
 # Global reference to keep window alive
 _analyzer_window = None
@@ -67,7 +64,8 @@ def initialize(context):
         if _analyzer_window is not None:
             try:
                 _analyzer_window.close()
-            except: pass
+            except Exception as _e:
+                logging.warning("[__init__.py:70] silenced: %s", _e)
             _analyzer_window = None
             
         # Open Dialog (Modeless)
@@ -98,7 +96,10 @@ def initialize(context):
                     if "* O   R   C   A *" in header or "Program Version" in header:
                         open_orca_file(path)
                         return True
-            except: pass
+            except ImportError:
+                pass
+            except Exception as _e:
+                logging.warning("[__init__.py:101] silenced: %s", _e)
         return False
 
     # Register Opener
@@ -162,8 +163,8 @@ def run(mw):
     if _analyzer_window is not None:
         try:
             _analyzer_window.close()
-        except Exception:
-            pass
+        except Exception as _e:
+            logging.warning("[__init__.py:165] silenced: %s", _e)
         _analyzer_window = None
 
     from .gui import OrcaResultAnalyzerDialog

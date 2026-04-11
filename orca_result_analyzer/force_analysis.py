@@ -4,8 +4,9 @@ import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                              QDoubleSpinBox, QGroupBox, QSlider, QTableWidget, 
-                             QTableWidgetItem, QCheckBox, QAbstractItemView)
+                             QTableWidgetItem, QCheckBox, QAbstractItemView, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer
+import logging
 
 class ForceViewerDialog(QDialog):
     def __init__(self, parent_dlg, gradients, parser=None):
@@ -125,7 +126,7 @@ class ForceViewerDialog(QDialog):
             # Find max magnitude
             max_mag = 0.0
             for g in self.gradients:
-                vec = g.get('grad', g.get('vector'))
+                vec = g.get('grad', g.get('vector', None))
                 if vec:
                     mag = np.linalg.norm(vec)
                     if mag > max_mag: max_mag = mag
@@ -148,7 +149,8 @@ class ForceViewerDialog(QDialog):
                 # If currently visualizing, update
                 if self.btn_visualize.isChecked():
                     self.update_vectors()
-        except: pass
+        except Exception as _e:
+            logging.warning("[force_analysis.py:151] silenced: %s", _e)
     
     def _setup_trajectory_controls(self, layout):
         """Setup trajectory navigation controls"""
@@ -234,7 +236,7 @@ class ForceViewerDialog(QDialog):
             self.gradients = self.parser.data.get("gradients", []) if self.parser else []
             
             # Auto-Scale if requested
-            if hasattr(self, 'chk_auto_scale') and self.chk_auto_scale.isChecked():
+            if getattr(self, 'chk_auto_scale', None) is not None and self.chk_auto_scale.isChecked():
                 self.auto_scale()
                 
             # Populate table
@@ -260,7 +262,7 @@ class ForceViewerDialog(QDialog):
             self.gradients = step.get('gradients', [])
             
             # Auto-Scale if requested
-            if hasattr(self, 'chk_auto_scale') and self.chk_auto_scale.isChecked():
+            if getattr(self, 'chk_auto_scale', None) is not None and self.chk_auto_scale.isChecked():
                 self.auto_scale()
                 
             # Populate table
@@ -366,7 +368,7 @@ class ForceViewerDialog(QDialog):
             self.traj_steps = self.parser.data.get("scan_steps", [])
             
             # Update slider if it exists
-            if hasattr(self, 'traj_slider'):
+            if getattr(self, 'traj_slider', None) is not None:
                 self.traj_slider.setRange(-1, len(self.traj_steps) - 1)
                 # Ensure current_step_idx is still valid
                 if self.current_step_idx >= len(self.traj_steps):
@@ -417,8 +419,8 @@ class ForceViewerDialog(QDialog):
                 rdDetermineBonds.DetermineConnectivity(mol)
                 charge = self.parser.data.get('charge', 0) if self.parser else 0
                 rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[force_analysis.py:420] silenced: %s", _e)
         
         final_mol = mol.GetMol()
         
@@ -452,11 +454,11 @@ class ForceViewerDialog(QDialog):
         
         # Populate with gradient data (force = -gradient)
         for grad_item in self.gradients:
-            atom_idx = grad_item.get('atom_idx')
+            atom_idx = grad_item.get('atom_idx', None)
             if atom_idx is None or atom_idx >= len(atoms):
                 continue
             
-            vec = grad_item.get('grad', grad_item.get('vector'))
+            vec = grad_item.get('grad', grad_item.get('vector', None))
             if not vec or len(vec) != 3:
                 continue
             
@@ -519,11 +521,11 @@ class ForceViewerDialog(QDialog):
             
             # Draw force vectors
             for grad_item in self.gradients:
-                atom_idx = grad_item.get('atom_idx')
+                atom_idx = grad_item.get('atom_idx', None)
                 if atom_idx is None or atom_idx >= len(current_coords):
                     continue
                 
-                vec = grad_item.get('grad', grad_item.get('vector'))
+                vec = grad_item.get('grad', grad_item.get('vector', None))
                 if not vec or len(vec) != 3:
                     continue
                 
@@ -578,8 +580,8 @@ class ForceViewerDialog(QDialog):
         for actor in self.actors:
             try:
                 mw.plotter.remove_actor(actor)
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[force_analysis.py:581] silenced: %s", _e)
         
         self.actors = []
         mw.plotter.render()
@@ -612,7 +614,8 @@ class ForceViewerDialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception as _e:
+                logging.warning("[force_analysis.py:615] silenced: %s", _e)
             
         force_settings = {
             # "scale": self.spin_scale.value(), # Do not save scale

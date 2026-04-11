@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
                              QMessageBox, QApplication, QButtonGroup)
 from PyQt6.QtCore import Qt, QTimer
 from .utils import get_default_export_path
+import logging
 
 try:
     from rdkit import Chem
@@ -57,13 +58,13 @@ class TrajectoryResultDialog(QDialog):
             self.steps = self.scan_points
             self.showing_scan_points = True
         # Detection for NEB / Path analysis
-        is_neb = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.all_steps)
+        is_neb = any(s.get('type', None) in ['neb_image', 'neb_step'] for s in self.all_steps)
         
         self.show_relative = self.showing_scan_points or is_neb
         
         # Default X-axis to Coordinate for NEB (always) or if scan coord values are present.
         # NEB path distance is always the meaningful x-axis even when dist=0.0 on the first image.
-        has_coord_values = any(s.get('scan_coord') is not None or s.get('dist') is not None for s in self.all_steps)
+        has_coord_values = any(s.get('scan_coord', None) is not None or s.get('dist', None) is not None for s in self.all_steps)
         self.show_coord_x = is_neb or has_coord_values
         self.use_log_scale = False
         self.is_playing = False
@@ -107,9 +108,9 @@ class TrajectoryResultDialog(QDialog):
         # parser.py tags NEB path summary items with type='neb_image'
         if not self.steps: return
         
-        is_neb = self.steps[0].get('type') == 'neb_image'
+        is_neb = self.steps[0].get('type', None) == 'neb_image'
         
-        if not self.steps[0].get('atoms') and is_neb:
+        if not self.steps[0].get('atoms', None) and is_neb:
              loaded = False
              
              # 1. Try Specific Candidates (Parsed or Output-based)
@@ -131,7 +132,7 @@ class TrajectoryResultDialog(QDialog):
                          loaded = True
                          break
                      except Exception as e:
-                         pass
+                         logging.warning("[traj_analysis.py:133] silenced: %s", e)
             
              if not loaded and self.base_dir:
                  # 2. Heuristic: look for unique *_MEP_trj.xyz in base_dir
@@ -141,7 +142,8 @@ class TrajectoryResultDialog(QDialog):
                          full_path = os.path.join(self.base_dir, f_cands[0])
                          self.load_external_trj(full_path, silent=True)
                          loaded = True
-                 except: pass
+                 except Exception as _e:
+                     logging.warning("[traj_analysis.py:144] silenced: %s", _e)
             
              if not loaded:
                  # 3. Last resort: prompt user
@@ -255,7 +257,7 @@ class TrajectoryResultDialog(QDialog):
         self.btn_play = QPushButton("Play")
         self.btn_play.clicked.connect(self.toggle_play)
         # Disable if no structure (NEB Summary)
-        if self.steps and not self.steps[0].get('atoms'):
+        if self.steps and not self.steps[0].get('atoms', None):
             self.btn_play.setEnabled(False)
         btn_layout.addWidget(self.btn_play)
         
@@ -294,14 +296,14 @@ class TrajectoryResultDialog(QDialog):
         self.btn_save_gif.clicked.connect(self.save_gif)
         self.btn_save_gif.setEnabled(HAS_PIL)
         # Disable if no structure (NEB Summary)
-        if self.steps and not self.steps[0].get('atoms'):
+        if self.steps and not self.steps[0].get('atoms', None):
             self.btn_save_gif.setEnabled(False)
         btn_layout.addWidget(self.btn_save_gif)
         
         # Load MEP TRJ Button (Only for NEB)
         is_neb = False
         if self.steps:
-            ft = self.steps[0].get('type')
+            ft = self.steps[0].get('type', None)
             if ft in ['neb_image', 'neb_step']:
                 is_neb = True
                 
@@ -337,7 +339,7 @@ class TrajectoryResultDialog(QDialog):
         has_scan_ids = False
         
         for s in steps:
-            sid = s.get('scan_step_id')
+            sid = s.get('scan_step_id', None)
             if sid is not None:
                 has_scan_ids = True
                 if sid not in groups: groups[sid] = []
@@ -374,7 +376,7 @@ class TrajectoryResultDialog(QDialog):
         else:
             self.steps = self.all_steps
             # NEB stays relative; plain optimization goes absolute
-            is_neb = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.steps)
+            is_neb = any(s.get('type', None) in ['neb_image', 'neb_step'] for s in self.steps)
             self.show_relative = is_neb
         
         # Update energy radio silently (no signal -> no double plot)
@@ -457,15 +459,15 @@ class TrajectoryResultDialog(QDialog):
             # Use explicit None checks so that 0.0 (first NEB image) is not skipped.
             x = []
             for i, s in enumerate(self.steps):
-                v = s.get('scan_coord')
+                v = s.get('scan_coord', None)
                 if v is None:
-                    v = s.get('dist')
+                    v = s.get('dist', None)
                 if v is None:
                     v = float(i)
                 x.append(v)
 
             xlabel = "Scan Coordinate"
-            if self.steps and self.steps[0].get('type') in ['neb_image', 'neb_step']:
+            if self.steps and self.steps[0].get('type', None) in ['neb_image', 'neb_step']:
                 xlabel = "Path Distance (Angstrom)"
         else:
             x = list(range(len(self.steps)))
@@ -515,12 +517,14 @@ class TrajectoryResultDialog(QDialog):
         
     def highlight_point(self, idx):
         # Remove old markers
-        if hasattr(self, '_highlight_marker'):
+        if getattr(self, '_highlight_marker', None) is not None:
             try: self._highlight_marker.remove()
-            except: pass
-        if hasattr(self, '_highlight_line'):
+            except Exception as _e:
+                logging.warning("[traj_analysis.py:520] silenced: %s", _e)
+        if getattr(self, '_highlight_line', None) is not None:
             try: self._highlight_line.remove()
-            except: pass
+            except Exception as _e:
+                logging.warning("[traj_analysis.py:523] silenced: %s", _e)
             
         if self.show_relative:
             y = self.display_energies[idx]
@@ -529,9 +533,9 @@ class TrajectoryResultDialog(QDialog):
             
         if self.show_coord_x:
             # Explicit None checks so that 0.0 is not treated as missing.
-            x_val = self.steps[idx].get('scan_coord')
+            x_val = self.steps[idx].get('scan_coord', None)
             if x_val is None:
-                x_val = self.steps[idx].get('dist')
+                x_val = self.steps[idx].get('dist', None)
             if x_val is None:
                 x_val = float(idx)
         else:
@@ -555,9 +559,9 @@ class TrajectoryResultDialog(QDialog):
         abs_h = step['energy']
         
         coord_info = ""
-        cv = step.get('scan_coord')
+        cv = step.get('scan_coord', None)
         if cv is None:
-            cv = step.get('dist')
+            cv = step.get('dist', None)
         if cv is not None:
             coord_info = f" | Coord: {cv:.6f}"
 
@@ -567,7 +571,7 @@ class TrajectoryResultDialog(QDialog):
             self.lbl_info.setText(f"Step {idx+1}/{len(self.steps)}{coord_info} | {val:.8f} {self.current_unit}")
         
         # NEB Safety: If no atoms (PATH SUMMARY), skip structure update
-        if not step.get('atoms'):
+        if not step.get('atoms', None):
             return
             
         self.update_structure(step['atoms'], step['coords'])
@@ -594,9 +598,8 @@ class TrajectoryResultDialog(QDialog):
             try:
                 rdDetermineBonds.DetermineConnectivity(mol)
                 rdDetermineBonds.DetermineBondOrders(mol, charge=self.charge)
-            except Exception as e:
-                # print(f"Bond determination failed at step: {e}")
-                pass
+            except Exception:
+                pass  # RDKit bond determination fails for some charge states; non-fatal
                 
         final_mol = mol.GetMol()
         
@@ -645,8 +648,8 @@ class TrajectoryResultDialog(QDialog):
             # (Preserves Path Summary distances even if XYZ lacks them)
             if len(steps) == len(self.steps):
                 for i, s in enumerate(steps):
-                    if s.get('dist') is None:
-                        d = self.steps[i].get('dist')
+                    if s.get('dist', None) is None:
+                        d = self.steps[i].get('dist', None)
                         s['dist'] = d
                         s['scan_coord'] = d
 
@@ -663,14 +666,14 @@ class TrajectoryResultDialog(QDialog):
             self.slider.blockSignals(False)
             
             # Re-enable buttons if we now have structure
-            if self.steps and self.steps[0].get('atoms'):
+            if self.steps and self.steps[0].get('atoms', None):
                 self.btn_play.setEnabled(True)
                 self.btn_save_gif.setEnabled(HAS_PIL)
             
             # Re-detect coordinate availability for external data.
             # NEB is always coord-based even when XYZ frames lack a dist label in comments.
-            is_neb_trj = any(s.get('type') in ['neb_image', 'neb_step'] for s in self.steps)
-            has_coords = any(s.get('scan_coord') is not None or s.get('dist') is not None for s in self.steps)
+            is_neb_trj = any(s.get('type', None) in ['neb_image', 'neb_step'] for s in self.steps)
+            has_coords = any(s.get('scan_coord', None) is not None or s.get('dist', None) is not None for s in self.steps)
             self.show_coord_x = is_neb_trj or has_coords
 
             # Update X-axis radio buttons
@@ -696,25 +699,29 @@ class TrajectoryResultDialog(QDialog):
                 if hasattr(mw.ui_manager, '_enter_3d_viewer_ui_mode'):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
-                    except: pass
+                    except Exception as _e:
+                        logging.warning("[traj_analysis.py:699] silenced: %s", _e)
                 elif hasattr(mw.ui_manager, '_enable_3d_features'):
                     try:
                         mw.ui_manager._enable_3d_features(True)
                         if hasattr(mw.ui_manager, 'minimize_2d_panel'):
                             mw.ui_manager.minimize_2d_panel()
-                    except: pass
+                    except Exception as _e:
+                        logging.warning("[traj_analysis.py:705] silenced: %s", _e)
             elif hasattr(mw, 'init_manager') and hasattr(mw.init_manager, 'splitter'):
                 # Fallback for manual splitter manipulation if ui_manager is missing
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
-                except: pass
+                except Exception as _e:
+                    logging.warning("[traj_analysis.py:711] silenced: %s", _e)
                 
             # Reset Camera
             if hasattr(mw, 'plotter') and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
-                except: pass
+                except Exception as _e:
+                    logging.warning("[traj_analysis.py:717] silenced: %s", _e)
                 
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
@@ -723,7 +730,7 @@ class TrajectoryResultDialog(QDialog):
 
     def on_pick(self, event):
         # Disable pick if current steps have no atoms (NEB Summary)
-        if self.steps and not self.steps[0].get('atoms'):
+        if self.steps and not self.steps[0].get('atoms', None):
              return
 
         if event.artist and hasattr(event, 'ind'):
@@ -740,9 +747,9 @@ class TrajectoryResultDialog(QDialog):
                 self.annot.xy = pos
                 val = self.display_energies[idx]
                 abs_h = self.steps[idx]['energy']
-                cv = self.steps[idx].get('scan_coord')
+                cv = self.steps[idx].get('scan_coord', None)
                 if cv is None:
-                    cv = self.steps[idx].get('dist')
+                    cv = self.steps[idx].get('dist', None)
                 
                 coord_txt = f"Coord: {cv:.6f}\n" if cv is not None else ""
                 
@@ -760,7 +767,7 @@ class TrajectoryResultDialog(QDialog):
             
     def toggle_play(self):
         # Disable play if no atoms
-        if self.steps and not self.steps[0].get('atoms'):
+        if self.steps and not self.steps[0].get('atoms', None):
              return
 
         if self.is_playing:
@@ -823,13 +830,15 @@ class TrajectoryResultDialog(QDialog):
 
     def clear_selection(self):
         # Remove highlight markers and line
-        if hasattr(self, '_highlight_marker'):
+        if getattr(self, '_highlight_marker', None) is not None:
             try: self._highlight_marker.remove()
-            except: pass
+            except Exception as _e:
+                logging.warning("[traj_analysis.py:828] silenced: %s", _e)
             del self._highlight_marker
-        if hasattr(self, '_highlight_line'):
+        if getattr(self, '_highlight_line', None) is not None:
             try: self._highlight_line.remove()
-            except: pass
+            except Exception as _e:
+                logging.warning("[traj_analysis.py:832] silenced: %s", _e)
             del self._highlight_line
         
         self.lbl_info.setText("Selection Cleared")
@@ -962,6 +971,6 @@ class TrajectoryResultDialog(QDialog):
 
     def closeEvent(self, event):
         """Clean up timer and resources"""
-        if hasattr(self, 'timer') and self.timer.isActive():
+        if getattr(self, 'timer', None) is not None and self.timer.isActive():
             self.timer.stop()
         super().closeEvent(event)

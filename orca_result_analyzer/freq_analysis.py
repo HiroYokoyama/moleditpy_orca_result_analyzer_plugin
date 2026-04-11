@@ -1,8 +1,7 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-                             QTreeWidget, QTreeWidgetItem, QHeaderView, QCheckBox, 
-                             QDoubleSpinBox, QSlider, QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, 
-                             QSpinBox, QMessageBox, QApplication, QColorDialog, QGroupBox, QAbstractItemView, 
-                             QTreeWidgetItemIterator, QComboBox)
+                             QTreeWidget, QTreeWidgetItem, QCheckBox, QDoubleSpinBox, 
+                             QWidget, QRadioButton, QFileDialog, QFormLayout, QDialogButtonBox, QSpinBox, QMessageBox, 
+                             QApplication, QColorDialog, QGroupBox, QAbstractItemView, QTreeWidgetItemIterator, QComboBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 import math
@@ -13,6 +12,7 @@ import traceback
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
 from .utils import get_default_export_path
+import logging
 
 try:
     from rdkit.Geometry import Point3D
@@ -51,7 +51,6 @@ class FreqSpectrumWindow(QWidget):
         settings_file = self.freq_dialog.settings_file
         if os.path.exists(settings_file):
             try:
-                import json
                 with open(settings_file, 'r') as f:
                     all_settings = json.load(f)
                 settings = all_settings.get("freq_settings", {})
@@ -60,7 +59,8 @@ class FreqSpectrumWindow(QWidget):
                 if "spec_markers" in settings: self.chk_markers.setChecked(bool(settings["spec_markers"]))
                 if "spec_auto_x" in settings: self.chk_auto_x.setChecked(bool(settings["spec_auto_x"]))
                 if "spec_auto_y" in settings: self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
-            except: pass
+            except Exception as _e:
+                logging.warning("[freq_analysis.py:63] silenced: %s", _e)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -654,7 +654,7 @@ class FrequencyDialog(QDialog):
         
         if is_manual: return
         
-        p = self.default_presets.get(preset) or self.custom_presets.get(preset)
+        p = self.default_presets.get(preset, None) or self.custom_presets.get(preset, None)
         if p:
             self.spin_sf_a.blockSignals(True)
             self.spin_sf_b.blockSignals(True)
@@ -715,7 +715,8 @@ class FrequencyDialog(QDialog):
                     self.tree.setCurrentItem(tree_item)
                     self.tree.scrollToItem(tree_item, QAbstractItemView.ScrollHint.PositionAtCenter)
                     break
-            except: pass
+            except Exception as _e:
+                logging.warning("[freq_analysis.py:718] silenced: %s", _e)
             it += 1
 
     def on_mode_selected(self, current, previous):
@@ -733,7 +734,7 @@ class FrequencyDialog(QDialog):
              
              # SpectrumWidget's data_list is what we need to search.
              for item in self.spectrum_win.spectrum.data_list:
-                  if item.get('_orig_idx') == idx:
+                  if item.get('_orig_idx', None) == idx:
                        self.spectrum_win.spectrum.set_selected_item(item)
                        break
         
@@ -753,7 +754,8 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except: pass
+            except Exception as _e:
+                logging.warning("[freq_analysis.py:756] silenced: %s", _e)
             self.vector_actor = None
             
         # 2. Reset geometry
@@ -854,7 +856,8 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except: pass
+            except Exception as _e:
+                logging.warning("[freq_analysis.py:857] silenced: %s", _e)
             self.vector_actor = None
         
         vecs = self.frequencies[self.current_mode_idx].get("vector", [])
@@ -1040,15 +1043,13 @@ class FrequencyDialog(QDialog):
         self.vector_res = val
         self.update_view()
 
-    def _dummy_import_pv(self):
-        import pyvista as pv # Ensure pv is available in local scope if needed, though usually global
-              
     def closeEvent(self, event):
         self.stop_animation()
         if self.vector_actor:
              try:
                  self.mw.plotter.remove_actor(self.vector_actor)
-             except: pass
+             except Exception as _e:
+                 logging.warning("[freq_analysis.py:1051] silenced: %s", _e)
         if self.spectrum_win:
              self.spectrum_win.close()
              
@@ -1095,10 +1096,10 @@ class FrequencyDialog(QDialog):
         all_settings = {}
         if os.path.exists(self.settings_file):
             try:
-                import json
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception as _e:
+                logging.warning("[freq_analysis.py:1101] silenced: %s", _e)
             
         freq_settings = {
             "sf_a": self.spin_sf_a.value(),

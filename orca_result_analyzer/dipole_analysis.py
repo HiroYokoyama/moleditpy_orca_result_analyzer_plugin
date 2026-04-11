@@ -5,8 +5,9 @@ import json
 import pyvista as pv
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QCheckBox, QDoubleSpinBox, QColorDialog, QSpinBox,
-                             QGroupBox, QFrame)
+                             QGroupBox)
 from PyQt6.QtGui import QColor
+import logging
 
 class DipoleDialog(QDialog):
     def __init__(self, parent_dlg, dipole_data):
@@ -96,7 +97,8 @@ class DipoleDialog(QDialog):
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
-            except: pass
+            except Exception as _e:
+                logging.warning("[dipole_analysis.py:99] silenced: %s", _e)
             self.arrow_actor = None
             
         if not self.chk_show.isChecked():
@@ -149,7 +151,8 @@ class DipoleDialog(QDialog):
              try:
                  self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
                  self.parent_dlg.mw.plotter.render()
-             except: pass
+             except Exception as _e:
+                 logging.warning("[dipole_analysis.py:152] silenced: %s", _e)
         # Clean up reference in parent
         # Clean up reference in parent
         if hasattr(self.parent_dlg, 'dipole_dlg'):
@@ -191,7 +194,8 @@ class DipoleDialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception:
+                pass  # settings file may be empty or corrupt; start fresh
             
         dipole_settings = {
             # "scale": self.spin_scale.value(),

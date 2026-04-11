@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QTableWidget, QTableWidgetIte
 import os
 import json
 import csv
+import logging
 
 class ThermalTableDialog(QDialog):
     def __init__(self, parent, data):
@@ -67,7 +68,8 @@ class ThermalTableDialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception as _e:
+                logging.warning("[thermal_analysis.py:70] silenced: %s", _e)
             
         thermal_settings = {
             "show_details": self.chk_details.isChecked()
@@ -86,28 +88,28 @@ class ThermalTableDialog(QDialog):
         data = self.data
         
         # Extract values
-        temp = data.get("temperature")
-        e_el = data.get("electronic_energy")
-        zpe = data.get("zpe")
-        u = data.get("thermal_energy") 
-        h = data.get("enthalpy")
-        h_corr = data.get("enthalpy_corr")
-        s = data.get("entropy") 
-        g = data.get("gibbs")
-        g_corr = data.get("gibbs_corr")
+        temp = data.get("temperature", None)
+        e_el = data.get("electronic_energy", None)
+        zpe = data.get("zpe", None)
+        u = data.get("thermal_energy", None) 
+        h = data.get("enthalpy", None)
+        h_corr = data.get("enthalpy_corr", None)
+        s = data.get("entropy", None) 
+        g = data.get("gibbs", None)
+        g_corr = data.get("gibbs_corr", None)
         
         # Detailed
-        corr_vib = data.get("corr_vib")
-        corr_rot = data.get("corr_rot")
-        corr_trans = data.get("corr_trans")
-        corr_thermal_total = data.get("corr_thermal_total")
-        corr_zpe = data.get("corr_zpe")
-        corr_total = data.get("corr_total")
+        corr_vib = data.get("corr_vib", None)
+        corr_rot = data.get("corr_rot", None)
+        corr_trans = data.get("corr_trans", None)
+        corr_thermal_total = data.get("corr_thermal_total", None)
+        corr_zpe = data.get("corr_zpe", None)
+        corr_total = data.get("corr_total", None)
         
-        s_el = data.get("s_el")
-        s_vib = data.get("s_vib")
-        s_rot = data.get("s_rot")
-        s_trans = data.get("s_trans")
+        s_el = data.get("s_el", None)
+        s_vib = data.get("s_vib", None)
+        s_rot = data.get("s_rot", None)
+        s_trans = data.get("s_trans", None)
         
         items = []
         if e_el is not None:
@@ -128,7 +130,7 @@ class ThermalTableDialog(QDialog):
         ])
         
         # Imaginary Frequencies
-        imag_count = data.get("imaginary_freq_count")
+        imag_count = data.get("imaginary_freq_count", None)
         if imag_count is not None:
              items.append(("Imaginary Frequencies", str(imag_count)))
         

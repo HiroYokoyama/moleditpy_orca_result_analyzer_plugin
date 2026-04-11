@@ -2,9 +2,9 @@
 import os
 import importlib
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-                             QWidget, QGridLayout, QMessageBox, QMenuBar, QMenu, QFileDialog)
+                             QWidget, QGridLayout, QMessageBox, QMenuBar, QFileDialog)
 from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import QSize
 
 try:
     from rdkit import Chem
@@ -28,6 +28,7 @@ from .thermal_analysis import ThermalTableDialog
 from .scf_analysis import SCFTraceDialog
 
 from . import PLUGIN_VERSION
+import logging
 # from .logger import Logger
 
 class OrcaResultAnalyzerDialog(QDialog):
@@ -311,13 +312,13 @@ class OrcaResultAnalyzerDialog(QDialog):
                         'thermal_dlg', 'tddft_dlg', 'dipole_dlg', 
                         'charges_dlg', 'nmr_dlg', 'scf_dlg']
         for attr in dialog_attrs:
-            if hasattr(self, attr):
+            if getattr(self, attr, None) is not None:
                 dlg = getattr(self, attr)
                 if dlg is not None:
                     try:
                         dlg.close()
-                    except:
-                        pass
+                    except Exception as _e:
+                        logging.warning("[gui.py:319] silenced: %s", _e)
                 setattr(self, attr, None)
 
     def closeEvent(self, event):
@@ -368,7 +369,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             
             # --- Auto-load NEB Trajectory if present ---
             # Try to get explicit filename from parser first
-            parsed_trj = new_parser.data.get("neb_trj_file")
+            parsed_trj = new_parser.data.get("neb_trj_file", None)
             base_dir = os.path.dirname(path)
             
             potential_paths = []
@@ -395,7 +396,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                          new_parser.data['scan_steps'] = trj_steps
                          
                          # Update main structure with the last frame of the trajectory
-                         if trj_steps[-1].get('atoms') and trj_steps[-1].get('coords'):
+                         if trj_steps[-1].get('atoms', None) and trj_steps[-1].get('coords', None):
                              new_parser.data['atoms'] = trj_steps[-1]['atoms']
                              new_parser.data['coords'] = trj_steps[-1]['coords']
                              
@@ -403,7 +404,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                          self.mw.statusBar().showMessage(f"Loaded NEB Trajectory from {os.path.basename(trj_path)}", 5000)
                  except Exception as e:
                      # print(f"Failed to load associated TRJ: {e}")
-                     pass
+                     logging.warning("[gui.py:404] silenced: %s", e)
             else:
                  pass
 
@@ -432,7 +433,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def update_file_info_labels(self):
         """Update the file info labels (Path, Time, Versions)"""
-        if not hasattr(self, 'lbl_file_path'): return
+        if getattr(self, 'lbl_file_path', None) is None: return
 
         self.lbl_file_path.setText(self.file_path)
         
@@ -443,14 +444,15 @@ class OrcaResultAnalyzerDialog(QDialog):
                 from datetime import datetime
                 dt = datetime.fromtimestamp(os.path.getmtime(self.file_path))
                 mtime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            except: pass
+            except Exception as _e:
+                logging.warning("[gui.py:446] silenced: %s", _e)
         
-        if hasattr(self, 'lbl_updated'):
+        if getattr(self, 'lbl_updated', None) is not None:
             self.lbl_updated.setText(f"Updated: {mtime_str}")
             
         # ORCA Version
         v = self.parser.data.get("version", "Unknown") if self.parser else "Unknown"
-        if hasattr(self, 'lbl_version'):
+        if getattr(self, 'lbl_version', None) is not None:
             self.lbl_version.setText(f"ORCA Version: {v}")
 
 
@@ -501,7 +503,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         
         is_neb_summary = False
         if scan_steps and isinstance(scan_steps, list):
-             first_type = scan_steps[0].get('type')
+             first_type = scan_steps[0].get('type', None)
              if first_type in ['neb_image', 'neb_step']: # Both summary and XYZ steps usually lack Forces in standard ORCA XYZ
                  is_neb_summary = True
         
@@ -519,7 +521,7 @@ class OrcaResultAnalyzerDialog(QDialog):
              tooltip = "View trajectory steps"
         self.btn_forces.setToolTip(tooltip)
         
-        has_thermal = bool(data.get("thermal") or (data.get("frequencies") and "thermo" in str(data))) 
+        bool(data.get("thermal") or (data.get("frequencies", None) and "thermo" in str(data))) 
         self.btn_therm.setEnabled(bool(data.get("thermal")))
         
         has_tddft = bool(data.get("tddft"))
@@ -562,7 +564,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             
             try:
                 rdDetermineBonds.DetermineBonds(final_mol)
-            except: pass
+            except Exception:
+                pass  # RDKit bond determination fails for some charge states; non-fatal
             
             # Set as current molecule for export functionality
             if hasattr(self.mw, 'current_mol'):
@@ -589,8 +592,8 @@ class OrcaResultAnalyzerDialog(QDialog):
                 try:
                     self.mw.view_3d_manager.plotter.reset_camera()
                     self.mw.view_3d_manager.plotter.render()
-                except:
-                    pass
+                except Exception as _e:
+                    logging.warning("[gui.py:592] silenced: %s", _e)
         except Exception as e:
             # self.logger.error(f"Error loading 3D: {e}")
             # print(f"Error loading 3D: {e}")
@@ -598,8 +601,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             traceback.print_exc()
 
     def show_mo_analyzer(self):
-        mo_coeffs = self.parser.data.get("mo_coeffs")
-        orb_energies = self.parser.data.get("orbital_energies")
+        mo_coeffs = self.parser.data.get("mo_coeffs", None)
+        orb_energies = self.parser.data.get("orbital_energies", None)
         
         data_to_show = mo_coeffs if mo_coeffs else orb_energies
         
@@ -607,7 +610,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             QMessageBox.warning(self, "No Data", "No Molecular Orbital coefficients or energies found.")
             return
             
-        if hasattr(self, 'mo_dlg') and self.mo_dlg is not None:
+        if getattr(self, 'mo_dlg', None) is not None and self.mo_dlg is not None:
             self.mo_dlg.close()
             
         self.mo_dlg = MODialog(self, data_to_show)
@@ -622,7 +625,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         coords = self.parser.data.get("coords", [])
         
         # Ensure only one instance is open
-        if hasattr(self, 'freq_dlg') and self.freq_dlg is not None:
+        if getattr(self, 'freq_dlg', None) is not None and self.freq_dlg is not None:
             self.freq_dlg.close()
             
         self.freq_dlg = FrequencyDialog(self.mw, freqs, atoms, coords)
@@ -633,11 +636,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No trajectory steps (Optimization / Scan) found.")
             return
-        if hasattr(self, 'traj_dlg') and self.traj_dlg is not None:
+        if getattr(self, 'traj_dlg', None) is not None and self.traj_dlg is not None:
              self.traj_dlg.close()
         charge = self.parser.data.get("charge", 0)
         base_dir = os.path.dirname(self.file_path) if self.file_path else None
-        parsed_trj = self.parser.data.get("neb_trj_file")
+        parsed_trj = self.parser.data.get("neb_trj_file", None)
         self.traj_dlg = TrajectoryResultDialog(self.mw, data, charge=charge, title="Trajectory / NEB Analysis", 
                                                base_dir=base_dir, output_path=self.file_path, predicted_trj=parsed_trj)
         self.traj_dlg.show()
@@ -651,7 +654,7 @@ class OrcaResultAnalyzerDialog(QDialog):
              QMessageBox.warning(self, "No Info", "No cartesian gradients or optimization steps found.")
              return
         
-        if hasattr(self, 'forces_dlg') and self.forces_dlg is not None:
+        if getattr(self, 'forces_dlg', None) is not None and self.forces_dlg is not None:
              self.forces_dlg.close()
         # Open Force Viewer with trajectory support
         self.forces_dlg = ForceViewerDialog(self, grads, parser=self.parser)
@@ -662,7 +665,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No thermochemistry section found.")
             return
-        if hasattr(self, 'thermal_dlg') and self.thermal_dlg is not None:
+        if getattr(self, 'thermal_dlg', None) is not None and self.thermal_dlg is not None:
             self.thermal_dlg.close()
         self.thermal_dlg = ThermalTableDialog(self, data)
         self.thermal_dlg.show()
@@ -673,18 +676,18 @@ class OrcaResultAnalyzerDialog(QDialog):
             QMessageBox.warning(self, "No Analysis", "No TDDFT/TDA excitation energies found.")
             return
             
-        if hasattr(self, 'tddft_dlg') and self.tddft_dlg is not None:
+        if getattr(self, 'tddft_dlg', None) is not None and self.tddft_dlg is not None:
              self.tddft_dlg.close()
              
         self.tddft_dlg = TDDFTDialog(self, excitations)
         self.tddft_dlg.show()
 
     def show_dipole(self):
-        d = self.parser.data.get("dipoles")
+        d = self.parser.data.get("dipoles", None)
         if not d:
             QMessageBox.warning(self, "No Info", "No dipole moment found.")
             return
-        if hasattr(self, 'dipole_dlg') and self.dipole_dlg is not None:
+        if getattr(self, 'dipole_dlg', None) is not None and self.dipole_dlg is not None:
              self.dipole_dlg.close()
         self.dipole_dlg = DipoleDialog(self, d)
         self.dipole_dlg.show()
@@ -694,7 +697,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not charges:
             QMessageBox.warning(self, "No Info", "No atomic charges found.")
             return
-        if hasattr(self, 'charges_dlg') and self.charges_dlg is not None:
+        if getattr(self, 'charges_dlg', None) is not None and self.charges_dlg is not None:
              self.charges_dlg.close()
         self.charges_dlg = ChargeDialog(self, charges)
         self.charges_dlg.show()
@@ -705,7 +708,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No NMR chemical shielding data found.")
             return
-        if hasattr(self, 'nmr_dlg') and self.nmr_dlg is not None:
+        if getattr(self, 'nmr_dlg', None) is not None and self.nmr_dlg is not None:
              self.nmr_dlg.close()
         self.nmr_dlg = NMRDialog(self, data, couplings=couplings, file_path=self.file_path)
         self.nmr_dlg.show()
@@ -715,7 +718,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not data:
             QMessageBox.warning(self, "No Info", "No SCF energy trace data found.")
             return
-        if hasattr(self, 'scf_dlg') and self.scf_dlg is not None:
+        if getattr(self, 'scf_dlg', None) is not None and self.scf_dlg is not None:
              self.scf_dlg.close()
         self.scf_dlg = SCFTraceDialog(self, data)
         self.scf_dlg.show()

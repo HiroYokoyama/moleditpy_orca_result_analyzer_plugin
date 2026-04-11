@@ -4,13 +4,14 @@ import tempfile
 import numpy as np
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QTreeWidget, QTreeWidgetItem, QAbstractItemView, QMessageBox, 
-                             QFileDialog, QProgressDialog, QTableWidget, QTableWidgetItem, 
-                             QHeaderView, QGroupBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget,
-                             QFormLayout, QTreeWidgetItemIterator, QApplication, QColorDialog, QInputDialog, QComboBox, QCheckBox)
+                             QFileDialog, QProgressDialog, QHeaderView, QGroupBox, 
+                             QSpinBox, QDoubleSpinBox, QFormLayout, QTreeWidgetItemIterator, QApplication, QColorDialog,
+                             QInputDialog, QComboBox, QCheckBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
 import json
 from .utils import get_default_export_path
+import logging
 
 try:
     from .mo_engine import BasisSetEngine, CalcWorker
@@ -330,7 +331,7 @@ class MODialog(QDialog):
             mo = self.mo_list[i]
             
             # Internal unique key
-            access_key = mo.get('_access_key')
+            access_key = mo.get('_access_key', None)
             
             # Display ID
             mo_idx_val = mo.get('id', mo.get('index', i))
@@ -345,7 +346,8 @@ class MODialog(QDialog):
             local_idx = -1
             try:
                 local_idx = int(mo_idx_val)
-            except: pass
+            except Exception as _e:
+                logging.warning("[mo_analysis.py:348] silenced: %s", _e)
             
             if spin in spin_homo_idx:
                 h = spin_homo_idx[spin]
@@ -370,8 +372,8 @@ class MODialog(QDialog):
                 elif diff < 0 and diff > -100: homo_lumo_label = f"HOMO{diff}"
             
             occ = mo.get('occ', mo.get('occupation', 0.0))
-            e_eh = mo.get('energy_eh', mo.get('energy'))
-            e_ev = mo.get('energy_ev')
+            e_eh = mo.get('energy_eh', mo.get('energy', None))
+            e_ev = mo.get('energy_ev', None)
             
             if e_eh is None and e_ev is not None: e_eh = e_ev / 27.2114
             elif e_ev is None and e_eh is not None: e_ev = e_eh * 27.2114
@@ -385,7 +387,8 @@ class MODialog(QDialog):
                 path = self.get_cube_path(label_id)
                 if path and os.path.exists(path):
                     bg_color = QColor(240, 255, 240) # Light Green
-            except: pass
+            except Exception as _e:
+                logging.warning("[mo_analysis.py:388] silenced: %s", _e)
 
             item = QTreeWidgetItem([label_id, homo_lumo_label, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"])
             if bg_color:
@@ -442,7 +445,8 @@ class MODialog(QDialog):
              path = self.get_cube_path(display_id)
              if path and os.path.exists(path):
                   self.show_cube(path)
-        except: pass
+        except Exception as _e:
+            logging.warning("[mo_analysis.py:445] silenced: %s", _e)
 
     def on_selection_changed(self):
         items = self.tree.selectedItems()
@@ -459,7 +463,8 @@ class MODialog(QDialog):
                             # Use key directly
                             if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
-            except: pass
+            except Exception as _e:
+                logging.warning("[mo_analysis.py:462] silenced: %s", _e)
             
         self.btn_vis.setEnabled(has_coeffs)
         if items and not has_coeffs:
@@ -543,9 +548,9 @@ class MODialog(QDialog):
         self.process_generation_queue()
 
     def process_generation_queue(self):
-        if not hasattr(self, 'generation_queue') or not self.generation_queue:
+        if not getattr(self, 'generation_queue', None):
             # Done
-            if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            if getattr(self, 'progress_dialog', None) is not None and self.progress_dialog:
                 self.progress_dialog.close()
                 self.progress_dialog = None
             return
@@ -565,7 +570,7 @@ class MODialog(QDialog):
         # Find the correct MO in self.mo_list
         mo_data = None
         for mo in self.mo_list:
-            if mo.get('_access_key') == key:
+            if mo.get('_access_key', None) == key:
                 mo_data = mo
                 break
         
@@ -604,7 +609,7 @@ class MODialog(QDialog):
             return
             
         coeffs_map = self.parent_dlg.parser.data.get("mo_coeffs", {})
-        mo_data_coeffs = coeffs_map.get(key) # This is the actual coeffs data
+        mo_data_coeffs = coeffs_map.get(key, None) # This is the actual coeffs data
         if not mo_data_coeffs:
             QMessageBox.warning(self, "Error", f"No coefficients for MO {display_id}")
             self.process_generation_queue()
@@ -641,7 +646,8 @@ class MODialog(QDialog):
             if not os.path.exists(out_dir):
                 try:
                     os.makedirs(out_dir)
-                except: pass
+                except Exception as _e:
+                    logging.warning("[mo_analysis.py:644] silenced: %s", _e)
         
         self.last_cube_path = out_path
         
@@ -663,7 +669,7 @@ class MODialog(QDialog):
 
         # Start Worker
         # Manage Progress Dialog (Shared)
-        if not hasattr(self, 'progress_dialog') or self.progress_dialog is None:
+        if getattr(self, 'progress_dialog', None) is None:
              self.progress_dialog = QProgressDialog("Generating Cubes...", "Cancel", 0, 100, self)
              self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
              self.progress_dialog.setAutoClose(False) # Keep open for batch
@@ -692,14 +698,14 @@ class MODialog(QDialog):
                          break
                     it += 1
                 
-                if hasattr(self, 'diag_dlg') and self.diag_dlg and self.diag_dlg.isVisible():
+                if getattr(self, 'diag_dlg', None) is not None and self.diag_dlg and self.diag_dlg.isVisible():
                     self.diag_dlg.status_label.setText(f"Generated: {os.path.basename(res)}")
             else:
                 # If one fails, maybe continue? 
                 # Or stop? let's continue but warn?
                 print(f"Failed: {res}")
                 QMessageBox.warning(self, "Generation Failed", f"Failed to generate cube:\n{res}")
-                if hasattr(self, 'diag_dlg') and self.diag_dlg and self.diag_dlg.isVisible():
+                if getattr(self, 'diag_dlg', None) is not None and self.diag_dlg and self.diag_dlg.isVisible():
                     self.diag_dlg.status_label.setText("Generation Failed")
             
             # Trigger Next
@@ -716,7 +722,8 @@ class MODialog(QDialog):
             if "background-color:" in style:
                 c_str = style.split("background-color:")[1].split(";")[0].strip()
                 current_col = QColor(c_str)
-        except: pass
+        except Exception as _e:
+            logging.warning("[mo_analysis.py:719] silenced: %s", _e)
         
         col = QColorDialog.getColor(current_col, self, "Select Color")
         if col.isValid():
@@ -776,7 +783,8 @@ class MODialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception as _e:
+                logging.warning("[mo_analysis.py:779] silenced: %s", _e)
             
         mo_settings = {
             "presets": {k:v for k,v in self.presets.items() if k != "Default"},
@@ -808,7 +816,7 @@ class MODialog(QDialog):
         self.presets[name] = data
         
         # Update combo
-        curr = self.combo_presets.currentText()
+        self.combo_presets.currentText()
         self.combo_presets.blockSignals(True)
         self.combo_presets.clear()
         self.combo_presets.addItems(list(self.presets.keys()))
@@ -900,9 +908,10 @@ class MODialog(QDialog):
     def closeEvent(self, event):
         """Clean up 3D actors when closing"""
         # Clean up tracked sub-dialogs
-        if hasattr(self, 'energy_dlg') and self.energy_dlg:
+        if getattr(self, 'energy_dlg', None) is not None and self.energy_dlg:
             try: self.energy_dlg.close()
-            except: pass
+            except Exception as _e:
+                logging.warning("[mo_analysis.py:905] silenced: %s", _e)
             self.energy_dlg = None
             
         if hasattr(self.parent_dlg, 'mw'):
@@ -967,8 +976,8 @@ class MODialog(QDialog):
         
         for mo in self.mo_list:
             s = mo.get('spin', 'restricted')
-            e_eh = mo.get('energy_eh', mo.get('energy'))
-            e_ev = mo.get('energy_ev')
+            e_eh = mo.get('energy_eh', mo.get('energy', None))
+            e_ev = mo.get('energy_ev', None)
              # Ensure e_eh is set (EnergyDiagram usually expects Hartree if unit selection is implemented there, defaults to "Ha")
             if e_eh is None and e_ev is not None: e_eh = e_ev / 27.2114
             if e_eh is None: e_eh = 0.0
@@ -1023,7 +1032,7 @@ class MODialog(QDialog):
                      res_dir = cube_dir
 
         # Make modeless
-        if hasattr(self, 'energy_dlg') and self.energy_dlg:
+        if getattr(self, 'energy_dlg', None) is not None and self.energy_dlg:
             self.energy_dlg.close()
             
         self.energy_dlg = EnergyDiagramDialog(diag_data, parent=self, result_dir=res_dir)
@@ -1060,7 +1069,7 @@ class MODialog(QDialog):
         # Check type
         is_uhf = False
         for mo in self.mo_list:
-            if mo.get('spin') == 'beta': is_uhf = True; break
+            if mo.get('spin', None) == 'beta': is_uhf = True; break
             
         if not is_uhf: target_spin = 'restricted'
         
@@ -1084,7 +1093,7 @@ class MODialog(QDialog):
             if s != target_spin: continue
             
             if curr_idx == index:
-                mo_key = mo.get('_access_key')
+                mo_key = mo.get('_access_key', None)
                 found_mo = mo
                 break
             curr_idx += 1

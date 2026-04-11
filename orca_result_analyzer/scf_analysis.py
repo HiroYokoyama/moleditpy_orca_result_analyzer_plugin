@@ -1,11 +1,10 @@
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QComboBox, QGroupBox, QFileDialog
-from PyQt6.QtCore import Qt
-import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import csv
 from .utils import get_default_export_path
+import logging
 
 class SCFTraceDialog(QDialog):
     def __init__(self, parent, scf_traces):
@@ -68,8 +67,8 @@ class SCFTraceDialog(QDialog):
     def closeEvent(self, event):
         try:
             plt.close(self.figure)
-        except:
-            pass
+        except Exception as _e:
+            logging.warning("[scf_analysis.py:71] silenced: %s", _e)
         super().closeEvent(event)
 
     def update_plot(self):

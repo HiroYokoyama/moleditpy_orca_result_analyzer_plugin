@@ -3,7 +3,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QFileDialog, QMessageBox, QGroupBox, QComboBox)
 import os
 import json
-import csv
 
 try:
     from .spectrum_widget import SpectrumWidget
@@ -13,6 +12,7 @@ except ImportError:
     except:
         SpectrumWidget = None
 from .utils import get_default_export_path
+import logging
 
 class TDDFTDialog(QDialog):
     def __init__(self, parent, excitations):
@@ -288,7 +288,8 @@ class TDDFTDialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except: pass
+            except Exception as _e:
+                logging.warning("[tddft_analysis.py:291] silenced: %s", _e)
             
         tddft_settings = {
             "sigma": self.spin_sigma.value(),
@@ -424,12 +425,12 @@ class TDDFTDialog(QDialog):
                     # --- Prepare Strength Values (Length vs Velocity) ---
                     # Oscillator Strength
                     # 変更: デフォルトを 0.0 ではなく None にして区別する
-                    f_len = item.get('osc_len', item.get('osc'))
-                    f_vel = item.get('osc_vel') 
+                    f_len = item.get('osc_len', item.get('osc', None))
+                    f_vel = item.get('osc_vel', None) 
                     
                     # Rotatory Strength
-                    r_len = item.get('rot_len', item.get('rotatory_strength'))
-                    r_vel = item.get('rot_vel')
+                    r_len = item.get('rot_len', item.get('rotatory_strength', None))
+                    r_vel = item.get('rot_vel', None)
 
                     # Helper for formatting (None -> "N/A")
                     def fmt_val(v):

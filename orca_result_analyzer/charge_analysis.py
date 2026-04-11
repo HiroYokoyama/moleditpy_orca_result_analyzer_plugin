@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
 from .utils import get_default_export_path
+import logging
 
 # GradientBar Widget
 class GradientBar(QWidget):
@@ -245,8 +246,8 @@ class ChargeDialog(QDialog):
             try:
                 with open(settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[charge_analysis.py:248] silenced: %s", _e)
         
         # Prepare charge-specific data
         charge_data = {}
@@ -279,11 +280,12 @@ class ChargeDialog(QDialog):
         show = self.chk_show_labels.isChecked()
         
         # Remove old labels if they exist
-        if hasattr(self, '_charge_labels'):
+        if getattr(self, '_charge_labels', None) is not None:
             for actor in self._charge_labels:
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
-                except: pass
+                except Exception as _e:
+                    logging.warning("[charge_analysis.py:286] silenced: %s", _e)
             self._charge_labels = []
         
         if not show:
@@ -335,18 +337,20 @@ class ChargeDialog(QDialog):
                     mw.view_3d_manager.update_atom_color_override(item['atom_idx'], None)
             
             # Remove scalar bar if exists
-            if hasattr(self, '_charge_scalar_bar'):
+            if getattr(self, '_charge_scalar_bar', None) is not None:
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     delattr(self, '_charge_scalar_bar')
-                except: pass
+                except Exception as _e:
+                    logging.warning("[charge_analysis.py:342] silenced: %s", _e)
             
             # Remove labels if exist
-            if hasattr(self, '_charge_labels'):
+            if getattr(self, '_charge_labels', None) is not None:
                 for actor in self._charge_labels:
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(actor)
-                    except: pass
+                    except Exception as _e:
+                        logging.warning("[charge_analysis.py:349] silenced: %s", _e)
                 self._charge_labels = []
                 self.chk_show_labels.setChecked(False)
             
@@ -506,11 +510,12 @@ class ChargeDialog(QDialog):
                     
                 if coords and len(coords) == len(data):
                     # Remove old labels if exist
-                    if hasattr(self, '_charge_labels'):
+                    if getattr(self, '_charge_labels', None) is not None:
                         for actor in self._charge_labels:
                             try:
                                 self.parent_dlg.mw.plotter.remove_actor(actor)
-                            except: pass
+                            except Exception as _e:
+                                logging.warning("[charge_analysis.py:513] silenced: %s", _e)
                     
                     self._charge_labels = []
                     for i, item in enumerate(data):
@@ -537,10 +542,11 @@ class ChargeDialog(QDialog):
                 cmap = LinearSegmentedColormap.from_list("charge_cmap", cmap_colors, N=256)
                 
                 # Remove old scalar bar if exists
-                if hasattr(self, '_charge_scalar_bar'):
+                if getattr(self, '_charge_scalar_bar', None) is not None:
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
-                    except: pass
+                    except Exception as _e:
+                        logging.warning("[charge_analysis.py:543] silenced: %s", _e)
                 
                 # Create dummy mesh for scalar bar
                 dummy = pv.Box()
@@ -650,17 +656,19 @@ class ChargeDialog(QDialog):
     def closeEvent(self, event):
         """Clean up labels and scalar bar on close"""
         # Remove scalar bar
-        if hasattr(self, '_charge_scalar_bar'):
+        if getattr(self, '_charge_scalar_bar', None) is not None:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
-            except: pass
+            except Exception as _e:
+                logging.warning("[charge_analysis.py:656] silenced: %s", _e)
             
         # Remove labels
-        if hasattr(self, '_charge_labels'):
+        if getattr(self, '_charge_labels', None) is not None:
             for actor in self._charge_labels:
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
-                except: pass
+                except Exception as _e:
+                    logging.warning("[charge_analysis.py:663] silenced: %s", _e)
         
         if hasattr(self.parent_dlg.mw, 'plotter'):
             self.parent_dlg.mw.plotter.render()

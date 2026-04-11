@@ -234,8 +234,8 @@ class NMRDialog(QDialog):
                 plotter = getattr(v3d, 'plotter', None) if v3d else None
                 if plotter and self._click_filter:
                     plotter.removeEventFilter(self._click_filter)
-        except Exception:
-            pass
+        except Exception as _e:
+            logging.warning("[nmr_analysis.py:237] silenced: %s", _e)
         self._click_filter = None
 
     def _on_plotter_click(self, x, y, widget):
@@ -331,7 +331,7 @@ class NMRDialog(QDialog):
         current_mw_selection_frozen = frozenset(indices)
         
         # Initialize tracker if missing
-        if not hasattr(self, '_last_synced_mw_selection'):
+        if getattr(self, '_last_synced_mw_selection', None) is None:
             self._last_synced_mw_selection = frozenset()
             
         # If the 3D selection HAS NOT CHANGED from what we last saw/set, STOP.
@@ -360,7 +360,7 @@ class NMRDialog(QDialog):
 
     def _calculate_peak_selection_from_atoms(self, target_atoms):
         """Helper to determine which peaks should be selected based on atom set"""
-        if not hasattr(self, 'peaks_metadata') or not self.peaks_metadata:
+        if not getattr(self, 'peaks_metadata', None):
             return set()
             
         new_selection = set()
@@ -425,7 +425,7 @@ class NMRDialog(QDialog):
         atom_symbols = set()
         
         # 1. 選択されたピークから原子インデックスと元素記号を取得
-        if hasattr(self, 'peaks_metadata') and self.peaks_metadata:
+        if getattr(self, 'peaks_metadata', None) is not None and self.peaks_metadata:
             for peak_idx in self.selected_peak_indices:
                 if peak_idx < len(self.peaks_metadata):
                     _, _, _, atom_indices = self.peaks_metadata[peak_idx]
@@ -433,9 +433,9 @@ class NMRDialog(QDialog):
                     
                     # 核種のチェック用に元素記号を収集
                     for idx in atom_indices:
-                        item = next((d for d in self.data if d.get('atom_idx') == idx), None)
+                        item = next((d for d in self.data if d.get('atom_idx', None) == idx), None)
                         if item:
-                            atom_symbols.add(item.get('atom_sym'))
+                            atom_symbols.add(item.get('atom_sym', None))
         
         # 2. 【物理バリデーション】異なる元素が混ざっていないかチェック
         if len(atom_symbols) > 1:
@@ -535,8 +535,8 @@ class NMRDialog(QDialog):
             try:
                 with open(self.settings_file, 'r') as f:
                     all_settings = json.load(f)
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[nmr_analysis.py:538] silenced: %s", _e)
         
         # Extract custom references only (non-default)
         # Extract custom references only (non-default)
@@ -579,7 +579,7 @@ class NMRDialog(QDialog):
                     if nucleus not in custom_refs:
                         custom_refs[nucleus] = {}
                     custom_refs[nucleus][ref_name] = ref_val
-                elif default_dict.get(ref_name) != ref_val:
+                elif default_dict.get(ref_name, None) != ref_val:
                     # Modified default reference
                     if nucleus not in custom_refs:
                         custom_refs[nucleus] = {}
@@ -901,7 +901,7 @@ class NMRDialog(QDialog):
     
     def update_reference_combo(self):
         """Update reference combo box based on current nucleus"""
-        if not hasattr(self, 'combo_ref') or self.combo_ref is None:
+        if getattr(self, 'combo_ref', None) is None:
             return
             
         current_nucleus = self.current_nucleus
@@ -996,7 +996,7 @@ class NMRDialog(QDialog):
 
         # Auto Range if "No Reference" is active
         if self.combo_ref.currentText() == "No Reference":
-            if hasattr(self, 'chk_auto_x'):
+            if getattr(self, 'chk_auto_x', None) is not None:
                 self.chk_auto_x.setChecked(True)
         
         # Re-enable combo signals
@@ -1022,7 +1022,7 @@ class NMRDialog(QDialog):
         
         # Auto Range if "No Reference" is selected
         if ref_name == "No Reference":
-            if hasattr(self, 'chk_auto_x'):
+            if getattr(self, 'chk_auto_x', None) is not None:
                 self.chk_auto_x.setChecked(True)
         
         refs = self.reference_standards.get(nucleus_key, {})
@@ -1126,7 +1126,7 @@ class NMRDialog(QDialog):
 
     def delete_custom_reference(self):
         """Delete currently selected custom reference"""
-        if not hasattr(self, 'current_nucleus') or not self.current_nucleus:
+        if not getattr(self, 'current_nucleus', None):
             return
 
         current_nucleus = self.get_nucleus_key(self.current_nucleus) if self.current_nucleus != "All" else "1H"
@@ -1190,14 +1190,14 @@ class NMRDialog(QDialog):
         self.current_nucleus = nucleus
         self.clear_peak_selection()
 
-        if hasattr(self, 'chk_auto_x'):
+        if getattr(self, 'chk_auto_x', None) is not None:
             self.chk_auto_x.blockSignals(True)
             self.chk_auto_x.setChecked(False) # ここで強制解除
             self.chk_auto_x.blockSignals(False)
             
             # Auto RangeをOFFにしたので、入力欄（スピンボックス）は有効化しておく
-            if hasattr(self, 'spin_x_max'): self.spin_x_max.setEnabled(True)
-            if hasattr(self, 'spin_x_min'): self.spin_x_min.setEnabled(True)
+            if getattr(self, 'spin_x_max', None) is not None: self.spin_x_max.setEnabled(True)
+            if getattr(self, 'spin_x_min', None) is not None: self.spin_x_min.setEnabled(True)
         
         # Update default X range for this nucleus
         self.update_x_range_defaults(nucleus)
@@ -1206,7 +1206,7 @@ class NMRDialog(QDialog):
 
         # User Request: Auto-enable coupling when switching to any nucleus (if coupling exists)
         # We do this AFTER apply_filter (which calls recalc) so we know if coupons exist for THIS nucleus.
-        if nucleus != "All" and hasattr(self, 'chk_real_spectrum') and self.chk_real_spectrum.isEnabled():
+        if nucleus != "All" and getattr(self, 'chk_real_spectrum', None) is not None and self.chk_real_spectrum.isEnabled():
             self.chk_real_spectrum.blockSignals(True)
             self.chk_real_spectrum.setChecked(True)
             self.chk_real_spectrum.blockSignals(False)
@@ -1215,7 +1215,7 @@ class NMRDialog(QDialog):
 
     def update_x_range_defaults(self, nucleus):
         """Set appropriate default X range based on nucleus type"""
-        if not hasattr(self, 'spin_x_max') or not hasattr(self, 'spin_x_min'):
+        if getattr(self, 'spin_x_max', None) is None or not hasattr(self, 'spin_x_min'):
             return
             
         # Block signals to prevent intermediate plotting (fixes "slope graph" artifact)
@@ -1258,7 +1258,7 @@ class NMRDialog(QDialog):
     
     def apply_filter(self):
         """Filter data by nucleus and update UI"""
-        if not hasattr(self, 'table') or self.table is None:
+        if getattr(self, 'table', None) is None:
             return
             
         nucleus = self.current_nucleus
@@ -1291,7 +1291,7 @@ class NMRDialog(QDialog):
             count = 0
             
             for atom_idx in group['indices']:
-                item = next((d for d in self.data if d.get('atom_idx') == atom_idx), None)
+                item = next((d for d in self.data if d.get('atom_idx', None) == atom_idx), None)
                 if item:
                     sigma = item.get('shielding', 0.0)
                     delta = self.delta_ref + (self.sigma_ref - sigma)
@@ -1351,7 +1351,7 @@ class NMRDialog(QDialog):
                 self.table.setItem(r, 4, QTableWidgetItem(j_str))
         
         # Auto enable couplings logic moved here (before plot) to ensure graph is correct immediately
-        if hasattr(self, 'chk_real_spectrum'):
+        if getattr(self, 'chk_real_spectrum', None) is not None:
             has_relevant_coupling = False
             if self.couplings:
                 current_indices = {d['atom_idx'] for d in self.displayed_data}
@@ -1401,7 +1401,7 @@ class NMRDialog(QDialog):
         ax = self.figure.add_subplot(111)
         
         # シミュレーションモードなら別メソッドへ
-        if hasattr(self, 'chk_real_spectrum') and self.chk_real_spectrum.isChecked():
+        if getattr(self, 'chk_real_spectrum', None) is not None and self.chk_real_spectrum.isChecked():
             self.plot_real_spectrum(ax)
             return
         
@@ -1455,13 +1455,13 @@ class NMRDialog(QDialog):
     
     def highlight_selected_peaks(self):
         """Add red highlights and labels to selected peaks"""
-        if not hasattr(self, 'current_shifts') or not self.selected_peak_indices:
+        if not getattr(self, 'current_shifts', None):
             # Clear highlights if no selection
             for artist in self.highlight_artists:
                 try:
                     artist.remove()
-                except:
-                    pass
+                except Exception as _e:
+                    logging.warning("[nmr_analysis.py:1463] silenced: %s", _e)
             self.highlight_artists = []
             self.canvas.draw()
             return
@@ -1474,8 +1474,8 @@ class NMRDialog(QDialog):
         for artist in self.highlight_artists:
             try:
                 artist.remove()
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[nmr_analysis.py:1477] silenced: %s", _e)
         self.highlight_artists = []
         
         # Add red highlights and text labels for selected peaks
@@ -1496,7 +1496,7 @@ class NMRDialog(QDialog):
                     # Build label text from all atoms in this peak
                     label_parts = []
                     for atom_idx in atom_indices:
-                        atom_item = next((d for d in self.data if d.get('atom_idx') == atom_idx), None)
+                        atom_item = next((d for d in self.data if d.get('atom_idx', None) == atom_idx), None)
                         if atom_item:
                             atom_sym = atom_item.get('atom_sym', '?')
                             label_parts.append(f"{atom_sym}{atom_idx}")
@@ -1535,7 +1535,7 @@ class NMRDialog(QDialog):
                 total_sigma = 0.0
                 valid_count = 0
                 for idx in indices:
-                    atom = atom_map.get(idx)
+                    atom = atom_map.get(idx, None)
                     if atom:
                         total_sigma += atom.get('shielding', 0.0)
                         valid_count += 1
@@ -1549,7 +1549,7 @@ class NMRDialog(QDialog):
 
         # 2. 個別（マージされていない）原子の処理
         for item in self.displayed_data:
-            idx = item.get('atom_idx')
+            idx = item.get('atom_idx', None)
             if idx not in processed_indices:
                 sigma = item.get('shielding', 0.0)
                 delta = self.delta_ref + (self.sigma_ref - sigma)
@@ -1595,7 +1595,7 @@ class NMRDialog(QDialog):
         try:
             with open(filename, 'w') as f:
                 # Check mode
-                is_real = hasattr(self, 'chk_real_spectrum') and self.chk_real_spectrum.isChecked()
+                is_real = getattr(self, 'chk_real_spectrum', None) is not None and self.chk_real_spectrum.isChecked()
                 
                 if is_real:
                     # Export XY data from matplotlib line
@@ -1637,7 +1637,7 @@ class NMRDialog(QDialog):
                     f.write("Chemical Shift (ppm),Intensity,AtomIndices\n")
                     
                     # We can use peaks_metadata if available, or reconstruct
-                    if hasattr(self, 'peaks_metadata') and self.peaks_metadata:
+                    if getattr(self, 'peaks_metadata', None) is not None and self.peaks_metadata:
                          for shift, intensity, is_merged, atom_indices in self.peaks_metadata:
                              indices_str = ";".join(str(i) for i in atom_indices)
                              f.write(f"{shift:.6f},{intensity:.4f},{indices_str}\n")
@@ -1745,7 +1745,7 @@ class NMRDialog(QDialog):
         
         for p in sorted_partners:
             # Find symbol for partner
-            p_item = next((d for d in self.data if d.get('atom_idx') == p), None)
+            p_item = next((d for d in self.data if d.get('atom_idx', None) == p), None)
             p_sym = p_item.get('atom_sym', '') if p_item else ""
             p_label = f"{p_sym}{p}"
             
@@ -1775,13 +1775,13 @@ class NMRDialog(QDialog):
 
     def toggle_simulation_controls(self):
         """Enable/Disable simulation spinboxes based on checkbox state"""
-        if not hasattr(self, 'chk_real_spectrum'): return
+        if getattr(self, 'chk_real_spectrum', None) is None: return
         
         is_sim_active = self.chk_real_spectrum.isChecked() and self.chk_real_spectrum.isEnabled() and nmrsim is not None
         
-        if hasattr(self, 'spin_real_width'):
+        if getattr(self, 'spin_real_width', None) is not None:
             self.spin_real_width.setEnabled(is_sim_active)
-        if hasattr(self, 'spin_mhz'):
+        if getattr(self, 'spin_mhz', None) is not None:
             self.spin_mhz.setEnabled(is_sim_active)
     
     def on_peak_click(self, event):
@@ -1850,7 +1850,7 @@ class NMRDialog(QDialog):
                 for atom_idx in atom_indices:
                     all_peak_indices.add(atom_idx)
                     # Find atom symbol from data
-                    atom_item = next((d for d in self.data if d.get('atom_idx') == atom_idx), None)
+                    atom_item = next((d for d in self.data if d.get('atom_idx', None) == atom_idx), None)
                     if atom_item:
                         atom_sym = atom_item.get('atom_sym', '?')
                         self.add_atom_label(atom_idx, atom_sym)
@@ -1877,8 +1877,8 @@ class NMRDialog(QDialog):
                 if e3d:
                     try:
                         e3d.update_3d_selection_display()
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        logging.warning("[nmr_analysis.py:1880] silenced: %s", _e)
 
             # Draw yellow highlights for NMR selection
             self.draw_custom_nmr_highlights_3d(all_peak_indices)
@@ -1922,12 +1922,11 @@ class NMRDialog(QDialog):
             self._atom_labels.append(actor)
             self._nmr_label_names.append(label_name)
         except Exception as e:
-            pass
+            logging.warning("[nmr_analysis.py:1924] silenced: %s", e)
     
     def highlight_atom_in_3d(self, atom_idx, atom_sym):
         """Highlight selected atom with a label in 3D viewer (legacy - now uses update_selected_labels)"""
         # This is now handled by update_selected_labels
-        pass
     
     def clear_peak_selection(self):
         """Clear all selected peaks and their labels"""
@@ -1938,8 +1937,8 @@ class NMRDialog(QDialog):
         for artist in self.highlight_artists:
             try:
                 artist.remove()
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[nmr_analysis.py:1941] silenced: %s", _e)
         self.highlight_artists = []
         
         # Clear 3D labels
@@ -1953,11 +1952,11 @@ class NMRDialog(QDialog):
                 e3d.selected_atoms_3d.clear()
                 try:
                     e3d.update_3d_selection_display()
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logging.warning("[nmr_analysis.py:1956] silenced: %s", _e)
         
         # Redraw spectrum
-        if hasattr(self, 'canvas'):
+        if getattr(self, 'canvas', None) is not None:
             self.canvas.draw()
     
     def plot_real_spectrum(self, ax):
@@ -1984,7 +1983,7 @@ class NMRDialog(QDialog):
                  target_nuc_sym = 'H'
 
         # 4. 周波数と磁気回転比の計算
-        base_freq_mhz = self.spin_mhz.value() if hasattr(self, 'spin_mhz') else 400.0
+        base_freq_mhz = self.spin_mhz.value() if getattr(self, 'spin_mhz', None) is not None else 400.0
         
         ratio = 1.0
         lookup_sym = target_nuc_sym.upper()
@@ -1999,7 +1998,7 @@ class NMRDialog(QDialog):
              
         spectrometer_freq = base_freq_mhz * ratio
         points = 8192
-        width_hz = max(0.1, self.spin_real_width.value()) if hasattr(self, 'spin_real_width') else 0.5
+        width_hz = max(0.1, self.spin_real_width.value()) if getattr(self, 'spin_real_width', None) is not None else 0.5
 
         # --- Jカップリングの計算とMultiplet生成 ---
         atom_to_group_size = {idx: len(g['indices']) for g in self.merged_peaks for idx in g['indices']}
@@ -2008,13 +2007,13 @@ class NMRDialog(QDialog):
         # 5. ここからループ開始（peaks_to_simulate が定義されているのでエラーになりません）
         for shift, intensity, is_merged, atom_indices in peaks_to_simulate:
             peak_atoms_set = set(atom_indices)
-            rep_item = next((d for d in self.data if d.get('atom_idx') == atom_indices[0]), None)
+            rep_item = next((d for d in self.data if d.get('atom_idx', None) == atom_indices[0]), None)
             peak_nuc = rep_item.get('atom_sym', '').strip().upper() if rep_item else ""
             
             couplings_list = []
             
             # カップリング計算ロジック
-            if hasattr(self, 'chk_real_spectrum') and self.chk_real_spectrum.isChecked():
+            if getattr(self, 'chk_real_spectrum', None) is not None and self.chk_real_spectrum.isChecked():
                 partner_j_values = {} 
                 partner_multiplicity = {} 
                 
@@ -2118,7 +2117,7 @@ class NMRDialog(QDialog):
         # タイトル設定
         current_nucleus_title = self.current_nucleus
         display_nuc = self.get_nucleus_key(current_nucleus_title)
-        ref_name_title = self.combo_ref.currentText() if hasattr(self, 'combo_ref') else "Custom"
+        ref_name_title = self.combo_ref.currentText() if getattr(self, 'combo_ref', None) is not None else "Custom"
         
         ax.set_title(f'{display_nuc} NMR Spectrum', fontsize=12, fontweight='bold', pad=20)
         ref_text = f'Ref: {ref_name_title} (δ_ref = {self.delta_ref:.2f} ppm, σ_ref = {self.sigma_ref:.1f} ppm)'
@@ -2151,7 +2150,7 @@ class NMRDialog(QDialog):
             
             # Select all peaks to show labels
             # Use peaks_metadata length if available, otherwise displayed_data as fallback
-            count = len(self.peaks_metadata) if hasattr(self, 'peaks_metadata') else len(self.displayed_data)
+            count = len(self.peaks_metadata) if getattr(self, 'peaks_metadata', None) is not None else len(self.displayed_data)
             for i in range(count):
                 self.selected_peak_indices.add(i)
             
@@ -2179,39 +2178,39 @@ class NMRDialog(QDialog):
         # 1. Clear custom NMR selection spheres by name (most reliable in PyVista)
         try:
             plotter.remove_actor('nmr_selection_highlights')
-        except:
-            pass
+        except Exception as _e:
+            logging.warning("[nmr_analysis.py:2182] silenced: %s", _e)
             
         # 2. Clear labels by tracked name
-        if hasattr(self, '_nmr_label_names'):
+        if getattr(self, '_nmr_label_names', None) is not None:
             for name in self._nmr_label_names:
                 try:
                     plotter.remove_actor(name)
-                except:
-                    pass
+                except Exception as _e:
+                    logging.warning("[nmr_analysis.py:2190] silenced: %s", _e)
             self._nmr_label_names = []
             
         # 3. Fallback: Clear labels by list reference
         for actor in self._atom_labels:
             try:
                 plotter.remove_actor(actor)
-            except:
-                pass
+            except Exception as _e:
+                logging.warning("[nmr_analysis.py:2198] silenced: %s", _e)
         self._atom_labels = []
         
         # 4. Clean up private spheres actor list
-        if hasattr(self, '_nmr_sphere_actors'):
+        if getattr(self, '_nmr_sphere_actors', None) is not None:
             for actor in self._nmr_sphere_actors:
                 try:
                     plotter.remove_actor(actor)
-                except:
-                    pass
+                except Exception as _e:
+                    logging.warning("[nmr_analysis.py:2207] silenced: %s", _e)
             self._nmr_sphere_actors = []
         
         try:
             plotter.render()
-        except:
-            pass
+        except Exception as _e:
+            logging.warning("[nmr_analysis.py:2213] silenced: %s", _e)
             
     def draw_custom_nmr_highlights_3d(self, atom_indices):
         """Draw yellow highlight spheres for selected atoms in 3D viewer"""
@@ -2225,8 +2224,8 @@ class NMRDialog(QDialog):
         # ALWAYS clear existing custom highlights first to prevent stacking/phantom spheres
         try:
             plotter.remove_actor('nmr_selection_highlights')
-        except:
-            pass
+        except Exception as _e:
+            logging.warning("[nmr_analysis.py:2228] silenced: %s", _e)
             
         # Clear tracker list to prevent stale references
         self._nmr_sphere_actors = []
@@ -2235,8 +2234,8 @@ class NMRDialog(QDialog):
         if not atom_indices or not hasattr(v3d, 'atom_positions_3d'):
              try:
                  plotter.render()
-             except:
-                 pass
+             except Exception as _e:
+                 logging.warning("[nmr_analysis.py:2238] silenced: %s", _e)
              return
 
         indices = list(atom_indices)
@@ -2253,7 +2252,7 @@ class NMRDialog(QDialog):
             radii = []
             for i in valid_indices:
                 # Find atom symbol from parser data
-                atom_item = next((d for d in self.data if i == d.get('atom_idx')), None)
+                atom_item = next((d for d in self.data if i == d.get('atom_idx', None)), None)
                 sym = atom_item.get('atom_sym', 'C') if atom_item else 'C'
                 # Use 1.4x scaling factor (40% larger)
                 r = VDW_RADII.get(sym, 0.4) * 1.4
@@ -2280,7 +2279,7 @@ class NMRDialog(QDialog):
             plotter.render()
             
         except Exception as e:
-            pass
+            logging.warning("[nmr_analysis.py:2282] silenced: %s", e)
     
     def closeEvent(self, event):
         """Clean up labels when dialog closes"""
@@ -2297,4 +2296,3 @@ class NMRDialog(QDialog):
             event.accept()
             return
         super().keyPressEvent(event)
-

@@ -270,7 +270,7 @@ class BasisSetEngine:
         current_idx = 0
         for sh in self.shells:
             l_type = sh['type']
-            defs = self.basis_definitions.get(l_type)
+            defs = self.basis_definitions.get(l_type, None)
             if not defs:
                 # Fallback or error?
                 # self.logger.warning(f"Unsupported shell type {l_type}")

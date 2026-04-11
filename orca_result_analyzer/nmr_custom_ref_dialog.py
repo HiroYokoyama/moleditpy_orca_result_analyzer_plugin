@@ -1,8 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QLineEdit, QDoubleSpinBox, QGroupBox,
-                             QFormLayout, QMessageBox, QComboBox, QScrollArea,
-                             QWidget)
-from PyQt6.QtCore import Qt
+                             QMessageBox, QComboBox, QScrollArea, QWidget)
 
 
 class CustomReferenceDialog(QDialog):
