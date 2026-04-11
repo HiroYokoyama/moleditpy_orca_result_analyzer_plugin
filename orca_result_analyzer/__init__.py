@@ -1,11 +1,10 @@
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.3.0"
+PLUGIN_VERSION = "2.3.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
-PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out, .log). Includes Vibrational, MO, TDDFT, and NMR analysis."
+PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
-import importlib
 import logging
 
 # Global reference to keep window alive
@@ -14,7 +13,7 @@ _analyzer_window = None
 def initialize(context):
     """
     Initialize the ORCA Result Analyzer plugin.
-    Registers file openers for .out and .log with HIGH PRIORITY (100).
+    Registers file openers for .out with HIGH PRIORITY (100).
     """
 
     def open_orca_file(path):
@@ -52,9 +51,6 @@ def initialize(context):
                  return
 
         # Initialize Parser
-        # Force reload to ensure latest code is used (dev mode helper)
-        from . import parser as parser_mod
-        importlib.reload(parser_mod)
         from .parser import OrcaParser
         
         parser = OrcaParser()
@@ -88,7 +84,7 @@ def initialize(context):
     # Register Drop Handler
     def handle_drop(path):
         # 1. Check for standard ORCA output
-        if path.lower().endswith((".out", ".log", ".txt")):
+        if path.lower().endswith(".out"):
             # content check for ORCA
             try:
                 with open(path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -105,14 +101,13 @@ def initialize(context):
     # Register Opener
     # Priority 100
     context.register_file_opener(".out", open_orca_file, priority=100)
-    context.register_file_opener(".log", open_orca_file, priority=100)
 
     context.register_drop_handler(handle_drop, priority=100)
 
     # Add to Main Menu
     def menu_action():
         mw = context.get_main_window()
-        path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log)")
+        path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out)")
         if path:
              if not handle_drop(path):
                  open_orca_file(path) # Fallback to standard opener logic if handle_drop returns false (e.g. extension check)
@@ -123,7 +118,7 @@ def initialize(context):
 
 def run(mw):
     from PyQt6.QtWidgets import QFileDialog, QApplication
-    path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out *.log);;All Files (*)")
+    path, _ = QFileDialog.getOpenFileName(mw, "Open ORCA Output", "", "ORCA Output (*.out);;All Files (*)")
     if not path:
         return
 
@@ -154,8 +149,6 @@ def run(mw):
             QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
             return
 
-    from . import parser as parser_mod
-    importlib.reload(parser_mod)
     from .parser import OrcaParser
     parser = OrcaParser()
     parser.load_from_memory(content, path)

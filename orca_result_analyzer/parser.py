@@ -1141,7 +1141,7 @@ class OrcaParser:
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line: break
-                if "--------------" in line:
+                if "---" in line:
                     if len(self.data["nmr_shielding"]) > 0: break
                     curr += 1
                     continue
@@ -1797,11 +1797,14 @@ class OrcaParser:
                 line = self.lines[curr].strip()
                 if not line or "---" in line or "****" in line or "MULLIKEN" in line:
                     break
-                
+                if line.startswith("*"):
+                    curr += 1
+                    continue
+
                 parts = line.split()
                 # Format: NO   OCC          E(Eh)            E(eV)
                 #           0   2.0000     -10.186408      -277.1862
-                if len(parts) >= 4:
+                if len(parts) >= 4 and parts[0].lstrip('-').isdigit():
                     try:
                         orbital_idx = int(parts[0])
                         occupation = float(parts[1])

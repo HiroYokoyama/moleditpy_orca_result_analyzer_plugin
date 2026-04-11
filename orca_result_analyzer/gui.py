@@ -1,6 +1,5 @@
 
 import os
-import importlib
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                              QWidget, QGridLayout, QMessageBox, QMenuBar, QFileDialog)
 from PyQt6.QtGui import QAction, QIcon
@@ -330,7 +329,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         # Get last directory from current file
         start_dir = os.path.dirname(self.file_path) if self.file_path else ""
         
-        path, _ = QFileDialog.getOpenFileName(self, "Open ORCA Output", start_dir, "ORCA Output (*.out *.log)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open ORCA Output", start_dir, "ORCA Output (*.out)")
         if not path: return
         
         self.load_file(path)
@@ -359,9 +358,6 @@ class OrcaResultAnalyzerDialog(QDialog):
                 with open(path, 'r', encoding='utf-8', errors='replace') as f:
                     content = f.read()
                 
-            # import importlib # Moved to top
-            from . import parser as parser_mod
-            importlib.reload(parser_mod)
             from .parser import OrcaParser
             
             new_parser = OrcaParser()
