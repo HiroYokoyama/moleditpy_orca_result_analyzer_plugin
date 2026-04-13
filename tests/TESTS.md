@@ -110,13 +110,29 @@ collection-order dependencies.
 | `traj_analysis.py` | Qt and matplotlib Qt backend stubbed; `QDialog`/`FigureCanvasQTAgg` as real inheritable classes |
 | `__init__.py` | Minimal PyQt6 (`QMessageBox`, `QFileDialog`) stubbed as `MagicMock()` |
 
-## Coverage Summary (as of initial suite)
+### test_parser_extended.py
+**Extended OrcaParser coverage — no stubs required**
+
+| Class | What is tested |
+|---|---|
+| `TestParseThermal` | electronic energy, ZPE, enthalpy, Gibbs, entropy, temperature; minimal block; empty content |
+| `TestParseOrbitalEnergies` | restricted RHF (3 MOs), UHF alpha+beta spins, energy_eh/energy_ev, occupation, type (occupied/virtual), backward-compat `mos` list; empty content |
+| `TestParseFrequenciesIR` | IR intensities stored by mode index (T² column); multiple modes; zero for non-IR modes; Raman activity stored by mode index |
+| `TestParseChargesMayer` | Mayer QA/VA/BVA/FA values; fallback into Mulliken when no separate Mulliken block; empty content |
+| `TestParseScanResultsTable` | builds scan_steps from "Actual Energy" summary; coord/energy mapping; maps coords into existing trajectory steps; empty content |
+| `TestParseTrajectoryNeb` | NEB PATH SUMMARY → neb_image steps, energies, distances |
+| `TestParseOptCycleConvergence` | convergence dict populated from GEOMETRY CONVERGENCE block; YES flags |
+| `TestParseGradientsMultipleBlocks` | two gradient blocks in all_gradients; default = last block; first block accessible |
+
+---
+
+## Coverage Summary
 
 | Module | Tests cover |
 |---|---|
 | `utils.py` | ~100% |
-| `parser.py` | All `parse_*` methods (basic, scf_trace, dipole, charges, frequencies, nmr, tddft, trajectory, gradients, xyz); ~60-70% of parser logic |
-| `traj_analysis.py` | `compute_scan_points`, `update_display_values`; Qt-dependent UI paths excluded |
+| `parser.py` | All `parse_*` methods including thermal, orbital energies, IR/Raman, Mayer charges, scan results, NEB path, opt convergence, multi-gradient blocks; ~80-85% of parser logic |
+| `traj_analysis.py` | `compute_scan_points`, `update_display_values`, `recalc_energies`; Qt-dependent UI paths excluded |
 | `__init__.py` | `initialize()`, `handle_drop()` False paths; `open_orca_file()` excluded |
 
 Modules with Qt UI code (`gui.py`, `scf_analysis.py`, `freq_analysis.py`,
