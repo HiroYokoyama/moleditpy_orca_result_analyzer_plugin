@@ -317,7 +317,7 @@ class SpectrumWidget(QWidget):
                     va="center",
                     transform=self.canvas.axes.transAxes,
                 )
-                self.canvas.draw()
+                self.canvas.draw_idle()
                 return
 
             # Use Gaussian points for X range if available, else Stick points
@@ -645,7 +645,7 @@ class SpectrumWidget(QWidget):
             #     self.canvas.figure.tight_layout()
             # except: pass
 
-            self.canvas.draw()
+            self.canvas.draw_idle()
 
             # Emit range changed to sync UI
             xlim = self.canvas.axes.get_xlim()

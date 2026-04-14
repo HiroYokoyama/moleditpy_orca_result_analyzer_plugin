@@ -174,7 +174,7 @@ class SCFTraceDialog(QDialog):
                 )
 
         self.figure.tight_layout()
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
     def export_csv(self):
         idx = self.combo_steps.currentData()
@@ -204,8 +204,8 @@ class SCFTraceDialog(QDialog):
                         ]
                     )
                     cum_idx = 1
-                    for trace in self.scf_traces:
-                        label = trace.get("step", "Step")
+                    for i, trace in enumerate(self.scf_traces):
+                        label = trace.get("step") or f"Step {i + 1}"
                         for d in trace.get("iterations", []):
                             writer.writerow([cum_idx, label, d["iter"], d["energy"]])
                             cum_idx += 1

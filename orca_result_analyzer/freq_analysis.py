@@ -1016,6 +1016,9 @@ class FrequencyDialog(QDialog):
             QMessageBox.warning(self, "Error", "PIL (Pillow) not installed.")
             return
 
+        if getattr(self, "_gif_saving", False):
+            return
+
         if self.current_mode_idx < 0:
             QMessageBox.warning(
                 self, "Select Mode", "Please select a frequency mode first."
@@ -1079,6 +1082,8 @@ class FrequencyDialog(QDialog):
             QMessageBox.warning(self, "Error", "Cannot access 3D plotter.")
             return
 
+        self._gif_saving = True
+        self.btn_gif.setEnabled(False)
         try:
             self.setCursor(Qt.CursorShape.WaitCursor)
 
@@ -1168,6 +1173,8 @@ class FrequencyDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
+            self._gif_saving = False
+            self.btn_gif.setEnabled(True)
             self.setCursor(Qt.CursorShape.ArrowCursor)
             self.reset_geometry()
             if was_playing:

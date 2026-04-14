@@ -75,8 +75,6 @@ class ForceViewerDialog(QDialog):
 
         row1.addStretch()
 
-        row1.addStretch()
-
         view_layout.addLayout(row1)
         main_layout.addWidget(view_group)
 
@@ -235,12 +233,13 @@ class ForceViewerDialog(QDialog):
         # Connect signals AFTER UI construction
         self.traj_slider.valueChanged.connect(self.on_trajectory_change)
 
-        # Set initial value (triggers signal)
+        # Block signals while setting initial value to avoid firing before data is ready
+        self.traj_slider.blockSignals(True)
         self.traj_slider.setValue(len(self.traj_steps))
+        self.traj_slider.blockSignals(False)
 
-        # Initial trigger if value didn't change (e.g. if we started at 0 and desired is 0)
-        if self.traj_slider.value() == 0 and len(self.traj_steps) == 0:
-            self.on_trajectory_change(0)
+        # Manually trigger initial update
+        self.on_trajectory_change(self.traj_slider.value())
 
         # Insert at the top (index 0) so it appears above other controls
         # even though it is initialized last.
@@ -387,14 +386,19 @@ class ForceViewerDialog(QDialog):
 
     def reload_data(self):
         """Reload data from the output file"""
+        if getattr(self, "_reloading", False):
+            return
+        self._reloading = True
         if not self.parser or not self.parser.filename:
             QMessageBox.warning(self, "Error", "No file associated with this parser.")
+            self._reloading = False
             return
 
         if not os.path.exists(self.parser.filename):
             QMessageBox.warning(
                 self, "Error", f"File not found: {self.parser.filename}"
             )
+            self._reloading = False
             return
 
         try:
@@ -443,6 +447,8 @@ class ForceViewerDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reload data: {e}")
+        finally:
+            self._reloading = False
 
     def update_structure(self, atoms, coords):
         """Update the 3D structure visualization using RDKit"""
@@ -453,9 +459,12 @@ class ForceViewerDialog(QDialog):
         except ImportError:
             return
 
+        if not hasattr(self, "_pt"):
+            self._pt = Chem.GetPeriodicTable()
+
         mol = Chem.RWMol()
         conf = Chem.Conformer()
-        pt = Chem.GetPeriodicTable()
+        pt = self._pt
 
         try:
             for i, sym in enumerate(atoms):
@@ -471,12 +480,14 @@ class ForceViewerDialog(QDialog):
 
         mol.AddConformer(conf)
 
-        # Determine bonds
+        # Determine bonds; skip DetermineBondOrders for large molecules (>80 atoms)
+        _BOND_ORDER_ATOM_THRESHOLD = 80
         if rdDetermineBonds:
             try:
                 rdDetermineBonds.DetermineConnectivity(mol)
-                charge = self.parser.data.get("charge", 0) if self.parser else 0
-                rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
+                if len(atoms) <= _BOND_ORDER_ATOM_THRESHOLD:
+                    charge = self.parser.data.get("charge", 0) if self.parser else 0
+                    rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
             except Exception as _e:
                 logging.warning("[force_analysis.py:420] silenced: %s", _e)
 

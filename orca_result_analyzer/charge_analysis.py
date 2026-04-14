@@ -446,8 +446,7 @@ class ChargeDialog(QDialog):
         # Sort or prioritize
         # Make sure standard Mayer order if present: VA, BVA, FA
         if "valency" in other_keys:
-            if "valency" in other_keys:
-                other_keys.remove("valency")
+            other_keys.remove("valency")
             if "bonded_valency" in other_keys:
                 other_keys.remove("bonded_valency")
             if "free_valency" in other_keys:
@@ -649,6 +648,9 @@ class ChargeDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
 
     def export_csv(self):
+        if getattr(self, "_csv_exporting", False):
+            return
+        self._csv_exporting = True
         default_path = get_default_export_path(
             self.parent_dlg.file_path, suffix="_charges_list", extension=".csv"
         )
@@ -656,6 +658,7 @@ class ChargeDialog(QDialog):
             self, "Export Charge Data", default_path, "CSV Files (*.csv)"
         )
         if not filename:
+            self._csv_exporting = False
             return
 
         try:
@@ -734,6 +737,8 @@ class ChargeDialog(QDialog):
                 )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
+        finally:
+            self._csv_exporting = False
 
     def closeEvent(self, event):
         """Clean up labels and scalar bar on close"""

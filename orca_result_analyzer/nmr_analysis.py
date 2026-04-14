@@ -1660,7 +1660,7 @@ class NMRDialog(QDialog):
                 transform=ax.transAxes,
                 fontsize=14,
             )
-            self.canvas.draw()
+            self.canvas.draw_idle()
             return
 
         # リストから描画用の値を抽出（NameErrorを解決）
@@ -1713,7 +1713,7 @@ class NMRDialog(QDialog):
             self.highlight_selected_peaks()
 
         self.figure.tight_layout()
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
     def highlight_selected_peaks(self):
         """Add red highlights and labels to selected peaks"""
@@ -1725,7 +1725,7 @@ class NMRDialog(QDialog):
                 except Exception as _e:
                     logging.warning("[nmr_analysis.py:1463] silenced: %s", _e)
             self.highlight_artists = []
-            self.canvas.draw()
+            self.canvas.draw_idle()
             return
 
         ax = self.figure.axes[0] if self.figure.axes else None
@@ -1795,7 +1795,7 @@ class NMRDialog(QDialog):
                     )
                     self.highlight_artists.append(text)
 
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
     def _get_current_peaks(self):
         """
@@ -2286,7 +2286,7 @@ class NMRDialog(QDialog):
 
         # Redraw spectrum
         if getattr(self, "canvas", None) is not None:
-            self.canvas.draw()
+            self.canvas.draw_idle()
 
     def plot_real_spectrum(self, ax):
         """Jカップリングを考慮したスペクトル描画（共通ロジック完全統合版）"""
@@ -2303,7 +2303,7 @@ class NMRDialog(QDialog):
                 va="center",
                 transform=ax.transAxes,
             )
-            self.canvas.draw()
+            self.canvas.draw_idle()
             return
 
         # 2. クラス変数にも保存（クリック判定やハイライト用）
@@ -2531,7 +2531,7 @@ class NMRDialog(QDialog):
         if self.selected_peak_indices:
             self.highlight_selected_peaks()
 
-        self.canvas.draw()
+        self.canvas.draw_idle()
 
     def toggle_all_labels(self):
         """Toggle showing all atom labels on the spectrum graph"""
