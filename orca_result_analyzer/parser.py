@@ -1,32 +1,34 @@
 import re
 import logging
-# from .logger import Logger 
+# from .logger import Logger
+
 
 class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
+
     def __init__(self):
         # self.logger = Logger.get_logger("OrcaParser")
         self.filename = ""
         self.raw_content = ""
         self.lines = []
         self.data = {
-            "scf_traces": [], # List of SCF energy values per iteration
+            "scf_traces": [],  # List of SCF energy values per iteration
             "converged": False,
             "scf_energy": None,
             "atoms": [],
             "coords": [],
             "charge": 0,
             "mult": 1,
-            "frequencies": [], # List of dicts: {freq, ir, raman, vector}
-            "excitation_energies": [], # TDDFT
+            "frequencies": [],  # List of dicts: {freq, ir, raman, vector}
+            "excitation_energies": [],  # TDDFT
             "dipole": None,
             "dipoles": None,
             "nmr_shielding": [],
             "nmr_couplings": [],
-            "charges": {}, # Type -> List
+            "charges": {},  # Type -> List
             "version": None,
             "scan_steps": [],
-            "all_steps": []
+            "all_steps": [],
         }
 
     def parse_xyz_content(self, content):
@@ -35,49 +37,50 @@ class OrcaParser:
         steps = []
         i = 0
         n_lines = len(lines)
-        
+
         while i < n_lines:
             line = lines[i].strip()
             if not line:
                 i += 1
                 continue
-                
+
             # Number of atoms
             try:
                 natoms = int(line)
             except ValueError:
                 i += 1
                 continue
-                
+
             i += 1
-            if i >= n_lines: break
-            
+            if i >= n_lines:
+                break
+
             # Comment line (extract energy if possible)
             comment = lines[i].strip()
-            
+
             # Filter out TS/CI steps if requested (User requirement: "if ts or ci present, do not use that in graph")
             # We want to filter "TS" or "CI" labels but NOT "CI-NEB" which is the method name
             import re
             # Check for TS or CI as whole words
             # Exclude strict "CI-NEB" matches from being flagged if "CI" is found
-            # Simple approach: Check word boundaries. 
+            # Simple approach: Check word boundaries.
             # If "CI-NEB" is present, we might still have "CI" separately?
             # Let's assume labels like "Image 5 (CI)" or "TS Structure"
-            
+
             is_excluded = False
             upper_comment = comment.upper()
-            
+
             # Check TS
             if re.search(r"\bTS\b", upper_comment):
                 is_excluded = True
-                
+
             # Check CI, but carefully
             # Only exclude if it's NOT "CI-NEB" or similar method string
             if re.search(r"\bCI\b", upper_comment):
-                 # It contains CI. Check if it is part of CI-NEB
-                 if "CI-NEB" not in upper_comment:
-                     is_excluded = True
-            
+                # It contains CI. Check if it is part of CI-NEB
+                if "CI-NEB" not in upper_comment:
+                    is_excluded = True
+
             if is_excluded:
                 # Skip this step (atoms + coords)
                 # We need to advance i by natoms
@@ -87,52 +90,65 @@ class OrcaParser:
             # Try robust extraction of Energy and Distance/Coord from comment
             energy = 0.0
             dist_val = None
-            
+
             # 1. Look for Energy Label: "Energy: -123.4" or "Energy -123.4" or "E -123.4"
-            e_match = re.search(r"(?:Energy|E)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)", comment, re.IGNORECASE)
+            e_match = re.search(
+                r"(?:Energy|E)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                comment,
+                re.IGNORECASE,
+            )
             if e_match:
-                try: energy = float(e_match.group(1))
+                try:
+                    energy = float(e_match.group(1))
                 except Exception as _e:
                     logging.warning("[parser.py:94] silenced: %s", _e)
             else:
                 # Fallback: Just take the last float (usually energy)
                 floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
                 if floats:
-                    try: energy = float(floats[-1])
+                    try:
+                        energy = float(floats[-1])
                     except Exception as _e:
                         logging.warning("[parser.py:100] silenced: %s", _e)
-            
+
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
-            d_match = re.search(r"(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)", comment, re.IGNORECASE)
+            d_match = re.search(
+                r"(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                comment,
+                re.IGNORECASE,
+            )
             if d_match:
-                try: dist_val = float(d_match.group(1))
+                try:
+                    dist_val = float(d_match.group(1))
                 except Exception as _e:
                     logging.warning("[parser.py:106] silenced: %s", _e)
-            
+
             i += 1
-            
+
             atoms = []
             coords = []
-            
+
             for _ in range(natoms):
-                if i >= n_lines: break
+                if i >= n_lines:
+                    break
                 parts = lines[i].split()
                 if len(parts) >= 4:
                     atoms.append(parts[0])
                     coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
                 i += 1
-                
-            steps.append({
-                'type': 'neb_step',
-                'energy': energy,
-                'dist': dist_val,
-                'scan_coord': dist_val,
-                'atoms': atoms,
-                'coords': coords
-            })
-            
-        return steps
 
+            steps.append(
+                {
+                    "type": "neb_step",
+                    "energy": energy,
+                    "dist": dist_val,
+                    "scan_coord": dist_val,
+                    "atoms": atoms,
+                    "coords": coords,
+                }
+            )
+
+        return steps
 
     def load_from_memory(self, content, filename=""):
         self.filename = filename
@@ -142,7 +158,7 @@ class OrcaParser:
 
     def parse_all(self):
         self.parse_basic()
-        self.parse_gradients() # Must come before trajectory to link gradients!
+        self.parse_gradients()  # Must come before trajectory to link gradients!
         self.parse_trajectory()
         self.parse_frequencies()
         self.parse_thermal()
@@ -155,7 +171,7 @@ class OrcaParser:
         self.parse_basis_set()
         self.parse_scf_trace()
         self.parse_scan_results_table()
-        
+
     def parse_basic(self):
         """Parse basic info: SCF Energy, Convergence, Geometry."""
         for i, line in enumerate(self.lines):
@@ -180,7 +196,7 @@ class OrcaParser:
                     self.data["charge"] = val
                 except Exception as _e:
                     logging.warning("[parser.py:175] silenced: %s", _e)
-                
+
             if "MULTIPLICITY" in uu:
                 try:
                     parts = line.split()
@@ -188,37 +204,49 @@ class OrcaParser:
                     self.data["mult"] = val
                 except Exception as _e:
                     logging.warning("[parser.py:182] silenced: %s", _e)
-            if "SCF CONVERGED" in uu or "OPTIMIZATION CONVERGED" in uu or "HURRAY" in uu:
+            if (
+                "SCF CONVERGED" in uu
+                or "OPTIMIZATION CONVERGED" in uu
+                or "HURRAY" in uu
+            ):
                 self.data["converged"] = True
-            
+
             if "RELAXED SURFACE SCAN" in uu:
                 self.data["is_scan"] = True
             if "NUDGED ELASTIC BAND" in uu or " NEB " in uu:
                 self.data["is_neb"] = True
-                
+
             if "CURRENT TRAJECTORY WILL BE WRITTEN TO" in uu:
                 # Robust regex extraction
-                match = re.search(r"Current trajectory will be written to\s*\.+\s*(.+)", line, re.IGNORECASE)
+                match = re.search(
+                    r"Current trajectory will be written to\s*\.+\s*(.+)",
+                    line,
+                    re.IGNORECASE,
+                )
                 if match:
-                     self.data["neb_trj_file"] = match.group(1).strip()
+                    self.data["neb_trj_file"] = match.group(1).strip()
                 else:
-                     # Fallback
-                     try: self.data["neb_trj_file"] = line.split()[-1].strip()
-                     except Exception as _e:
-                         logging.warning("[parser.py:199] silenced: %s", _e)
-                
-            if "CARTESIAN COORDINATES" in uu and "A.U." not in uu: # Prefer Angstrom
+                    # Fallback
+                    try:
+                        self.data["neb_trj_file"] = line.split()[-1].strip()
+                    except Exception as _e:
+                        logging.warning("[parser.py:199] silenced: %s", _e)
+
+            if "CARTESIAN COORDINATES" in uu and "A.U." not in uu:  # Prefer Angstrom
                 # Read geometry
                 self.data["atoms"] = []
                 self.data["coords"] = []
                 curr = i + 2
                 while curr < len(self.lines):
                     l_geo = self.lines[curr].strip()
-                    if not l_geo or "---" in l_geo: break
+                    if not l_geo or "---" in l_geo:
+                        break
                     parts = l_geo.split()
                     if len(parts) >= 4:
                         self.data["atoms"].append(parts[0])
-                        self.data["coords"].append([float(parts[1]), float(parts[2]), float(parts[3])])
+                        self.data["coords"].append(
+                            [float(parts[1]), float(parts[2]), float(parts[3])]
+                        )
                     curr += 1
 
     def parse_trajectory(self):
@@ -226,13 +254,13 @@ class OrcaParser:
         # Already initialized in parse_all, but keep for robustness if called standalone
         if "scan_steps" not in self.data:
             self.data["scan_steps"] = []
-        
+
         # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE" or "NEB"
         # And capture Energy + Geometry
         # Actually usually Step header -> Energy -> ... -> Coordinates
-        
+
         current_scan_step = None
-        
+
         # Helper to find coords after a header
         def read_coords_from(idx):
             atoms = []
@@ -241,76 +269,81 @@ class OrcaParser:
             # ORCA output for coords in opt steps usually:
             # "CARTESIAN COORDINATES (ANGSTROEM)"
             # search forward for coordinates
-            limit = 1000 # Search limit
+            limit = 1000  # Search limit
             found_coords = False
             for k in range(limit):
-                if idx + k >= len(self.lines): break
-                line = self.lines[idx+k].strip()
+                if idx + k >= len(self.lines):
+                    break
+                line = self.lines[idx + k].strip()
                 if "CARTESIAN COORDINATES" in line.upper():
                     c_idx = idx + k + 2
                     found_coords = True
                     while c_idx < len(self.lines):
-                         cl = self.lines[c_idx].strip()
-                         if not cl or "-------" in cl: break
-                         parts = cl.split()
-                         if len(parts) >= 4:
-                             atoms.append(parts[0])
-                             coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
-                         c_idx += 1
+                        cl = self.lines[c_idx].strip()
+                        if not cl or "-------" in cl:
+                            break
+                        parts = cl.split()
+                        if len(parts) >= 4:
+                            atoms.append(parts[0])
+                            coords.append(
+                                [float(parts[1]), float(parts[2]), float(parts[3])]
+                            )
+                        c_idx += 1
                     break
             return atoms, coords, found_coords
 
         for i, line in enumerate(self.lines):
             uu_line = line.upper()
-            
-            # --- NEB Parsing ---
-            if "PATH SUMMARY" in uu_line and i > 0 and "----" in self.lines[i-1]:
-                 # Found the summary table
-                 # Skip header lines
-                 # Line i: ---------------------------
-                 # Line i+1:          PATH SUMMARY
-                 # Line i+2: ---------------------------
-                 # Line i+3: All forces in Eh/Bohr.
-                 # Line i+4: Image Dist.(Ang.)    E(Eh)   dE(kcal/mol)  max(|Fp|)  RMS(Fp)
-                 
-                 curr = i + 1
-                 header_found = False
-                 while curr < len(self.lines) and curr < i + 10:
-                     if "Image" in self.lines[curr] and "E(Eh)" in self.lines[curr]:
-                         header_found = True
-                         curr += 1
-                         break
-                     curr += 1
-                 
-                 if header_found:
-                     while curr < len(self.lines):
-                         l_row = self.lines[curr].strip()
-                         if not l_row: 
-                             break
-                             
-                         parts = l_row.split()
-                         if len(parts) >= 3 and parts[0].isdigit():
-                             try:
-                                 img_idx = int(parts[0])
-                                 dist = float(parts[1])
-                                 en = float(parts[2])
-                                 
-                                 # We have no geometry, but user said "NO STRUCTURE IS OK"
-                                 # We provide empty atoms/coords
-                                 self.data["scan_steps"].append({
-                                    'type': 'neb_image',
-                                    'scan_step_id': img_idx,
-                                    'step': len(self.data["scan_steps"]) + 1,
-                                    'id': img_idx,
-                                    'dist': dist,
-                                    'energy': en,
-                                    'atoms': [],
-                                    'coords': []
-                                 })
-                             except Exception as _e:
-                                 logging.warning("[parser.py:303] silenced: %s", _e)
-                         curr += 1
 
+            # --- NEB Parsing ---
+            if "PATH SUMMARY" in uu_line and i > 0 and "----" in self.lines[i - 1]:
+                # Found the summary table
+                # Skip header lines
+                # Line i: ---------------------------
+                # Line i+1:          PATH SUMMARY
+                # Line i+2: ---------------------------
+                # Line i+3: All forces in Eh/Bohr.
+                # Line i+4: Image Dist.(Ang.)    E(Eh)   dE(kcal/mol)  max(|Fp|)  RMS(Fp)
+
+                curr = i + 1
+                header_found = False
+                while curr < len(self.lines) and curr < i + 10:
+                    if "Image" in self.lines[curr] and "E(Eh)" in self.lines[curr]:
+                        header_found = True
+                        curr += 1
+                        break
+                    curr += 1
+
+                if header_found:
+                    while curr < len(self.lines):
+                        l_row = self.lines[curr].strip()
+                        if not l_row:
+                            break
+
+                        parts = l_row.split()
+                        if len(parts) >= 3 and parts[0].isdigit():
+                            try:
+                                img_idx = int(parts[0])
+                                dist = float(parts[1])
+                                en = float(parts[2])
+
+                                # We have no geometry, but user said "NO STRUCTURE IS OK"
+                                # We provide empty atoms/coords
+                                self.data["scan_steps"].append(
+                                    {
+                                        "type": "neb_image",
+                                        "scan_step_id": img_idx,
+                                        "step": len(self.data["scan_steps"]) + 1,
+                                        "id": img_idx,
+                                        "dist": dist,
+                                        "energy": en,
+                                        "atoms": [],
+                                        "coords": [],
+                                    }
+                                )
+                            except Exception as _e:
+                                logging.warning("[parser.py:303] silenced: %s", _e)
+                        curr += 1
 
             # Scan Step Header
             if "RELAXED SURFACE SCAN STEP" in uu_line:
@@ -319,43 +352,44 @@ class OrcaParser:
                 if match:
                     step_idx = int(match.group(1))
                 current_scan_step = step_idx
-                
+
                 # Find next step to bound search
                 next_marker = len(self.lines)
                 for m in range(i + 1, len(self.lines)):
                     if "RELAXED SURFACE SCAN STEP" in self.lines[m].upper():
                         next_marker = m
                         break
-                
+
                 en = 0.0
                 conv_info = {}
                 coord_val = None
                 for k in range(i, next_marker):
                     uu = self.lines[k].strip().upper()
                     if "ACTUAL SCAN COORDINATE" in uu:
-                         try:
-                             # Format: Actual scan coordinate      ...   1.500000
-                             coord_val = float(self.lines[k].split()[-1])
-                         except Exception as _e:
-                             logging.warning("[parser.py:331] silenced: %s", _e)
+                        try:
+                            # Format: Actual scan coordinate      ...   1.500000
+                            coord_val = float(self.lines[k].split()[-1])
+                        except Exception as _e:
+                            logging.warning("[parser.py:331] silenced: %s", _e)
                     if "FINAL SINGLE POINT ENERGY" in uu:
-                         try: en = float(self.lines[k].split()[-1])
-                         except Exception as _e:
-                             logging.warning("[parser.py:334] silenced: %s", _e)
+                        try:
+                            en = float(self.lines[k].split()[-1])
+                        except Exception as _e:
+                            logging.warning("[parser.py:334] silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
-                         # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
-                         try:
-                             parts = self.lines[k].split(":")
-                             en = float(parts[1].split()[0])
-                         except Exception as _e:
-                             logging.warning("[parser.py:340] silenced: %s", _e)
+                        # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
+                        try:
+                            parts = self.lines[k].split(":")
+                            en = float(parts[1].split()[0])
+                        except Exception as _e:
+                            logging.warning("[parser.py:340] silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
-                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
-                         try:
-                             parts = self.lines[k].split("....")
-                             en = float(parts[1].split()[0])
-                         except Exception as _e:
-                             logging.warning("[parser.py:346] silenced: %s", _e)
+                        # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
+                        try:
+                            parts = self.lines[k].split("....")
+                            en = float(parts[1].split()[0])
+                        except Exception as _e:
+                            logging.warning("[parser.py:346] silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -365,31 +399,35 @@ class OrcaParser:
                             if "---" in cl:
                                 c_idx += 1
                                 continue
-                            
+
                             p = cl.split()
                             if len(p) >= 4:
                                 s = p[-1]
                                 t = p[-2]
                                 v = p[-3]
                                 n = " ".join(p[:-3]).strip().lower()
-                                
+
                                 # Check if it's a standard Yes/No criterion
                                 if s.upper() in ["YES", "NO"]:
-                                    if n and n != "item": 
+                                    if n and n != "item":
                                         conv_info[n] = {
-                                            'value': v,
-                                            'tolerance': t,
-                                            'converged': s
+                                            "value": v,
+                                            "tolerance": t,
+                                            "converged": s,
                                         }
                                 elif "max(" in cl.lower():
                                     # Parse Max(...) stats
                                     # e.g. Max(Bonds) 0.123 Max(Angles) 0.0
-                                    matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
+                                    matches = re.findall(
+                                        r"(Max\([^)]+\))\s+([-\d\.]+)",
+                                        cl,
+                                        re.IGNORECASE,
+                                    )
                                     for label, val in matches:
                                         conv_info[label] = {
-                                            'value': val, 
-                                            'tolerance': '', 
-                                            'converged': 'INFO'
+                                            "value": val,
+                                            "tolerance": "",
+                                            "converged": "INFO",
                                         }
                             c_idx += 1
 
@@ -397,34 +435,36 @@ class OrcaParser:
                 step_grads = []
                 candidates = []
                 for g_block in self.data.get("all_gradients", []):
-                    if g_block['line'] >= i and g_block['line'] < next_marker:
-                        candidates.append(g_block['grads'])
-                
+                    if g_block["line"] >= i and g_block["line"] < next_marker:
+                        candidates.append(g_block["grads"])
+
                 if candidates:
                     step_grads = candidates[-1]
-                # Fallback: if not found between markers, maybe it's slightly before the marker? 
+                # Fallback: if not found between markers, maybe it's slightly before the marker?
                 # Or just use the one closest to the coordinate block.
 
                 atoms, coords, found = read_coords_from(i)
                 if found:
-                    self.data["scan_steps"].append({
-                        'type': 'scan_step',
-                        'scan_step_id': current_scan_step,
-                        'step': step_idx,
-                        'energy': en,
-                        'scan_coord': coord_val,
-                        'atoms': atoms,
-                        'coords': coords,
-                        'convergence': conv_info,
-                        'gradients': step_grads
-                    })
-                    
+                    self.data["scan_steps"].append(
+                        {
+                            "type": "scan_step",
+                            "scan_step_id": current_scan_step,
+                            "step": step_idx,
+                            "energy": en,
+                            "scan_coord": coord_val,
+                            "atoms": atoms,
+                            "coords": coords,
+                            "convergence": conv_info,
+                            "gradients": step_grads,
+                        }
+                    )
+
             elif "OPTIMIZATION CYCLE" in uu_line:
                 cycle_idx = 0
                 match = re.search(r"CYCLE\s+(\d+)", uu_line)
                 if match:
                     cycle_idx = int(match.group(1))
-                
+
                 # Find next cycle to bound search
                 next_marker = len(self.lines)
                 for m in range(i + 1, len(self.lines)):
@@ -433,7 +473,10 @@ class OrcaParser:
                     if "OPTIMIZATION CYCLE" in uu_m:
                         next_marker = m
                         break
-                    if "OPTIMIZATION HAS CONVERGED" in uu_m or "OPTIMIZATION HAS RUN OUT OF CYCLES" in uu_m:
+                    if (
+                        "OPTIMIZATION HAS CONVERGED" in uu_m
+                        or "OPTIMIZATION HAS RUN OUT OF CYCLES" in uu_m
+                    ):
                         next_marker = m
                         break
                     if "ORCA TERMINATED NORMALLY" in uu_m:
@@ -442,25 +485,26 @@ class OrcaParser:
 
                 en = 0.0
                 conv_info = {}
-                
+
                 for k in range(i, next_marker):
                     uu = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu:
-                         try: en = float(self.lines[k].split()[-1])
-                         except Exception as _e:
-                             logging.warning("[parser.py:441] silenced: %s", _e)
+                        try:
+                            en = float(self.lines[k].split()[-1])
+                        except Exception as _e:
+                            logging.warning("[parser.py:441] silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
-                         try:
-                             parts = self.lines[k].split(":")
-                             en = float(parts[1].split()[0])
-                         except Exception as _e:
-                             logging.warning("[parser.py:446] silenced: %s", _e)
+                        try:
+                            parts = self.lines[k].split(":")
+                            en = float(parts[1].split()[0])
+                        except Exception as _e:
+                            logging.warning("[parser.py:446] silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
-                         try:
-                             parts = self.lines[k].split("....")
-                             en = float(parts[1].split()[0])
-                         except Exception as _e:
-                             logging.warning("[parser.py:451] silenced: %s", _e)
+                        try:
+                            parts = self.lines[k].split("....")
+                            en = float(parts[1].split()[0])
+                        except Exception as _e:
+                            logging.warning("[parser.py:451] silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -471,224 +515,263 @@ class OrcaParser:
                             if "---" in cl:
                                 c_idx += 1
                                 continue
-                            
+
                             p = cl.split()
                             if len(p) >= 4:
                                 s = p[-1]
                                 t = p[-2]
                                 v = p[-3]
                                 n = " ".join(p[:-3]).strip().lower()
-                                
+
                                 # Check if it's a standard Yes/No criterion
                                 if s.upper() in ["YES", "NO"]:
                                     if n and n != "item":
                                         conv_info[n] = {
-                                            'value': v,
-                                            'tolerance': t,
-                                            'converged': s
+                                            "value": v,
+                                            "tolerance": t,
+                                            "converged": s,
                                         }
                                 elif "max(" in cl.lower():
                                     # Parse Max(...) stats
-                                    matches = re.findall(r"(Max\([^)]+\))\s+([-\d\.]+)", cl, re.IGNORECASE)
+                                    matches = re.findall(
+                                        r"(Max\([^)]+\))\s+([-\d\.]+)",
+                                        cl,
+                                        re.IGNORECASE,
+                                    )
                                     for label, val in matches:
                                         conv_info[label] = {
-                                            'value': val, 
-                                            'tolerance': '', 
-                                            'converged': 'INFO'
+                                            "value": val,
+                                            "tolerance": "",
+                                            "converged": "INFO",
                                         }
                             c_idx += 1
-                
+
                 # Find matching gradients for this cycle
                 # Gradient block for cycle N is usually printed AFTER the convergence checks of cycle N
                 step_grads = []
-                # Strategy: 
+                # Strategy:
                 # 1. Take the LAST gradient block that appeared before next_marker
                 # 2. But it MUST be at or after the current cycle index (i)
                 candidates = []
                 for g_block in self.data.get("all_gradients", []):
-                    if g_block['line'] >= i and g_block['line'] < next_marker:
-                        candidates.append(g_block['grads'])
-                
+                    if g_block["line"] >= i and g_block["line"] < next_marker:
+                        candidates.append(g_block["grads"])
+
                 if candidates:
-                    step_grads = candidates[-1] # Usually only one, but take the last if multiple
-                
+                    step_grads = candidates[
+                        -1
+                    ]  # Usually only one, but take the last if multiple
+
                 # Special case: if we are at cycle N, and the gradient was printed just BEFORE the header?
                 # This doesn't usually happen in ORCA, but for robustness we could check the previous few lines.
-                
-                # If we still don't have gradients, look slightly further back? 
+
+                # If we still don't have gradients, look slightly further back?
                 # sometimes printed just before? No, usually after.
 
                 atoms, coords, found = read_coords_from(i)
                 if found:
-                     self.data["scan_steps"].append({
-                        'type': 'opt_cycle',
-                        'scan_step_id': current_scan_step,
-                        'step': cycle_idx,
-                        'energy': en,
-                        'atoms': atoms,
-                        'coords': coords,
-                        'convergence': conv_info,
-                        'gradients': step_grads
-                     })
-        
-    
+                    self.data["scan_steps"].append(
+                        {
+                            "type": "opt_cycle",
+                            "scan_step_id": current_scan_step,
+                            "step": cycle_idx,
+                            "energy": en,
+                            "atoms": atoms,
+                            "coords": coords,
+                            "convergence": conv_info,
+                            "gradients": step_grads,
+                        }
+                    )
+
     def parse_mo_coeffs(self):
-        self.data["mo_coeffs"] = {} # mo_idx -> { 'coeffs': list, 'energy': float, 'occ': float, 'spin': 'alpha'/'beta' }
-        
+        self.data[
+            "mo_coeffs"
+        ] = {}  # mo_idx -> { 'coeffs': list, 'energy': float, 'occ': float, 'spin': 'alpha'/'beta' }
+
         # Blocks to look for:
         # "MOLECULAR ORBITALS" (RHF or UHF if (UHF) present)
         # "SPIN UP ORBITALS" (UHF Alpha)
         # "SPIN DOWN ORBITALS" (UHF Beta)
-        
+
         start_indices = []
         for i, line in enumerate(self.lines):
             uu = line.upper()
-            if "MOLECULAR ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            if (
+                "MOLECULAR ORBITALS" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
                 start_indices.append((i, "restricted"))
-            elif "SPIN UP ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            elif (
+                "SPIN UP ORBITALS" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
                 start_indices.append((i, "alpha"))
-            elif "SPIN DOWN ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            elif (
+                "SPIN DOWN ORBITALS" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
                 start_indices.append((i, "beta"))
-                
-        if not start_indices: return
-        
+
+        if not start_indices:
+            return
+
         # Only keep the LAST occurrence for each spin type
         final_indices = {}
         for idx, spin in start_indices:
             final_indices[spin] = idx
-            
+
         filtered_indices = []
         for spin, idx in final_indices.items():
             filtered_indices.append((idx, spin))
         filtered_indices.sort()
-        
+
         for start_idx, spin in filtered_indices:
             curr = start_idx + 2
-            
+
             # Check if this "restricted" block is actually UHF
             header_line = self.lines[start_idx].upper()
             current_spin = spin
             if spin == "restricted" and "(UHF)" in header_line:
                 current_spin = "alpha"
-            
+
             last_first_mo_idx = -1
 
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line: 
+                if not line:
                     curr += 1
                     continue
-                if "TIMINGS" in line: break 
-                if "--------" in line: 
+                if "TIMINGS" in line:
+                    break
+                if "--------" in line:
                     curr += 1
                     continue
-                if "ORBITALS" in line and "--------" in self.lines[curr+1]: break # Next block
-                
+                if "ORBITALS" in line and "--------" in self.lines[curr + 1]:
+                    break  # Next block
+
                 parts = line.split()
-                if not parts: 
-                    curr+=1
+                if not parts:
+                    curr += 1
                     continue
-                    
+
                 # Header check: Integers? "0   1   2..."
                 is_header = False
                 try:
                     # Check first few items
                     if all(p.isdigit() for p in parts):
-                         [int(p) for p in parts]
-                         is_header = True
+                        [int(p) for p in parts]
+                        is_header = True
                 except Exception as _e:
                     logging.warning("[parser.py:590] silenced: %s", _e)
-                
+
                 if is_header:
                     current_mos = [int(p) for p in parts]
-                    
+
                     # Detect spin switch (Index Reset) logic for implicit UHF
                     if current_mos[0] <= last_first_mo_idx and last_first_mo_idx != -1:
                         # If we were in alpha/restricted and index dropped, assume beta
                         if current_spin == "alpha" or current_spin == "restricted":
                             current_spin = "beta"
-                    
+
                     last_first_mo_idx = current_mos[0]
-                    
+
                     # Init storage dicts
                     for idx in current_mos:
-                        key = f"{idx}_{current_spin}" # Use current_spin
+                        key = f"{idx}_{current_spin}"  # Use current_spin
                         # If duplicate key (e.g. from previous block override), reset it
                         # BUT be careful not to wipe if we are appending chunks (not the case here, cols are complete MOs)
                         if key not in self.data["mo_coeffs"]:
-                             self.data["mo_coeffs"][key] = {'coeffs': [], 'spin': current_spin, 'energy': 0.0, 'occ': 0.0, 'id': idx}
-                    
+                            self.data["mo_coeffs"][key] = {
+                                "coeffs": [],
+                                "spin": current_spin,
+                                "energy": 0.0,
+                                "occ": 0.0,
+                                "id": idx,
+                            }
+
                     # Try to parse Energy / Occ lines immediately following
                     # Usually:
                     #                  -10.000    -5.000
                     #                   2.0000     1.000
                     try:
-                        next_lines = [self.lines[curr+1].strip(), self.lines[curr+2].strip()]
+                        next_lines = [
+                            self.lines[curr + 1].strip(),
+                            self.lines[curr + 2].strip(),
+                        ]
                         # Check if numbers
                         vals1 = next_lines[0].split()
                         vals2 = next_lines[1].split()
-                        
-                        if len(vals1) == len(current_mos) and len(vals2) == len(current_mos):
-                             # Assume line 1 is Energy (Eh), Line 2 is Occ
-                             # Verify they look like floats
-                             try:
-                                 energies = [float(v) for v in vals1]
-                                 occs = [float(v) for v in vals2]
-                                 for k, idx in enumerate(current_mos):
-                                     key = f"{idx}_{current_spin}"
-                                     if key in self.data["mo_coeffs"]:
-                                         self.data["mo_coeffs"][key]['energy'] = energies[k]
-                                         self.data["mo_coeffs"][key]['occ'] = occs[k]
-                                 curr += 2 # Skip these 2 lines
-                             except Exception as _e:
-                                 logging.warning("[parser.py:635] silenced: %s", _e)
+
+                        if len(vals1) == len(current_mos) and len(vals2) == len(
+                            current_mos
+                        ):
+                            # Assume line 1 is Energy (Eh), Line 2 is Occ
+                            # Verify they look like floats
+                            try:
+                                energies = [float(v) for v in vals1]
+                                occs = [float(v) for v in vals2]
+                                for k, idx in enumerate(current_mos):
+                                    key = f"{idx}_{current_spin}"
+                                    if key in self.data["mo_coeffs"]:
+                                        self.data["mo_coeffs"][key]["energy"] = (
+                                            energies[k]
+                                        )
+                                        self.data["mo_coeffs"][key]["occ"] = occs[k]
+                                curr += 2  # Skip these 2 lines
+                            except Exception as _e:
+                                logging.warning("[parser.py:635] silenced: %s", _e)
                     except Exception as _e:
                         logging.warning("[parser.py:636] silenced: %s", _e)
-                             
+
                     curr += 1
                     continue
-                
+
                 # Coefficient line: "0   C  1s   0.000 ..." or "0C  1s ..."
                 if len(parts) >= 2:
-                     try:
-                         atom_idx = -1
-                         sym = ""
-                         orb = ""
-                         val_strs = []
-                         
-                         # Check for merged format "0C"
-                         match_merged = re.match(r"^(\d+)([A-Za-z]+)$", parts[0])
-                         if match_merged:
-                             atom_idx = int(match_merged.group(1))
-                             sym = match_merged.group(2)
-                             orb = parts[1]
-                             val_strs = parts[2:]
-                         elif len(parts) >= 3 and parts[0].isdigit():
-                             atom_idx = int(parts[0])
-                             sym = parts[1]
-                             orb = parts[2]
-                             val_strs = parts[3:]
-                         else:
-                             curr += 1
-                             continue
+                    try:
+                        atom_idx = -1
+                        sym = ""
+                        orb = ""
+                        val_strs = []
 
-                         if len(val_strs) == len(current_mos):
-                              for k, v_str in enumerate(val_strs):
-                                  mo_idx = current_mos[k]
-                                  key = f"{mo_idx}_{current_spin}"
-                                  try:
-                                      val = float(v_str)
-                                      if key in self.data["mo_coeffs"]:
-                                          self.data["mo_coeffs"][key]['coeffs'].append({
-                                              "atom_idx": atom_idx,
-                                              "sym": sym,
-                                              "orb": orb,
-                                              "coeff": val
-                                          })
-                                  except Exception as _e:
-                                      logging.warning("[parser.py:678] silenced: %s", _e)
-                     except Exception as _e:
-                         logging.warning("[parser.py:679] silenced: %s", _e)
+                        # Check for merged format "0C"
+                        match_merged = re.match(r"^(\d+)([A-Za-z]+)$", parts[0])
+                        if match_merged:
+                            atom_idx = int(match_merged.group(1))
+                            sym = match_merged.group(2)
+                            orb = parts[1]
+                            val_strs = parts[2:]
+                        elif len(parts) >= 3 and parts[0].isdigit():
+                            atom_idx = int(parts[0])
+                            sym = parts[1]
+                            orb = parts[2]
+                            val_strs = parts[3:]
+                        else:
+                            curr += 1
+                            continue
+
+                        if len(val_strs) == len(current_mos):
+                            for k, v_str in enumerate(val_strs):
+                                mo_idx = current_mos[k]
+                                key = f"{mo_idx}_{current_spin}"
+                                try:
+                                    val = float(v_str)
+                                    if key in self.data["mo_coeffs"]:
+                                        self.data["mo_coeffs"][key]["coeffs"].append(
+                                            {
+                                                "atom_idx": atom_idx,
+                                                "sym": sym,
+                                                "orb": orb,
+                                                "coeff": val,
+                                            }
+                                        )
+                                except Exception as _e:
+                                    logging.warning("[parser.py:678] silenced: %s", _e)
+                    except Exception as _e:
+                        logging.warning("[parser.py:679] silenced: %s", _e)
                 curr += 1
 
     def parse_scan(self):
@@ -701,17 +784,18 @@ class OrcaParser:
 
     def parse_gradients(self):
         """Parse all Cartesian Gradient blocks found in the file."""
-        self.data["gradients"] = [] # The last one (default)
-        self.data["all_gradients"] = [] # List of {line: int, grads: []}
-        
+        self.data["gradients"] = []  # The last one (default)
+        self.data["all_gradients"] = []  # List of {line: int, grads: []}
+
         gradient_starts = []
         for i, line in enumerate(self.lines):
             stripped = line.strip().upper()
             if "CARTESIAN GRADIENT" in stripped and "NORM" not in stripped:
                 gradient_starts.append(i)
-        
-        if not gradient_starts: return
-        
+
+        if not gradient_starts:
+            return
+
         for start_idx in gradient_starts:
             block_grads = []
             curr = start_idx + 1
@@ -722,16 +806,19 @@ class OrcaParser:
                 parts = line.split()
                 if len(parts) >= 3 and parts[0].isdigit():
                     found_data = True
-                    break 
+                    break
                 curr += 1
-            
-            if not found_data: continue
+
+            if not found_data:
+                continue
 
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if "-------" in line or "Difference to" in line: break
-                if not line: break 
-                
+                if "-------" in line or "Difference to" in line:
+                    break
+                if not line:
+                    break
+
                 parts = line.split()
                 # Format: 0 C : X Y Z (6 parts) or 1 C X Y Z (5 parts)
                 if len(parts) >= 5:
@@ -740,50 +827,56 @@ class OrcaParser:
                             if len(parts) >= 6:
                                 idx_raw = int(parts[0])
                                 sym = parts[1]
-                                vx, vy, vz = float(parts[3]), float(parts[4]), float(parts[5])
+                                vx, vy, vz = (
+                                    float(parts[3]),
+                                    float(parts[4]),
+                                    float(parts[5]),
+                                )
                                 # Usually 1-indexed
                                 idx = idx_raw - 1 if idx_raw > 0 else 0
-                            else: 
+                            else:
                                 curr += 1
                                 continue
                         else:
                             idx_raw = int(parts[0])
                             sym = parts[1]
-                            vx, vy, vz = float(parts[2]), float(parts[3]), float(parts[4])
+                            vx, vy, vz = (
+                                float(parts[2]),
+                                float(parts[3]),
+                                float(parts[4]),
+                            )
                             idx = idx_raw - 1 if idx_raw > 0 else 0
-                            
-                        block_grads.append({
-                            'atom_idx': idx, 
-                            'atom_sym': sym, 
-                            'vector': [vx, vy, vz]
-                        })
+
+                        block_grads.append(
+                            {"atom_idx": idx, "atom_sym": sym, "vector": [vx, vy, vz]}
+                        )
                     except Exception as _e:
                         logging.warning("[parser.py:748] silenced: %s", _e)
                 curr += 1
-            
+
             if block_grads:
-                self.data["all_gradients"].append({
-                    'line': start_idx,
-                    'grads': block_grads
-                })
-        
+                self.data["all_gradients"].append(
+                    {"line": start_idx, "grads": block_grads}
+                )
+
         if self.data["all_gradients"]:
             # Set the last one as the default "gradients"
-            self.data["gradients"] = self.data["all_gradients"][-1]['grads']
+            self.data["gradients"] = self.data["all_gradients"][-1]["grads"]
 
     def parse_dipole(self):
         # Look for "Total Dipole Moment"
         self.data["dipoles"] = None
         self.data["dipole"] = None
-        
+
         candidates = []
         for i, line in enumerate(self.lines):
             uu = line.upper()
             if "TOTAL DIPOLE MOMENT" in uu and ":" in line:
-                 candidates.append(i)
-                 
-        if not candidates: return
-        
+                candidates.append(i)
+
+        if not candidates:
+            return
+
         # Take the last occurrence
         idx = candidates[-1]
         line = self.lines[idx]
@@ -792,30 +885,26 @@ class OrcaParser:
             try:
                 vec_str = parts[1].strip().split()
                 if len(vec_str) >= 3:
-                     x, y, z = float(vec_str[0]), float(vec_str[1]), float(vec_str[2])
-                     
-                     mag = 0.0
-                     if idx + 1 < len(self.lines):
-                         line2 = self.lines[idx+1]
-                         if "Magnitude" in line2 and ":" in line2:
-                             mag = float(line2.split(":")[1].strip())
-                         else:
-                             import math
-                             mag = math.sqrt(x*x + y*y + z*z)
-                             
-                     self.data["dipoles"] = {
-                         "vector": (x, y, z),
-                         "magnitude": mag
-                     }
-                     self.data["dipole"] = self.data["dipoles"]
+                    x, y, z = float(vec_str[0]), float(vec_str[1]), float(vec_str[2])
+
+                    mag = 0.0
+                    if idx + 1 < len(self.lines):
+                        line2 = self.lines[idx + 1]
+                        if "Magnitude" in line2 and ":" in line2:
+                            mag = float(line2.split(":")[1].strip())
+                        else:
+                            import math
+
+                            mag = math.sqrt(x * x + y * y + z * z)
+
+                    self.data["dipoles"] = {"vector": (x, y, z), "magnitude": mag}
+                    self.data["dipole"] = self.data["dipoles"]
             except Exception as _e:
                 logging.warning("[parser.py:798] silenced: %s", _e)
 
-
-        
     def parse_charges(self):
-        self.data["charges"] = {} # type -> list of {atom_idx, atom_sym, charge}
-        
+        self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}
+
         # Section Markers
         mulliken_start = -1
         loewdin_start = -1
@@ -827,85 +916,105 @@ class OrcaParser:
         mbis_start = -1
         resp_start = -1
         fmo_start = -1
-        
+
         for i, line in enumerate(self.lines):
             uu = line.upper()
-            if "MULLIKEN ATOMIC CHARGES" in uu: mulliken_start = i
-            elif "LOEWDIN ATOMIC CHARGES" in uu: loewdin_start = i
-            elif "HIRSHFELD ANALYSIS" in uu: hirshfeld_start = i
-            elif "MAYER POPULATION ANALYSIS" in uu: mayer_start = i
-            elif "NATURAL POPULATIONS" in uu: nbo_start = i
-            elif "CHELPG ATOMIC CHARGES" in uu: chelpg_start = i
-            elif "MERZ-KOLLMAN ATOMIC CHARGES" in uu or "MK ATOMIC CHARGES" in uu: mk_start = i
-            elif "MBIS ANALYSIS" in uu: mbis_start = i
-            elif "RESP ATOMIC CHARGES" in uu: resp_start = i
-            elif "FRONTIER MOLECULAR ORBITAL POPULATION ANALYSIS" in uu: fmo_start = i
-            
-        def parse_standard_block(start_idx, header_lines=2, hirshfeld=False, mbis=False):
+            if "MULLIKEN ATOMIC CHARGES" in uu:
+                mulliken_start = i
+            elif "LOEWDIN ATOMIC CHARGES" in uu:
+                loewdin_start = i
+            elif "HIRSHFELD ANALYSIS" in uu:
+                hirshfeld_start = i
+            elif "MAYER POPULATION ANALYSIS" in uu:
+                mayer_start = i
+            elif "NATURAL POPULATIONS" in uu:
+                nbo_start = i
+            elif "CHELPG ATOMIC CHARGES" in uu:
+                chelpg_start = i
+            elif "MERZ-KOLLMAN ATOMIC CHARGES" in uu or "MK ATOMIC CHARGES" in uu:
+                mk_start = i
+            elif "MBIS ANALYSIS" in uu:
+                mbis_start = i
+            elif "RESP ATOMIC CHARGES" in uu:
+                resp_start = i
+            elif "FRONTIER MOLECULAR ORBITAL POPULATION ANALYSIS" in uu:
+                fmo_start = i
+
+        def parse_standard_block(
+            start_idx, header_lines=2, hirshfeld=False, mbis=False
+        ):
             res = []
-            if start_idx == -1: return res
+            if start_idx == -1:
+                return res
             curr = start_idx + header_lines
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line or "---" in line or "Sum of" in line:
-                    if res: break
+                    if res:
+                        break
                     curr += 1
                     continue
-                
+
                 parts = line.split()
                 if len(parts) >= 3:
-                     try:
-                         # Handle merged "0C" case
-                         first_part = parts[0]
-                         match = re.match(r"^(\d+)([a-zA-Z]+)$", first_part)
-                         if match:
-                             idx_str = match.group(1)
-                             sym = match.group(2)
-                         else:
-                             idx_str = first_part.strip(":")
-                             # If "0 C", sym is parts[1]
-                             sym = parts[1].strip(":")
-                         
-                         if hirshfeld or mbis:
-                              val = float(parts[2]) # 0 C Charge Spin
-                         else:
-                              # 0 C : -1.23 or 0 C -1.23
-                              val = float(parts[3]) if parts[2] == ":" else float(parts[2])
-                         
-                         atom_data = {
-                             "atom_idx": int(idx_str),
-                             "atom_sym": sym,
-                             "charge": val
-                         }
-                         
-                         # Capture spin if available (Hirshfeld/MBIS)
-                         if hirshfeld:
-                             if len(parts) >= 4:
-                                 atom_data["spin"] = float(parts[3])
-                         elif mbis:
-                             if len(parts) >= 4:
-                                 # ATOM CHARGE POPULATION [SPIN]
-                                 atom_data["population"] = float(parts[3])
-                             if len(parts) >= 5:
-                                 atom_data["spin"] = float(parts[4])
-                             
-                         res.append(atom_data)
-                     except Exception as _e:
-                         logging.warning("[parser.py:879] silenced: %s", _e)
+                    try:
+                        # Handle merged "0C" case
+                        first_part = parts[0]
+                        match = re.match(r"^(\d+)([a-zA-Z]+)$", first_part)
+                        if match:
+                            idx_str = match.group(1)
+                            sym = match.group(2)
+                        else:
+                            idx_str = first_part.strip(":")
+                            # If "0 C", sym is parts[1]
+                            sym = parts[1].strip(":")
+
+                        if hirshfeld or mbis:
+                            val = float(parts[2])  # 0 C Charge Spin
+                        else:
+                            # 0 C : -1.23 or 0 C -1.23
+                            val = (
+                                float(parts[3]) if parts[2] == ":" else float(parts[2])
+                            )
+
+                        atom_data = {
+                            "atom_idx": int(idx_str),
+                            "atom_sym": sym,
+                            "charge": val,
+                        }
+
+                        # Capture spin if available (Hirshfeld/MBIS)
+                        if hirshfeld:
+                            if len(parts) >= 4:
+                                atom_data["spin"] = float(parts[3])
+                        elif mbis:
+                            if len(parts) >= 4:
+                                # ATOM CHARGE POPULATION [SPIN]
+                                atom_data["population"] = float(parts[3])
+                            if len(parts) >= 5:
+                                atom_data["spin"] = float(parts[4])
+
+                        res.append(atom_data)
+                    except Exception as _e:
+                        logging.warning("[parser.py:879] silenced: %s", _e)
                 curr += 1
             return res
 
         self.data["charges"]["Mulliken"] = parse_standard_block(mulliken_start)
         self.data["charges"]["Loewdin"] = parse_standard_block(loewdin_start)
-        self.data["charges"]["Hirshfeld"] = parse_standard_block(hirshfeld_start, hirshfeld=True)
+        self.data["charges"]["Hirshfeld"] = parse_standard_block(
+            hirshfeld_start, hirshfeld=True
+        )
         self.data["charges"]["CHELPG"] = parse_standard_block(chelpg_start)
         self.data["charges"]["MK"] = parse_standard_block(mk_start)
-        self.data["charges"]["MBIS"] = parse_standard_block(mbis_start, header_lines=3, mbis=True)
+        self.data["charges"]["MBIS"] = parse_standard_block(
+            mbis_start, header_lines=3, mbis=True
+        )
         self.data["charges"]["RESP"] = parse_standard_block(resp_start)
-        
+
         # Clean up empty entries
         self.data["charges"] = {k: v for k, v in self.data["charges"].items() if v}
-        
+
         # Mayer Parsing (QA is Mulliken charge)
         if mayer_start != -1:
             mayer_res = []
@@ -915,10 +1024,11 @@ class OrcaParser:
                     curr += 1
                     break
                 curr += 1
-            
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line or "---" in line or "Mayer bond" in line: break
+                if not line or "---" in line or "Mayer bond" in line:
+                    break
                 parts = line.split()
                 if len(parts) >= 4:
                     try:
@@ -929,19 +1039,21 @@ class OrcaParser:
                         # parts[3] = ZA (Atomic Number)
                         # parts[4] = QA (Charge)
                         qa = float(parts[4])
-                        
+
                         # Extra Mayer Indices
                         extra = {}
                         if len(parts) >= 8:
-                            extra["valency"] = float(parts[5])       # VA
-                            extra["bonded_valency"] = float(parts[6]) # BVA
-                            extra["free_valency"] = float(parts[7])   # FA
-                            
-                        mayer_res.append({"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra})
+                            extra["valency"] = float(parts[5])  # VA
+                            extra["bonded_valency"] = float(parts[6])  # BVA
+                            extra["free_valency"] = float(parts[7])  # FA
+
+                        mayer_res.append(
+                            {"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra}
+                        )
                     except Exception as _e:
                         logging.warning("[parser.py:926] silenced: %s", _e)
                 curr += 1
-            if mayer_res: 
+            if mayer_res:
                 self.data["charges"]["Mayer"] = mayer_res
                 if not self.data["charges"].get("Mulliken", None):
                     self.data["charges"]["Mulliken"] = mayer_res
@@ -949,7 +1061,7 @@ class OrcaParser:
         # NBO Parsing
         if nbo_start != -1:
             nbo_charges = []
-            
+
             # 1. Try to find Detailed Summary Table first
             # "Summary of Natural Population Analysis"
             summary_start = -1
@@ -957,31 +1069,32 @@ class OrcaParser:
             # But usually the summary is a distinct block.
             # Let's search the whole file? No, usually near the end or after NBO analysis
             # Optimization: Look forward from nbo_start
-            
+
             for i in range(nbo_start, min(nbo_start + 2000, len(self.lines))):
-                 if "Summary of Natural Population Analysis" in self.lines[i]:
-                     summary_start = i
-                     break
-            
+                if "Summary of Natural Population Analysis" in self.lines[i]:
+                    summary_start = i
+                    break
+
             if summary_start != -1:
                 # Parse the detailed table
                 curr = summary_start + 1
                 while curr < len(self.lines):
                     line = self.lines[curr].strip()
                     if "Atom No" in line and "Charge" in line and "Core" in line:
-                        curr += 1 # Skip header line
-                        if curr < len(self.lines) and "----" in self.lines[curr]: 
-                            curr += 1 # Skip separator
+                        curr += 1  # Skip header line
+                        if curr < len(self.lines) and "----" in self.lines[curr]:
+                            curr += 1  # Skip separator
                         break
                     curr += 1
-                
+
                 while curr < len(self.lines):
                     line = self.lines[curr].strip()
-                    if "====" in line or "Total" in line: break
+                    if "====" in line or "Total" in line:
+                        break
                     if not line:
                         curr += 1
                         continue
-                    
+
                     parts = line.split()
                     # C  1   -0.49495      1.99999     4.48487    0.01009     6.49495
                     if len(parts) >= 7:
@@ -993,20 +1106,22 @@ class OrcaParser:
                             val = float(parts[4])
                             ryd = float(parts[5])
                             tot = float(parts[6])
-                            
-                            nbo_charges.append({
-                                "atom_idx": idx - 1,
-                                "atom_sym": sym,
-                                "charge": chg,
-                                "core": core,
-                                "valence": val,
-                                "rydberg": ryd,
-                                "total": tot
-                            })
+
+                            nbo_charges.append(
+                                {
+                                    "atom_idx": idx - 1,
+                                    "atom_sym": sym,
+                                    "charge": chg,
+                                    "core": core,
+                                    "valence": val,
+                                    "rydberg": ryd,
+                                    "total": tot,
+                                }
+                            )
                         except Exception as _e:
                             logging.warning("[parser.py:990] silenced: %s", _e)
                     curr += 1
-            
+
             # 2. Fallback if no summary found (or parsing failed), try simple block near nbo_start
             if not nbo_charges:
                 curr = nbo_start + 1
@@ -1015,30 +1130,33 @@ class OrcaParser:
                     if "---" in line:
                         curr += 1
                         continue
-                    if "================" in line or "Natural Electron Configuration" in line:
-                        if nbo_charges: break
+                    if (
+                        "================" in line
+                        or "Natural Electron Configuration" in line
+                    ):
+                        if nbo_charges:
+                            break
                         curr += 1
                         continue
                     if not line:
-                        if nbo_charges: break # Stop on empty line if we have data
+                        if nbo_charges:
+                            break  # Stop on empty line if we have data
                         curr += 1
                         continue
-                    
+
                     parts = line.split()
                     if len(parts) >= 3:
-                         try:
-                             # Simple format: Atom No Charge ...
-                             # or format: C 1 -0.123
-                             sym = parts[0]
-                             idx = int(parts[1])
-                             chg = float(parts[2])
-                             nbo_charges.append({
-                                 "atom_idx": idx - 1, 
-                                 "atom_sym": sym,
-                                 "charge": chg
-                             })
-                         except Exception as _e:
-                             logging.warning("[parser.py:1023] silenced: %s", _e)
+                        try:
+                            # Simple format: Atom No Charge ...
+                            # or format: C 1 -0.123
+                            sym = parts[0]
+                            idx = int(parts[1])
+                            chg = float(parts[2])
+                            nbo_charges.append(
+                                {"atom_idx": idx - 1, "atom_sym": sym, "charge": chg}
+                            )
+                        except Exception as _e:
+                            logging.warning("[parser.py:1023] silenced: %s", _e)
                     curr += 1
 
             if nbo_charges:
@@ -1046,85 +1164,89 @@ class OrcaParser:
 
         # FMO Parsing
         if fmo_start != -1:
-             fmo_data = []
-             curr = fmo_start + 1
-             
-             table_start = False
-             # Look for table header
-             while curr < len(self.lines) and curr < fmo_start + 40:
-                 if "--------" in self.lines[curr]:
-                      # Check previous lines for "Atom" "HOMO" etc.
-                      # Usually two or three lines of header, then barrier
-                      # Or "Atom   Q(Mulliken) ..."
-                      if curr > 0 and "Atom" in self.lines[curr-1]:
-                          table_start = True
-                          curr += 1
-                          break
-                      if curr > 1 and "HOMO" in self.lines[curr-2]:
-                          table_start = True
-                          curr += 1
-                          break
-                 curr += 1
-            
-             if table_start:
-                 while curr < len(self.lines):
-                     line = self.lines[curr].strip()
-                     if not line or "--------" in line:
-                         if fmo_data: break
-                         curr += 1
-                         continue
-                     
-                     parts = line.split()
-                     # 0-C 0.937 0.906 0.804 0.755
-                     if len(parts) >= 5:
-                         try:
-                             atom_lbl = parts[0] # 0-C
-                             if "-" in atom_lbl:
-                                 # Split only on first hyphen to handle negative indices or strange names?
-                                 # Usually ORCA format is 0-C, 1-H etc.
-                                 p_lbl = atom_lbl.split("-")
-                                 idx_str = p_lbl[0] 
-                                 sym = p_lbl[1]
-                                 idx = int(idx_str)
-                             else:
-                                 # Fallback if just C or just 0
-                                 idx = len(fmo_data)
-                                 sym = atom_lbl
-                             
-                             homo_m = float(parts[1])
-                             homo_l = float(parts[2])
-                             lumo_m = float(parts[3])
-                             lumo_l = float(parts[4])
-                             
-                             fmo_data.append({
-                                 "atom_idx": idx,
-                                 "atom_sym": sym,
-                                 # Use Mulliken HOMO as primary visual if asked for "charge"
-                                 "charge": homo_m, 
-                                 "homo_mulliken": homo_m,
-                                 "homo_loewdin": homo_l,
-                                 "lumo_mulliken": lumo_m,
-                                 "lumo_loewdin": lumo_l
-                             })
-                         except Exception as _e:
-                             logging.warning("[parser.py:1091] silenced: %s", _e)
-                     curr += 1
-                 
-                 if fmo_data:
-                     self.data["charges"]["FMO"] = fmo_data
+            fmo_data = []
+            curr = fmo_start + 1
 
-        
+            table_start = False
+            # Look for table header
+            while curr < len(self.lines) and curr < fmo_start + 40:
+                if "--------" in self.lines[curr]:
+                    # Check previous lines for "Atom" "HOMO" etc.
+                    # Usually two or three lines of header, then barrier
+                    # Or "Atom   Q(Mulliken) ..."
+                    if curr > 0 and "Atom" in self.lines[curr - 1]:
+                        table_start = True
+                        curr += 1
+                        break
+                    if curr > 1 and "HOMO" in self.lines[curr - 2]:
+                        table_start = True
+                        curr += 1
+                        break
+                curr += 1
+
+            if table_start:
+                while curr < len(self.lines):
+                    line = self.lines[curr].strip()
+                    if not line or "--------" in line:
+                        if fmo_data:
+                            break
+                        curr += 1
+                        continue
+
+                    parts = line.split()
+                    # 0-C 0.937 0.906 0.804 0.755
+                    if len(parts) >= 5:
+                        try:
+                            atom_lbl = parts[0]  # 0-C
+                            if "-" in atom_lbl:
+                                # Split only on first hyphen to handle negative indices or strange names?
+                                # Usually ORCA format is 0-C, 1-H etc.
+                                p_lbl = atom_lbl.split("-")
+                                idx_str = p_lbl[0]
+                                sym = p_lbl[1]
+                                idx = int(idx_str)
+                            else:
+                                # Fallback if just C or just 0
+                                idx = len(fmo_data)
+                                sym = atom_lbl
+
+                            homo_m = float(parts[1])
+                            homo_l = float(parts[2])
+                            lumo_m = float(parts[3])
+                            lumo_l = float(parts[4])
+
+                            fmo_data.append(
+                                {
+                                    "atom_idx": idx,
+                                    "atom_sym": sym,
+                                    # Use Mulliken HOMO as primary visual if asked for "charge"
+                                    "charge": homo_m,
+                                    "homo_mulliken": homo_m,
+                                    "homo_loewdin": homo_l,
+                                    "lumo_mulliken": lumo_m,
+                                    "lumo_loewdin": lumo_l,
+                                }
+                            )
+                        except Exception as _e:
+                            logging.warning("[parser.py:1091] silenced: %s", _e)
+                    curr += 1
+
+                if fmo_data:
+                    self.data["charges"]["FMO"] = fmo_data
+
     def parse_nmr(self):
-        self.data["nmr_shielding"] = [] # List of {atom_idx, atom_sym, shielding, shift=None}
+        self.data[
+            "nmr_shielding"
+        ] = []  # List of {atom_idx, atom_sym, shielding, shift=None}
         self.data["nmr_couplings"] = []
-        
+
         # Look for "CHEMICAL SHIELDING SUMMARY (PPM)" or individual nucleus blocks
         summary_start = -1
         for i, line in enumerate(self.lines):
             if "CHEMICAL SHIELDING SUMMARY (PPM)" in line.upper():
                 summary_start = i
                 break
-                
+
         if summary_start != -1:
             curr = summary_start + 1
             # Skip until we hit the header "N Nucleus Shielding" or similar
@@ -1140,121 +1262,126 @@ class OrcaParser:
 
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line: break
+                if not line:
+                    break
                 if "---" in line:
-                    if len(self.data["nmr_shielding"]) > 0: break
+                    if len(self.data["nmr_shielding"]) > 0:
+                        break
                     curr += 1
                     continue
-                
+
                 parts = line.split()
                 # Format: Index Nucleus Shielding
                 if len(parts) >= 3:
-                     try:
-                         idx = int(parts[0])
-                         sym = parts[1]
-                         val = float(parts[2])
-                         self.data["nmr_shielding"].append({
-                             "atom_idx": idx,
-                             "atom_sym": sym,
-                             "shielding": val
-                         })
-                     except Exception as _e:
-                         logging.warning("[parser.py:1142] silenced: %s", _e)
+                    try:
+                        idx = int(parts[0])
+                        sym = parts[1]
+                        val = float(parts[2])
+                        self.data["nmr_shielding"].append(
+                            {"atom_idx": idx, "atom_sym": sym, "shielding": val}
+                        )
+                    except Exception as _e:
+                        logging.warning("[parser.py:1142] silenced: %s", _e)
                 curr += 1
-                
+
         # Parse Couplings
         # "SUMMARY OF ISOTROPIC COUPLING CONSTANTS (Hz)"
         header_found = False
         start_idx = -1
         for i, line in enumerate(self.lines):
-             # Make (Hz) optional and case-insensitive
-             upper_line = line.upper()
-             if "SUMMARY OF ISOTROPIC COUPLING CONSTANTS" in upper_line:
-                  start_idx = i
-                  header_found = True
-                  break
-        
-        if header_found:
-             curr = start_idx + 1
-             # Skip until first separator or data
-             while curr < len(self.lines):
-                 if "----------------" in self.lines[curr]:
-                     curr += 1 # Skip first separator
-                     break
-                 curr += 1
-             
-             # Now we iterate through blocks
-             current_col_indices = [] # List of atom indices for current block of columns
-             
-             while curr < len(self.lines):
-                 line = self.lines[curr].strip()
-                 if not line: 
-                     curr += 1
-                     continue
-                 
-                 if "Maximum memory used" in line or "Timings" in line or "ORCA TERMINATED" in line:
-                     break
-                 
-                 parts = line.split()
-                 if len(parts) == 0: 
-                     curr += 1
-                     continue
-                 
-                 # Is it a header line?
-                 is_header = False
-                 # Header format: "0 C   1 C ..."
-                 # Row format: "0 C   0.000 ..."
-                 
-                 if len(parts) >= 3:
-                     # Check 3rd token (index 2). 
-                     token3 = parts[2]
-                     # In header, token3 is an index (int). In data, it is a value (float).
-                     # simple check: isdigit handles positive integers correctly.
-                     # 0.000 is not digit. -1.23 is not digit.
-                     if token3.isdigit():
-                         is_header = True
-                     else:
-                         is_header = False
-                 elif len(parts) == 2:
-                     # "0 C" only -> could be header of last column block
-                     is_header = True
-                         
-                 if is_header:
-                     # Parse column indices
-                     # ["0", "C", "1", "C", ...]
-                     current_col_indices = []
-                     p_idx = 0
-                     while p_idx < len(parts) - 1:
-                         if parts[p_idx].isdigit():
-                             current_col_indices.append(int(parts[p_idx]))
-                             p_idx += 2
-                         else:
-                             p_idx += 1
-                 else:
-                     # Parse Row
-                     if len(parts) >= 2 and parts[0].isdigit():
-                         try:
-                             row_atom_idx = int(parts[0])
-                             
-                             values = parts[2:]
-                             for c_i, val_str in enumerate(values):
-                                 if c_i < len(current_col_indices):
-                                     col_atom_idx = current_col_indices[c_i]
-                                     val = float(val_str)
-                                     
-                                     # Store unique couplings (J_AB)
-                                     if row_atom_idx < col_atom_idx:
-                                         self.data["nmr_couplings"].append({
-                                             "atom_idx1": row_atom_idx,
-                                             "atom_idx2": col_atom_idx,
-                                             "coupling": val
-                                         })
-                         except Exception as _e:
-                             logging.warning("[parser.py:1232] silenced: %s", _e)
-                         
-                 curr += 1
+            # Make (Hz) optional and case-insensitive
+            upper_line = line.upper()
+            if "SUMMARY OF ISOTROPIC COUPLING CONSTANTS" in upper_line:
+                start_idx = i
+                header_found = True
+                break
 
-        
+        if header_found:
+            curr = start_idx + 1
+            # Skip until first separator or data
+            while curr < len(self.lines):
+                if "----------------" in self.lines[curr]:
+                    curr += 1  # Skip first separator
+                    break
+                curr += 1
+
+            # Now we iterate through blocks
+            current_col_indices = []  # List of atom indices for current block of columns
+
+            while curr < len(self.lines):
+                line = self.lines[curr].strip()
+                if not line:
+                    curr += 1
+                    continue
+
+                if (
+                    "Maximum memory used" in line
+                    or "Timings" in line
+                    or "ORCA TERMINATED" in line
+                ):
+                    break
+
+                parts = line.split()
+                if len(parts) == 0:
+                    curr += 1
+                    continue
+
+                # Is it a header line?
+                is_header = False
+                # Header format: "0 C   1 C ..."
+                # Row format: "0 C   0.000 ..."
+
+                if len(parts) >= 3:
+                    # Check 3rd token (index 2).
+                    token3 = parts[2]
+                    # In header, token3 is an index (int). In data, it is a value (float).
+                    # simple check: isdigit handles positive integers correctly.
+                    # 0.000 is not digit. -1.23 is not digit.
+                    if token3.isdigit():
+                        is_header = True
+                    else:
+                        is_header = False
+                elif len(parts) == 2:
+                    # "0 C" only -> could be header of last column block
+                    is_header = True
+
+                if is_header:
+                    # Parse column indices
+                    # ["0", "C", "1", "C", ...]
+                    current_col_indices = []
+                    p_idx = 0
+                    while p_idx < len(parts) - 1:
+                        if parts[p_idx].isdigit():
+                            current_col_indices.append(int(parts[p_idx]))
+                            p_idx += 2
+                        else:
+                            p_idx += 1
+                else:
+                    # Parse Row
+                    if len(parts) >= 2 and parts[0].isdigit():
+                        try:
+                            row_atom_idx = int(parts[0])
+
+                            values = parts[2:]
+                            for c_i, val_str in enumerate(values):
+                                if c_i < len(current_col_indices):
+                                    col_atom_idx = current_col_indices[c_i]
+                                    val = float(val_str)
+
+                                    # Store unique couplings (J_AB)
+                                    if row_atom_idx < col_atom_idx:
+                                        self.data["nmr_couplings"].append(
+                                            {
+                                                "atom_idx1": row_atom_idx,
+                                                "atom_idx2": col_atom_idx,
+                                                "coupling": val,
+                                            }
+                                        )
+                        except Exception as _e:
+                            logging.warning("[parser.py:1232] silenced: %s", _e)
+
+                curr += 1
+
     def parse_tddft(self):
         """
         Parse TD-DFT/TDA excited states and spectra (Absorption/CD).
@@ -1263,7 +1390,7 @@ class OrcaParser:
         - Stores data in 'osc_len', 'osc_vel', 'rot_len', 'rot_vel'.
         - Handles '0-1A -> 1-1A' transition lines and auto-calculates eV from nm.
         """
-        self.data["tddft"] = [] 
+        self.data["tddft"] = []
         states_dict = {}  # state_id (int) -> dict
 
         # Helper to ensure state dict exists with all gauge keys initialized
@@ -1274,13 +1401,13 @@ class OrcaParser:
                     "energy_ev": 0.0,
                     "energy_nm": 0.0,
                     "energy_cm": 0.0,
-                    "osc": 0.0,       # Default (usually Length)
-                    "osc_len": 0.0,   # Length Gauge
-                    "osc_vel": 0.0,   # Velocity Gauge
-                    "rotatory_strength": 0.0, # Default (usually Length)
-                    "rot_len": 0.0,   # Length Gauge
-                    "rot_vel": 0.0,   # Velocity Gauge
-                    "transitions": []
+                    "osc": 0.0,  # Default (usually Length)
+                    "osc_len": 0.0,  # Length Gauge
+                    "osc_vel": 0.0,  # Velocity Gauge
+                    "rotatory_strength": 0.0,  # Default (usually Length)
+                    "rot_len": 0.0,  # Length Gauge
+                    "rot_vel": 0.0,  # Velocity Gauge
+                    "transitions": [],
                 }
             return states_dict[idx]
 
@@ -1288,7 +1415,7 @@ class OrcaParser:
         # PASS 1: Parse Detailed Excited States (Energy + Transitions)
         # -------------------------------------------------------------------------
         current_state_id = -1
-        
+
         for i, line in enumerate(self.lines):
             line_strip = line.strip()
             line_upper = line.upper()
@@ -1302,20 +1429,23 @@ class OrcaParser:
 
                     # Extract Energies
                     match_ev = re.search(r"([-+]?\d*\.\d+)\s*eV", line, re.IGNORECASE)
-                    if match_ev: state_entry["energy_ev"] = float(match_ev.group(1))
-                    
+                    if match_ev:
+                        state_entry["energy_ev"] = float(match_ev.group(1))
+
                     match_cm = re.search(r"([-+]?\d*\.\d+)\s*cm", line, re.IGNORECASE)
-                    if match_cm: state_entry["energy_cm"] = float(match_cm.group(1))
-                    
+                    if match_cm:
+                        state_entry["energy_cm"] = float(match_cm.group(1))
+
                     match_nm = re.search(r"([-+]?\d*\.\d+)\s*nm", line, re.IGNORECASE)
-                    if match_nm: state_entry["energy_nm"] = float(match_nm.group(1))
+                    if match_nm:
+                        state_entry["energy_nm"] = float(match_nm.group(1))
                 except:
                     current_state_id = -1
 
             # Detect Transitions
             elif current_state_id != -1:
                 if "-------" in line or "SPECTRUM" in line_upper:
-                    pass 
+                    pass
                 elif "->" in line and ":" in line:
                     parts = line_strip.split(":")
                     if len(parts) >= 2:
@@ -1328,33 +1458,36 @@ class OrcaParser:
         # -------------------------------------------------------------------------
         # PASS 2: Parse Summary Tables (All Gauges)
         # -------------------------------------------------------------------------
-        
+
         def parse_summary_table(start_idx, data_key):
             curr = start_idx + 1
             header_found = False
-            
+
             # 1. ヘッダー検出 (テーブルの開始を確認するだけ)
             while curr < len(self.lines) and curr < start_idx + 30:
                 line = self.lines[curr].strip()
                 if not line or "--------" in line:
                     curr += 1
                     continue
-                
+
                 u_line = line.upper()
                 # "TRANSITION" や "STATE" があり、かつ "ENERGY" や "WAVELENGTH" があればテーブルとみなす
-                if ("TRANSITION" in u_line or "STATE" in u_line) and ("ENERGY" in u_line or "WAVELENGTH" in u_line):
+                if ("TRANSITION" in u_line or "STATE" in u_line) and (
+                    "ENERGY" in u_line or "WAVELENGTH" in u_line
+                ):
                     header_found = True
                     break
-                
+
                 # 古いフォーマット等の救済
                 parts = line.split()
                 if len(parts) >= 3 and parts[0].isdigit():
                     header_found = True
                     break
-                    
+
                 curr += 1
-            
-            if not header_found: return
+
+            if not header_found:
+                return
 
             # 2. データ行の解析
             data_parsing_started = False
@@ -1363,28 +1496,28 @@ class OrcaParser:
                 if not line:
                     curr += 1
                     continue
-                
+
                 # Check for "TOTAL" explicitly (always stop)
-                if "TOTAL" in line.upper(): 
+                if "TOTAL" in line.upper():
                     break
-                    
+
                 # Skip the first separator line encountered (header separator)
-                if "--------" in line: 
+                if "--------" in line:
                     if not data_parsing_started:
                         curr += 1
-                        # If the very next line is also a separator, skip it too? 
+                        # If the very next line is also a separator, skip it too?
                         # Or if we just skipped one and haven't started data, we are now ready.
                         # Let's set a flag to verify we found the header separator.
-                        data_parsing_started = True 
+                        data_parsing_started = True
                         continue
                     else:
-                        break # End of table
-                
+                        break  # End of table
+
                 parts = line.split()
                 # If we encounter a valid data line (starts with digit), mark as started
                 if (len(parts) > 0 and parts[0].isdigit()) or "->" in parts:
-                    data_parsing_started = True 
-                
+                    data_parsing_started = True
+
                 # --- パターンA: 矢印 "->" を含む標準フォーマット ---
                 # 例: 0-1A  ->  1-1A   2.780   22422   446.0   0.000 ...
                 # idx:  0    1     2      3       4       5       6
@@ -1397,7 +1530,7 @@ class OrcaParser:
                         # arrow+3: Energy (cm-1)
                         # arrow+4: Wavelength (nm)
                         # arrow+5: Value (Strength)
-                        
+
                         if len(parts) > arrow_idx + 5:
                             # 1. State ID
                             target_state_str = parts[arrow_idx + 1]
@@ -1405,25 +1538,28 @@ class OrcaParser:
                             if match:
                                 s_id = int(match.group(1))
                                 entry = get_state(s_id)
-                                
+
                                 # 2. Values (強度)
                                 entry[data_key] = float(parts[arrow_idx + 5])
-                                
+
                                 # 3. Energies (値が0なら埋める / 上書きする)
                                 # 詳細ブロック(PASS 1)が見つからなかった場合のためにここでeVを取得することが重要
-                                try: entry["energy_ev"] = float(parts[arrow_idx + 2])
+                                try:
+                                    entry["energy_ev"] = float(parts[arrow_idx + 2])
                                 except Exception as _e:
                                     logging.warning("[parser.py:1394] silenced: %s", _e)
-                                
-                                try: entry["energy_cm"] = float(parts[arrow_idx + 3])
+
+                                try:
+                                    entry["energy_cm"] = float(parts[arrow_idx + 3])
                                 except Exception as _e:
                                     logging.warning("[parser.py:1397] silenced: %s", _e)
-                                
-                                try: entry["energy_nm"] = float(parts[arrow_idx + 4])
+
+                                try:
+                                    entry["energy_nm"] = float(parts[arrow_idx + 4])
                                 except Exception as _e:
                                     logging.warning("[parser.py:1400] silenced: %s", _e)
-                    except: 
-                        pass # パース失敗行はスキップ
+                    except:
+                        pass  # パース失敗行はスキップ
 
                 # --- パターンB: 矢印なしの短縮フォーマット ---
                 # 例: 1    2.78    446.0    0.001 ...
@@ -1432,24 +1568,24 @@ class OrcaParser:
                     try:
                         s_id = int(parts[0])
                         entry = get_state(s_id)
-                        
+
                         # 固定レイアウトと仮定 (State, eV, nm, Value) ※cm-1がない場合が多い
                         # データ数に応じて推測
                         entry[data_key] = float(parts[3])
-                        
+
                         if entry["energy_ev"] == 0:
                             entry["energy_ev"] = float(parts[1])
                         if entry["energy_nm"] == 0:
                             entry["energy_nm"] = float(parts[2])
                     except Exception as _e:
                         logging.warning("[parser.py:1420] silenced: %s", _e)
-                
+
                 curr += 1
 
         # Locate tables and parse SPECIFIC gauges
         for i, line in enumerate(self.lines):
             line_upper = line.upper()
-            
+
             # Absorption Spectrum
             if "ABSORPTION SPECTRUM" in line_upper:
                 if "ELECTRIC DIPOLE" in line_upper:
@@ -1459,7 +1595,7 @@ class OrcaParser:
                 elif "VELOCITY DIPOLE" in line_upper:
                     # Parse as 'osc_vel'
                     parse_summary_table(i, "osc_vel")
-            
+
             # CD Spectrum
             if "CD SPECTRUM" in line_upper:
                 if "ELECTRIC DIPOLE" in line_upper:
@@ -1474,7 +1610,7 @@ class OrcaParser:
         # FINALIZATION: Fix Missing Units & Sort
         # -------------------------------------------------------------------------
         all_items = list(states_dict.values())
-        
+
         # 1. Auto-Calculate Missing eV from nm
         for item in all_items:
             if item["energy_ev"] == 0.0:
@@ -1486,25 +1622,25 @@ class OrcaParser:
         # 2. Filter & Sort
         valid_items = [item for item in all_items if item["energy_ev"] > 0]
         valid_items.sort(key=lambda x: x["energy_ev"])
-        
+
         self.data["tddft"] = valid_items
-        #print(self.data["tddft"])
+        # print(self.data["tddft"])
 
     def parse_thermal(self):
         self.data["thermal"] = {}
         # ORCA Thermochem block
         # Look for "THERMOCHEMISTRY AT 298.15 K"
-    
+
         start_line = -1
         # Scan for the start of thermochemistry section
         for i, line in enumerate(self.lines):
             line_upper = line.upper()
             if "THERMOCHEMISTRY AT" in line_upper:
                 start_line = i
-                
+
         if start_line != -1:
             curr = start_line
-            
+
             # Mapping of ORCA labels to JSON keys
             # Using uppercase for case-insensitive matching
             thermal_keys = {
@@ -1518,27 +1654,32 @@ class OrcaParser:
                 "NON-THERMAL (ZPE) CORRECTION": "corr_zpe",
                 "TOTAL CORRECTION": "corr_total",
                 "TOTAL ENTHALPY": "enthalpy",
-                "THERMAL ENTHALPY CORRECTION": "thermal_enthalpy_corr", # Just RT
+                "THERMAL ENTHALPY CORRECTION": "thermal_enthalpy_corr",  # Just RT
                 "ELECTRONIC ENTROPY": "s_el",
                 "VIBRATIONAL ENTROPY": "s_vib",
                 "ROTATIONAL ENTROPY": "s_rot",
                 "TRANSLATIONAL ENTROPY": "s_trans",
-                "FINAL ENTROPY TERM": "entropy", 
+                "FINAL ENTROPY TERM": "entropy",
                 "FINAL GIBBS FREE ENERGY": "gibbs",
-                "G-E(EL)": "gibbs_corr"
+                "G-E(EL)": "gibbs_corr",
             }
-            
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 line_upper = line.upper()
-                
-                if "TIMINGS FOR INDIVIDUAL MODULES" in line_upper: break
-                
+
+                if "TIMINGS FOR INDIVIDUAL MODULES" in line_upper:
+                    break
+
                 # Temperature check
-                if "TEMPERATURE" in line_upper and "K" in line_upper and "..." in line_upper:
+                if (
+                    "TEMPERATURE" in line_upper
+                    and "K" in line_upper
+                    and "..." in line_upper
+                ):
                     match = re.search(r"(\d+\.\d+)\s*K", line)
                     if match:
-                         self.data["thermal"]["temperature"] = float(match.group(1))
+                        self.data["thermal"]["temperature"] = float(match.group(1))
 
                 # Iterate through expected keys
                 for key_upper, val_key in thermal_keys.items():
@@ -1548,7 +1689,9 @@ class OrcaParser:
                             # Split by "Eh" and take the part before it
                             pre_eh = line.split("Eh")[0]
                             # Find the last float-like number in the pre-Eh part
-                            val_matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh)
+                            val_matches = re.findall(
+                                r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", pre_eh
+                            )
                             if val_matches:
                                 try:
                                     val = float(val_matches[-1])
@@ -1557,7 +1700,9 @@ class OrcaParser:
                                     logging.warning("[parser.py:1531] silenced: %s", _e)
                         else:
                             # Fallback: take the last numeric match
-                            matches = re.findall(r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line)
+                            matches = re.findall(
+                                r"[-+]?\d*\.\d+(?:[eE][-+]?\d+)?", line
+                            )
                             if matches:
                                 try:
                                     val = float(matches[-1])
@@ -1565,29 +1710,32 @@ class OrcaParser:
                                 except ValueError as _e:
                                     logging.warning("[parser.py:1539] silenced: %s", _e)
                 curr += 1
-            
+
             # Post-processing: Calculate H correction (H - E_el) more accurately
             # ORCA's "Thermal Enthalpy correction" is often just RT.
             # We want the total correction including ZPE and Thermal effects.
             t_data = self.data["thermal"]
             if "enthalpy" in t_data and "electronic_energy" in t_data:
-                t_data["enthalpy_corr"] = t_data["enthalpy"] - t_data["electronic_energy"]
+                t_data["enthalpy_corr"] = (
+                    t_data["enthalpy"] - t_data["electronic_energy"]
+                )
             elif "corr_total" in t_data and "thermal_enthalpy_corr" in t_data:
                 # Fallback: H_corr = Total_corr (U-E_el) + RT_corr
-                t_data["enthalpy_corr"] = t_data["corr_total"] + t_data["thermal_enthalpy_corr"]
-            
+                t_data["enthalpy_corr"] = (
+                    t_data["corr_total"] + t_data["thermal_enthalpy_corr"]
+                )
+
             # Similarly for Gibbs if not directly found
             if "gibbs" in t_data and "electronic_energy" in t_data:
-                 t_data["gibbs_corr"] = t_data["gibbs"] - t_data["electronic_energy"]
-            
+                t_data["gibbs_corr"] = t_data["gibbs"] - t_data["electronic_energy"]
+
             # Count imaginary frequencies
             freqs = self.data.get("frequencies", [])
             imaginary_count = sum(1 for f in freqs if f.get("freq", 0) < 0)
             t_data["imaginary_freq_count"] = imaginary_count
-            
-            return 
 
-            
+            return
+
         # 2. Final Energy
         for line in reversed(self.lines):
             target = "FINAL SINGLE POINT ENERGY"
@@ -1600,11 +1748,9 @@ class OrcaParser:
                 except Exception as _e:
                     logging.warning("[parser.py:1573] silenced: %s", _e)
 
-
-
     def parse_frequencies(self):
         self.data["frequencies"] = []
-        
+
         # 1. Frequencies
         freq_start = -1
         for i, line in enumerate(self.lines):
@@ -1612,27 +1758,28 @@ class OrcaParser:
                 freq_start = i
                 # Don't break immediately, could be multiple? usually last one matters or first?
                 # In optimization + freq, it's at end.
-        
+
         if freq_start != -1:
             curr = freq_start + 1
             # Skip until we find first data line (Index: Value)
             while curr < len(self.lines) and curr < freq_start + 10:
                 line = self.lines[curr].strip()
                 if ":" in line and ("cm**-1" in line or "cm-1" in line):
-                    break # Found data match
+                    break  # Found data match
                 curr += 1
-                
+
             # Now parse data
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if "NORMAL MODES" in line or "-------" in line:
                     # If we already have freqs, a dashed line means end
-                    if len(self.data["frequencies"]) > 0: break
-                
+                    if len(self.data["frequencies"]) > 0:
+                        break
+
                 if not line:
                     curr += 1
                     continue
-                
+
                 # Format:   0:         0.00 cm**-1
                 if ":" in line and ("cm**-1" in line or "cm-1" in line):
                     parts = line.split()
@@ -1642,13 +1789,15 @@ class OrcaParser:
                         # Value is typically index 1 if index 0 ends with colon
                         val_str = parts[1]
                         val = float(val_str)
-                        self.data["frequencies"].append({"freq": val, "ir": 0.0, "raman": 0.0, "vector": []})
+                        self.data["frequencies"].append(
+                            {"freq": val, "ir": 0.0, "raman": 0.0, "vector": []}
+                        )
                     except Exception as _e:
                         logging.warning("[parser.py:1618] silenced: %s", _e)
                 elif len(self.data["frequencies"]) > 0 and ":" not in line:
                     # Maybe end of block
                     break
-                    
+
                 curr += 1
 
         # 2. IR Spectrum
@@ -1656,15 +1805,17 @@ class OrcaParser:
         for i, line in enumerate(self.lines):
             if "IR SPECTRUM" in line.upper():
                 ir_start = i
-        
+
         if ir_start != -1:
             curr = ir_start + 5
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if "The first frequency" in line or "-----" in line:
-                    if "The first frequency" in line: break
-                    if "-----" in line and curr > ir_start + 10: break # End of block
-                    
+                    if "The first frequency" in line:
+                        break
+                    if "-----" in line and curr > ir_start + 10:
+                        break  # End of block
+
                 parts = line.split()
                 if len(parts) > 3 and ":" in parts[0]:
                     try:
@@ -1681,25 +1832,27 @@ class OrcaParser:
         for i, line in enumerate(self.lines):
             if "RAMAN SPECTRUM" in line.upper():
                 raman_start = i
-                
+
         if raman_start != -1:
             curr = raman_start + 5
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if "The first frequency" in line or "-----" in line:
-                     if "The first frequency" in line: break
-                     if "-----" in line and curr > raman_start + 10: break
+                    if "The first frequency" in line:
+                        break
+                    if "-----" in line and curr > raman_start + 10:
+                        break
 
                 parts = line.split()
                 if len(parts) > 2 and ":" in parts[0]:
-                     try:
+                    try:
                         idx = int(parts[0].replace(":", ""))
                         # Mode Freq Activity ...
                         act = float(parts[2])
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["raman"] = act
-                     except Exception as _e:
-                         logging.warning("[parser.py:1671] silenced: %s", _e)
+                    except Exception as _e:
+                        logging.warning("[parser.py:1671] silenced: %s", _e)
                 curr += 1
 
         # 4. Normal Modes
@@ -1708,91 +1861,106 @@ class OrcaParser:
             uu = line.upper()
             if "NORMAL MODES" in uu:
                 modes_start = i
-        
+
         if modes_start != -1 and self.data["atoms"]:
             n_atoms = len(self.data["atoms"])
             n_coords = n_atoms * 3
             curr = modes_start + 7
-            
-            mode_buffer = {} # m_idx -> [vals]
-            
+
+            mode_buffer = {}  # m_idx -> [vals]
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line:
                     curr += 1
                     continue
-                if "IR SPECTRUM" in line or "--------" in line: break
-                
+                if "IR SPECTRUM" in line or "--------" in line:
+                    break
+
                 try:
                     headers = [int(x) for x in line.split()]
                     start_data = curr + 1
                     for r in range(n_coords):
-                        if start_data + r >= len(self.lines): break
-                        dline = self.lines[start_data+r]
+                        if start_data + r >= len(self.lines):
+                            break
+                        dline = self.lines[start_data + r]
                         dparts = dline.split()
                         values = [float(x) for x in dparts[1:]]
-                        
+
                         for c, m_idx in enumerate(headers):
-                             if m_idx not in mode_buffer: mode_buffer[m_idx] = []
-                             if c < len(values):
-                                 mode_buffer[m_idx].append(values[c])
-                                 
+                            if m_idx not in mode_buffer:
+                                mode_buffer[m_idx] = []
+                            if c < len(values):
+                                mode_buffer[m_idx].append(values[c])
+
                     curr = start_data + n_coords
                 except ValueError:
                     curr += 1
                     continue
-            
+
             # Process collected mode buffer AFTER parsing all mode blocks
             for m_idx, vec_flat in mode_buffer.items():
                 if 0 <= m_idx < len(self.data["frequencies"]):
                     vecs = []
                     for k in range(0, len(vec_flat), 3):
-                        if k+2 < len(vec_flat):
-                            vecs.append((vec_flat[k], vec_flat[k+1], vec_flat[k+2]))
+                        if k + 2 < len(vec_flat):
+                            vecs.append((vec_flat[k], vec_flat[k + 1], vec_flat[k + 2]))
                     self.data["frequencies"][m_idx]["vector"] = vecs
-
-
 
     def parse_orbital_energies(self):
         """Parse orbital energies from ORBITAL ENERGIES section"""
         self.data["orbital_energies"] = []
-        self.data["mos"] = [] # Backward compatibility
-        
+        self.data["mos"] = []  # Backward compatibility
+
         # Look for "ORBITAL ENERGIES" section
         start_indices = []
         for i, line in enumerate(self.lines):
             uu = line.upper()
-            if "ORBITAL ENERGIES" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
-                start_indices.append((i, "restricted")) # Default
-            elif "SPIN UP ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            if (
+                "ORBITAL ENERGIES" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
+                start_indices.append((i, "restricted"))  # Default
+            elif (
+                "SPIN UP ORBITALS" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
                 start_indices.append((i, "alpha"))
-            elif "SPIN DOWN ORBITALS" in uu and i+1 < len(self.lines) and "---" in self.lines[i+1]:
+            elif (
+                "SPIN DOWN ORBITALS" in uu
+                and i + 1 < len(self.lines)
+                and "---" in self.lines[i + 1]
+            ):
                 start_indices.append((i, "beta"))
-        
+
         if not start_indices:
             return
-            
+
         # Only keep the LAST occurrence for each spin type
         final_indices = {}
         for idx, spin in start_indices:
             final_indices[spin] = idx
-            
+
         filtered_indices = []
         for spin, idx in final_indices.items():
             filtered_indices.append((idx, spin))
         filtered_indices.sort()
-        
+
         for start_idx, spin in filtered_indices:
             # Skip title and separator, then find column header
             curr = start_idx + 2
             while curr < len(self.lines) and curr < start_idx + 10:
                 line = self.lines[curr].strip()
                 # Check for "NO", "OCC", and "Eh" or "eV"
-                if "NO" in line and ("OCC" in line or "E(Eh)" in line or "E(eV)" in line):
+                if "NO" in line and (
+                    "OCC" in line or "E(Eh)" in line or "E(eV)" in line
+                ):
                     curr += 1
                     break
                 curr += 1
-                
+
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
                 if not line or "---" in line or "****" in line or "MULLIKEN" in line:
@@ -1804,31 +1972,31 @@ class OrcaParser:
                 parts = line.split()
                 # Format: NO   OCC          E(Eh)            E(eV)
                 #           0   2.0000     -10.186408      -277.1862
-                if len(parts) >= 4 and parts[0].lstrip('-').isdigit():
+                if len(parts) >= 4 and parts[0].lstrip("-").isdigit():
                     try:
                         orbital_idx = int(parts[0])
                         occupation = float(parts[1])
                         energy_eh = float(parts[2])
                         energy_ev = float(parts[3])
-                        
+
                         orb_data = {
                             "index": orbital_idx,
-                            "id": orbital_idx, # For mo_analysis
+                            "id": orbital_idx,  # For mo_analysis
                             "occupation": occupation,
-                            "occ": occupation, # For mo_analysis
+                            "occ": occupation,  # For mo_analysis
                             "energy_eh": energy_eh,
                             "energy_ev": energy_ev,
-                            "energy": energy_eh, # For backward compatibility
+                            "energy": energy_eh,  # For backward compatibility
                             "spin": spin,
-                            "type": "occupied" if occupation > 0.1 else "virtual"
+                            "type": "occupied" if occupation > 0.1 else "virtual",
                         }
                         self.data["orbital_energies"].append(orb_data)
                         self.data["mos"].append(orb_data)
                     except Exception as _e:
                         logging.warning("[parser.py:1793] silenced: %s", _e)
-                
+
                 curr += 1
-    
+
     # COMMENTED OUT: Hessian file parsing no longer needed
     # Force analysis now uses only output file gradient data
     # def parse_hessian_file(self, filepath):
@@ -1839,7 +2007,7 @@ class OrcaParser:
     #     except Exception as e:
     #         print(f"Error reading Hessian file: {e}")
     #         return None
-    #     
+    #
     #     lines = content.splitlines()
     #     hessian_data = {
     #         "matrix": [],
@@ -1849,26 +2017,26 @@ class OrcaParser:
     #         "coords": [],
     #         "gradient_vec": []
     #     }
-    #     
+    #
     #     i = 0
     #     while i < len(lines):
     #         line = lines[i].strip()
-    #         
+    #
     #         # Parse Hessian matrix
     #         if line == "$hessian":
     #             i += 1
     #             if i < len(lines):
     #                 n_coords = int(lines[i].strip())
     #                 i += 1
-    #                 
+    #
     #                 # Read matrix in blocks
     #                 matrix = [[] for _ in range(n_coords)]
-    #                 
+    #
     #                 while i < len(lines):
     #                     line = lines[i].strip()
     #                     if line.startswith("$"):
     #                         break
-    #                     
+    #
     #                     parts = line.split()
     #                     if len(parts) > 1 and parts[0].isdigit():
     #                         # Check if it's a header line (all integers)
@@ -1882,7 +2050,7 @@ class OrcaParser:
     #                                 # Integers don't have '.' usually
     #                         except:
     #                             pass
-    #                             
+    #
     #                         if is_header:
     #                             # Double check: try parsing all as ints
     #                             try:
@@ -1898,18 +2066,18 @@ class OrcaParser:
     #                         values = [float(x) for x in parts[1:]]
     #                         if row_idx < len(matrix):
     #                             matrix[row_idx].extend(values)
-    #                     
+    #
     #                     i += 1
-    #                 
+    #
     #                 hessian_data["matrix"] = matrix
-    #         
+    #
     #         # Parse frequencies
     #         elif line == "$vibrational_frequencies":
     #             i += 1
     #             if i < len(lines):
     #                 n_freq = int(lines[i].strip())
     #                 i += 1
-    #                 
+    #
     #                 frequencies = []
     #                 for _ in range(n_freq):
     #                     if i >= len(lines):
@@ -1918,9 +2086,9 @@ class OrcaParser:
     #                     if len(parts) >= 2:
     #                         frequencies.append(float(parts[1]))
     #                     i += 1
-    #                 
+    #
     #                 hessian_data["frequencies"] = frequencies
-    #         
+    #
     #         # Parse normal modes
     #         elif line == "$normal_modes":
     #             i += 1
@@ -1930,28 +2098,28 @@ class OrcaParser:
     #                     n_rows = int(dims[0]) # 3 * n_atoms
     #                     n_cols = int(dims[1]) # n_freq
     #                     i += 1
-    #                     
+    #
     #                     # Initialize normal modes matrix (n_rows x n_cols)
     #                     # We want to store per mode, so list of n_cols vectors of length n_rows
     #                     modes = [[] for _ in range(n_cols)]
-    #                     
+    #
     #                     while i < len(lines):
     #                         line = lines[i].strip()
     #                         if line.startswith("$"):
     #                             break
-    #                         
+    #
     #                         # Block headers: 0 1 2 3 ...
     #                         parts = line.split()
     #                         if not parts:
     #                             i += 1
     #                             continue
-    #                             
+    #
     #                         # Check if header line (likely integer indices)
     #                         try:
     #                             # If all are integers, it's a header line
     #                             col_indices = [int(x) for x in parts]
     #                             i += 1 # Move to data
-    #                             
+    #
     #                             # Read data rows for this block
     #                             for r in range(n_rows):
     #                                 if i >= len(lines): break
@@ -1968,7 +2136,7 @@ class OrcaParser:
     #                         except ValueError:
     #                             # Not a header line? Should not happen if format is strict
     #                             i += 1
-    #                     
+    #
     #                     # Reformat to list of vectors (tuples) for each mode
     #                     # Each mode is list of 3N floats. Convert to list of (x,y,z)
     #                     formatted_modes = []
@@ -1978,7 +2146,7 @@ class OrcaParser:
     #                             if k+2 < len(m):
     #                                 vecs.append((m[k], m[k+1], m[k+2]))
     #                         formatted_modes.append(vecs)
-    #                         
+    #
     #                     hessian_data["normal_modes"] = formatted_modes
     #
     #         # Parse atoms
@@ -1987,7 +2155,7 @@ class OrcaParser:
     #             if i < len(lines):
     #                 n_atoms = int(lines[i].strip())
     #                 i += 1
-    #                 
+    #
     #                 atoms = []
     #                 coords = []
     #                 for _ in range(n_atoms):
@@ -2004,7 +2172,7 @@ class OrcaParser:
     #                             float(parts[4]) * BOHR_TO_ANG
     #                         ])
     #                     i += 1
-    #                 
+    #
     #                 hessian_data["atoms"] = atoms
     #                 hessian_data["coords"] = coords
     #
@@ -2015,16 +2183,16 @@ class OrcaParser:
     #                 try:
     #                     n_grad = int(lines[i].strip())
     #                     i += 1
-    #                     
+    #
     #                     gradients_vec = []
     #                     for _ in range(n_grad):
     #                         if i >= len(lines): break
-    #                         
+    #
     #                         parts = lines[i].strip().split()
     #                         if not parts:
     #                             i += 1
     #                             continue
-    #                             
+    #
     #                         val = 0.0
     #                         # Robust parsing: Check format "index value" vs "value"
     #                         if len(parts) >= 2:
@@ -2046,21 +2214,19 @@ class OrcaParser:
     #                             try:
     #                                 val = float(parts[0])
     #                             except: pass
-    #                             
+    #
     #                         gradients_vec.append(val)
     #                         i += 1
-    #                     
+    #
     #                     hessian_data["gradient_vec"] = gradients_vec
     #                 except ValueError:
     #                      print("Error parsing number of gradients")
     #                      i += 1
-    #         
+    #
     #         i += 1
-    #     
+    #
     #     return hessian_data
-        
-        
-    
+
     def parse_scan_results_table(self):
         """
         Parses the specific 1D scan summary table from the ORCA output.
@@ -2071,8 +2237,9 @@ class OrcaParser:
             if "Actual Energy" in line:
                 data_start = len(self.lines) - 1 - i + 1
                 break
-        
-        if data_start == -1: return
+
+        if data_start == -1:
+            return
 
         table_vals = []
         for i in range(data_start, len(self.lines)):
@@ -2082,76 +2249,87 @@ class OrcaParser:
                 if table_vals:
                     break
                 continue
-            
+
             parts = line.split()
             if len(parts) >= 2:
                 try:
                     coord = float(parts[0])
                     en = float(parts[-1])
-                    table_vals.append({'coord': coord, 'energy': en})
+                    table_vals.append({"coord": coord, "energy": en})
                 except:
                     # Non-numeric line after data = end of table
                     if table_vals:
                         break
-        
-        if not table_vals: return
-        
+
+        if not table_vals:
+            return
+
         if "scan_steps" not in self.data:
             self.data["scan_steps"] = []
-            
+
         steps = self.data["scan_steps"]
         if not steps:
             # Reconstruct entire trajectory from the summary table
             for idx, v in enumerate(table_vals):
-                steps.append({
-                    'type': 'scan_step_summary',
-                    'scan_step_id': idx,
-                    'step': idx,
-                    'energy': v['energy'],
-                    'scan_coord': v['coord'],
-                    'atoms': [], 'coords': []
-                })
+                steps.append(
+                    {
+                        "type": "scan_step_summary",
+                        "scan_step_id": idx,
+                        "step": idx,
+                        "energy": v["energy"],
+                        "scan_coord": v["coord"],
+                        "atoms": [],
+                        "coords": [],
+                    }
+                )
         else:
             # Map coordinates to existing optimization steps
-            sids = [s.get('scan_step_id') for s in steps if s.get('scan_step_id') is not None]
+            sids = [
+                s.get("scan_step_id")
+                for s in steps
+                if s.get("scan_step_id") is not None
+            ]
             if sids:
                 offset = min(sids)
                 for s in steps:
-                    sid = s.get('scan_step_id', None)
+                    sid = s.get("scan_step_id", None)
                     if sid is not None:
                         idx = sid - offset
                         if 0 <= idx < len(table_vals):
-                            s['scan_coord'] = table_vals[idx]['coord']
+                            s["scan_coord"] = table_vals[idx]["coord"]
             else:
-                for idx, s in enumerate(steps[:len(table_vals)]):
-                    s['scan_coord'] = table_vals[idx]['coord']
+                for idx, s in enumerate(steps[: len(table_vals)]):
+                    s["scan_coord"] = table_vals[idx]["coord"]
 
     def parse_basis_set(self):
         """Parse Basis Set information needed for MO visualization"""
         self.data["basis_set_shells"] = []
-        
+
         # Look for "BASIS SET IN INPUT FORMAT"
         start_idx = -1
         for i, line in enumerate(self.lines):
             if "BASIS SET IN INPUT FORMAT" in line:
                 start_idx = i
                 break
-        
-        if start_idx == -1: return
-        
+
+        if start_idx == -1:
+            return
+
         curr = start_idx + 2
-        
-        basis_defs = {} # Sym -> List of shells
+
+        basis_defs = {}  # Sym -> List of shells
         current_sym = None
         current_shells = []
-        
+
         while curr < len(self.lines):
             line = self.lines[curr].strip()
-            
+
             # Stop conditions
-            if "--------" in line and curr > start_idx + 10: break 
-            if "AUXILIARY BASIS" in line: break
-            
+            if "--------" in line and curr > start_idx + 10:
+                break
+            if "AUXILIARY BASIS" in line:
+                break
+
             # Start of Atom block: "NewGTO H"
             if line.startswith("NewGTO"):
                 parts = line.split()
@@ -2160,160 +2338,179 @@ class OrcaParser:
                     current_shells = []
                 curr += 1
                 continue
-                
+
             # End of Atom block: "end" or "end;"
             if line.startswith("end"):
                 if current_sym:
-                     basis_defs[current_sym] = current_shells
+                    basis_defs[current_sym] = current_shells
                 curr += 1
                 continue
-                
+
             # Shell definition header: "S   3" or "P   2"
             parts = line.split()
-            if len(parts) >= 2 and parts[0].upper() in ['S', 'P', 'D', 'F', 'G']:
+            if len(parts) >= 2 and parts[0].upper() in ["S", "P", "D", "F", "G"]:
                 sh_type = parts[0].upper()
                 try:
                     n_prim = int(parts[1])
-                    if n_prim > 50: # Sanity check
+                    if n_prim > 50:  # Sanity check
                         curr += 1
                         continue
-                        
+
                     curr += 1
-                    
+
                     exps = []
                     coeffs = []
-                    
+
                     # Read primitives
                     for _ in range(n_prim):
-                        if curr >= len(self.lines): break
+                        if curr >= len(self.lines):
+                            break
                         pl = self.lines[curr].strip()
                         pp = pl.split()
                         if len(pp) >= 3:
                             exps.append(float(pp[1]))
                             coeffs.append(float(pp[2]))
                         curr += 1
-                        
-                    l_map = {'S':0, 'P':1, 'D':2, 'F':3, 'G':4}
+
+                    l_map = {"S": 0, "P": 1, "D": 2, "F": 3, "G": 4}
                     l_val = l_map.get(sh_type, 0)
-                    
+
                     if exps:
-                        current_shells.append({
-                            'l': l_val,
-                            'exps': exps,
-                            'coeffs': coeffs
-                        })
-                    
-                    continue 
+                        current_shells.append(
+                            {"l": l_val, "exps": exps, "coeffs": coeffs}
+                        )
+
+                    continue
                 except Exception as _e:
                     logging.warning("[parser.py:2173] silenced: %s", _e)
-            
+
             curr += 1
-            if curr > start_idx + 5000: break # Safety break
-            
+            if curr > start_idx + 5000:
+                break  # Safety break
+
         # Expand to actual atoms
         atoms = self.data.get("atoms", [])
         coords = self.data.get("coords", [])
-        
+
         full_shells = []
-        
+
         if not atoms:
-             # Try to recover atoms from parser data if parse_basic hasn't run or failed?
-             # No, parse_basis_set relies on atoms being parsed.
-             return
+            # Try to recover atoms from parser data if parse_basic hasn't run or failed?
+            # No, parse_basis_set relies on atoms being parsed.
+            return
 
         for idx, (sym, coord) in enumerate(zip(atoms, coords)):
             defs = basis_defs.get(sym, [])
             for d in defs:
-                full_shells.append({
-                    'atom_idx': idx,
-                    'origin': coord,
-                    'l': d['l'],
-                    'exps': d['exps'],
-                    'coeffs': d['coeffs']
-                })
-                
+                full_shells.append(
+                    {
+                        "atom_idx": idx,
+                        "origin": coord,
+                        "l": d["l"],
+                        "exps": d["exps"],
+                        "coeffs": d["coeffs"],
+                    }
+                )
+
         self.data["basis_set_shells"] = full_shells
 
     def parse_scf_trace(self):
         """Extract SCF iteration energies for each block found."""
         self.data["scf_traces"] = []
-        
+
         # We search for blocks starting with D-I-I-S or S-O-S-C-F or SCF ITERATIONS
         current_step_label = "Initial"
-        
+
         i = 0
         while i < len(self.lines):
             line = self.lines[i]
             uu = line.upper()
-        
+
             if "OPTIMIZATION CYCLE" in uu:
-                try: 
+                try:
                     parts = line.split()
                     # Find the index of CYCLE and take the next part
-                    cycle_part = parts[parts.index("CYCLE") + 1] if "CYCLE" in parts else parts[-2]
+                    cycle_part = (
+                        parts[parts.index("CYCLE") + 1]
+                        if "CYCLE" in parts
+                        else parts[-2]
+                    )
                     current_step_label = f"Cycle {cycle_part}"
-                except: current_step_label = "Opt Cycle"
+                except:
+                    current_step_label = "Opt Cycle"
             elif "SCAN STEP" in uu:
-                try: current_step_label = f"Scan Step {line.split()[-1]}"
-                except: current_step_label = "Scan Step"
+                try:
+                    current_step_label = f"Scan Step {line.split()[-1]}"
+                except:
+                    current_step_label = "Scan Step"
             elif "ORCA PROPERTIES" in uu or "ORCA PROPERTY" in uu:
                 current_step_label = "Property/Final"
             elif "OPTIMIZATION HAS CONVERGED" in uu:
                 current_step_label = "Post-Opt/Final"
-                
-            if "SCF ITERATIONS" in uu or "ORCA LEAN-SCF" in uu or "INCREMENTAL FOCK MATRIX" in uu:
+
+            if (
+                "SCF ITERATIONS" in uu
+                or "ORCA LEAN-SCF" in uu
+                or "INCREMENTAL FOCK MATRIX" in uu
+            ):
                 header_idx = -1
                 for k in range(1, 15):
-                    if i + k >= len(self.lines): break
-                    uu_k = self.lines[i+k].upper()
+                    if i + k >= len(self.lines):
+                        break
+                    uu_k = self.lines[i + k].upper()
                     if "ITER" in uu_k and "ENERGY" in uu_k:
                         header_idx = i + k
                         break
-                
+
                 if header_idx != -1:
                     trace = []
                     idx = header_idx + 1
                     # Check for separator line right after header
                     if idx < len(self.lines) and "---" in self.lines[idx]:
                         idx += 1
-                    
+
                     while idx < len(self.lines):
                         l_scf = self.lines[idx].strip()
-                        if not l_scf or "---" in l_scf or "SUCCESS" in l_scf or "Energy Check" in l_scf:
-                            if trace: break
+                        if (
+                            not l_scf
+                            or "---" in l_scf
+                            or "SUCCESS" in l_scf
+                            or "Energy Check" in l_scf
+                        ):
+                            if trace:
+                                break
                             idx += 1
                             continue
-                        
+
                         parts = l_scf.split()
                         if len(parts) >= 2:
                             try:
                                 it_no = int(parts[0])
                                 it_en = float(parts[1])
-                                trace.append({'iter': it_no, 'energy': it_en})
+                                trace.append({"iter": it_no, "energy": it_en})
                             except Exception:
                                 pass  # ORCA prints '***' for overflow values; skip unparseable lines
                         idx += 1
-                    
+
                     if trace:
                         # Check if we should append or start new
                         # If it's a new "SCF ITERATIONS" block, we want a new entry in the traces list
                         # unless it's genuinely part of the same convergence process (rare in ORCA output stream)
-                        
-                        # Heuristic: if last trace in self.data["scf_traces"] has same label, 
+
+                        # Heuristic: if last trace in self.data["scf_traces"] has same label,
                         # suffix the new one if they are distinct blocks.
                         same_label_count = 0
                         for t in self.data["scf_traces"]:
-                            if t['step'].startswith(current_step_label):
+                            if t["step"].startswith(current_step_label):
                                 same_label_count += 1
-                        
+
                         label = current_step_label
                         if same_label_count > 0:
                             label = f"{current_step_label} ({same_label_count + 1})"
-                            
-                        self.data["scf_traces"].append({
-                            'step': label,
-                            'iterations': trace
-                        })
+
+                        self.data["scf_traces"].append(
+                            {"step": label, "iterations": trace}
+                        )
                         i = idx
                         continue
             i += 1

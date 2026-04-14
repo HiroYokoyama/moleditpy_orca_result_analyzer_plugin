@@ -1,5 +1,6 @@
 import os
 
+
 def get_default_export_path(base_path, suffix="_analyzed", extension=""):
     """
     Generates a default export path based on the input file path.
