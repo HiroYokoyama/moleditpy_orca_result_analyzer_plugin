@@ -615,7 +615,17 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             # Bond determination must run on the RWMol (mutable) before GetMol().
             # DetermineBonds on a read-only Mol silently fails.
-            if rdDetermineBonds:
+            # Skip if any animation is currently playing (traj or freq) — the result
+            # would be immediately overwritten and the cost is wasted.
+            _traj_playing = (
+                getattr(self, "traj_dlg", None) is not None
+                and getattr(self.traj_dlg, "is_playing", False)
+            )
+            _freq_playing = (
+                getattr(self, "freq_dlg", None) is not None
+                and getattr(self.freq_dlg, "is_playing", False)
+            )
+            if rdDetermineBonds and not (_traj_playing or _freq_playing):
                 try:
                     charge = self.parser.data.get("charge", 0)
                     rdDetermineBonds.DetermineConnectivity(mol)
