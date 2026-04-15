@@ -135,6 +135,9 @@ class TrajectoryResultDialog(QDialog):
 
         self.init_ui()
         self.plot_data()
+        # Load initial structure into the 3D view (slider starts at 0 and never
+        # emits valueChanged, so on_step_changed would not fire otherwise).
+        QTimer.singleShot(0, lambda: self.on_step_changed(self.slider.value()))
 
         # Schedule auto-load check after dialog init
         QTimer.singleShot(10, self.run_auto_load)
@@ -874,6 +877,12 @@ class TrajectoryResultDialog(QDialog):
             self.timer.stop()
             self.btn_play.setText("Play")
             self.is_playing = False
+            # Re-render current frame with full bond orders now that playback stopped
+            idx = self.slider.value()
+            if self.steps and 0 <= idx < len(self.steps):
+                step = self.steps[idx]
+                if step.get("atoms"):
+                    self.update_structure(step["atoms"], step["coords"])
         else:
             # If loop is off and we are at the last frame, start from the beginning
             if (
