@@ -480,14 +480,12 @@ class ForceViewerDialog(QDialog):
 
         mol.AddConformer(conf)
 
-        # Determine bonds; skip DetermineBondOrders for large molecules (>80 atoms)
-        _BOND_ORDER_ATOM_THRESHOLD = 80
+        # Determine bonds and bond orders on every load (no animation in this view).
         if rdDetermineBonds:
             try:
+                charge = self.parser.data.get("charge", 0) if self.parser else 0
                 rdDetermineBonds.DetermineConnectivity(mol)
-                if len(atoms) <= _BOND_ORDER_ATOM_THRESHOLD:
-                    charge = self.parser.data.get("charge", 0) if self.parser else 0
-                    rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
+                rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
             except Exception as _e:
                 logging.warning("[force_analysis.py:420] silenced: %s", _e)
 

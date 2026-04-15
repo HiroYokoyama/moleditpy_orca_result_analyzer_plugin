@@ -674,15 +674,14 @@ class TrajectoryResultDialog(QDialog):
 
         mol.AddConformer(conf)
 
-        # Determine Bonds and Bond Orders for each step.
-        # Skip DetermineBondOrders during playback or for large molecules (>80 atoms)
-        # to avoid per-frame latency; connectivity is sufficient for 3D display.
-        _BOND_ORDER_ATOM_THRESHOLD = 80
-        _skip_bond_orders = self.is_playing or len(atoms) > _BOND_ORDER_ATOM_THRESHOLD
+        # Determine bonds and bond orders.
+        # Skip DetermineBondOrders only during animation playback to avoid per-frame
+        # latency; connectivity is sufficient while playing.  On load and on close the
+        # full bond-order pass always runs so the main window gets accurate bond types.
         if rdDetermineBonds:
             try:
                 rdDetermineBonds.DetermineConnectivity(mol)
-                if not _skip_bond_orders:
+                if not self.is_playing:
                     rdDetermineBonds.DetermineBondOrders(mol, charge=self.charge)
             except Exception:
                 pass  # RDKit bond determination fails for some charge states; non-fatal
@@ -1139,7 +1138,14 @@ class TrajectoryResultDialog(QDialog):
                 self.toggle_play()
 
     def closeEvent(self, event):
-        """Clean up timer and resources"""
+        """Stop animation, push final structure with full bond orders, then clean up."""
         if getattr(self, "timer", None) is not None and self.timer.isActive():
             self.timer.stop()
+        self.is_playing = False  # ensure bond orders run in update_structure below
+        # Re-render current step so main window gets accurate bond types on close
+        idx = self.slider.value() if hasattr(self, "slider") else 0
+        if self.steps and 0 <= idx < len(self.steps):
+            step = self.steps[idx]
+            if step.get("atoms"):
+                self.update_structure(step["atoms"], step["coords"])
         super().closeEvent(event)
