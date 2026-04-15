@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.4.0"
+PLUGIN_VERSION = "2.4.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
@@ -65,7 +65,7 @@ def initialize(context):
             try:
                 _analyzer_window.close()
             except Exception as _e:
-                logging.warning("[__init__.py:70] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             _analyzer_window = None
 
         # Open Dialog (Modeless)
@@ -100,7 +100,7 @@ def initialize(context):
             except ImportError:
                 pass
             except Exception as _e:
-                logging.warning("[__init__.py:101] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         return False
 
     # Register Opener
@@ -170,7 +170,7 @@ def run(mw):
         try:
             _analyzer_window.close()
         except Exception as _e:
-            logging.warning("[__init__.py:165] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
         _analyzer_window = None
 
     from .gui import OrcaResultAnalyzerDialog

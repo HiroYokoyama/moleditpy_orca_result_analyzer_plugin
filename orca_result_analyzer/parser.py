@@ -232,7 +232,7 @@ class OrcaParser:
                     except Exception as _e:
                         logging.warning("[parser.py:199] silenced: %s", _e)
 
-            if "CARTESIAN COORDINATES" in uu and "A.U." not in uu:  # Prefer Angstrom
+            if "CARTESIAN COORDINATES (ANGSTROEM)" in uu:
                 # Read geometry
                 self.data["atoms"] = []
                 self.data["coords"] = []
@@ -275,7 +275,7 @@ class OrcaParser:
                 if idx + k >= len(self.lines):
                     break
                 line = self.lines[idx + k].strip()
-                if "CARTESIAN COORDINATES" in line.upper():
+                if "CARTESIAN COORDINATES (ANGSTROEM)" in line.upper():
                     c_idx = idx + k + 2
                     found_coords = True
                     while c_idx < len(self.lines):
