@@ -612,12 +612,18 @@ class OrcaResultAnalyzerDialog(QDialog):
                 conf.SetAtomPosition(idx, Point3D(x, y, z))
 
             mol.AddConformer(conf)
-            final_mol = mol.GetMol()
 
-            try:
-                rdDetermineBonds.DetermineBonds(final_mol)
-            except Exception:
-                pass  # RDKit bond determination fails for some charge states; non-fatal
+            # Bond determination must run on the RWMol (mutable) before GetMol().
+            # DetermineBonds on a read-only Mol silently fails.
+            if rdDetermineBonds:
+                try:
+                    charge = self.parser.data.get("charge", 0)
+                    rdDetermineBonds.DetermineConnectivity(mol)
+                    rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
+                except Exception:
+                    pass  # Non-fatal; some charge states are unsupported
+
+            final_mol = mol.GetMol()
 
             # Set as current molecule for export functionality
             if hasattr(self.mw, "current_mol"):
