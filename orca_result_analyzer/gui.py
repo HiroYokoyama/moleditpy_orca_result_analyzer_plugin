@@ -664,6 +664,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             traceback.print_exc()
 
     def show_mo_analyzer(self):
+        self.load_structure_3d()
         mo_coeffs = self.parser.data.get("mo_coeffs", None)
         orb_energies = self.parser.data.get("orbital_energies", None)
 
@@ -682,6 +683,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.mo_dlg.show()
 
     def show_freq(self):
+        self.load_structure_3d()  # Reset to final structure before opening
         freqs = self.parser.data.get("frequencies", [])
         if not freqs:
             QMessageBox.warning(self, "No Data", "No frequency data found.")
@@ -739,6 +741,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.forces_dlg.show()
 
     def show_thermal(self):
+        self.load_structure_3d()
         data = self.parser.data.get("thermal", {})
         if not data:
             QMessageBox.warning(self, "No Info", "No thermochemistry section found.")
@@ -752,6 +755,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.thermal_dlg.show()
 
     def show_tddft(self):
+        self.load_structure_3d()
         excitations = self.parser.data.get("tddft", [])
         if not excitations:
             QMessageBox.warning(
@@ -766,6 +770,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.tddft_dlg.show()
 
     def show_dipole(self):
+        self.load_structure_3d()
         d = self.parser.data.get("dipoles", None)
         if not d:
             QMessageBox.warning(self, "No Info", "No dipole moment found.")
@@ -779,6 +784,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.dipole_dlg.show()
 
     def show_charges(self):
+        self.load_structure_3d()
         charges = self.parser.data.get("charges", {})
         if not charges:
             QMessageBox.warning(self, "No Info", "No atomic charges found.")
@@ -792,6 +798,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.charges_dlg.show()
 
     def show_nmr(self):
+        self.load_structure_3d()
         data = self.parser.data.get("nmr_shielding", [])
         couplings = self.parser.data.get("nmr_couplings", [])
         if not data:
@@ -807,6 +814,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.nmr_dlg.show()
 
     def show_scf_trace(self):
+        self.load_structure_3d()
         data = self.parser.data.get("scf_traces", [])
         if not data:
             QMessageBox.warning(self, "No Info", "No SCF energy trace data found.")
