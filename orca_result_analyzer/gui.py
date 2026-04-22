@@ -666,7 +666,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.mw.view_3d_manager.plotter.render()
                 except Exception as _e:
                     logging.warning("[gui.py:592] silenced: %s", _e)
-        except Exception as e:
+        except Exception:
             # self.logger.error(f"Error loading 3D: {e}")
             # print(f"Error loading 3D: {e}")
             import traceback

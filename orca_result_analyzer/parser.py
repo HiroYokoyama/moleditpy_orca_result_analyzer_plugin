@@ -1486,7 +1486,7 @@ class OrcaParser:
                     match_nm = re.search(r"([-+]?\d*\.\d+)\s*nm", line, re.IGNORECASE)
                     if match_nm:
                         state_entry["energy_nm"] = float(match_nm.group(1))
-                except:
+                except Exception:
                     current_state_id = -1
 
             # Detect Transitions
@@ -1605,7 +1605,7 @@ class OrcaParser:
                                     entry["energy_nm"] = float(parts[arrow_idx + 4])
                                 except Exception as _e:
                                     logging.warning("[parser.py:1400] silenced: %s", _e)
-                    except:
+                    except Exception:
                         pass  # パース失敗行はスキップ
 
                 # --- パターンB: 矢印なしの短縮フォーマット ---
@@ -2303,7 +2303,7 @@ class OrcaParser:
                     coord = float(parts[0])
                     en = float(parts[-1])
                     table_vals.append({"coord": coord, "energy": en})
-                except:
+                except Exception:
                     # Non-numeric line after data = end of table
                     if table_vals:
                         break
@@ -2483,12 +2483,12 @@ class OrcaParser:
                         else parts[-2]
                     )
                     current_step_label = f"Cycle {cycle_part}"
-                except:
+                except Exception:
                     current_step_label = "Opt Cycle"
             elif "SCAN STEP" in uu:
                 try:
                     current_step_label = f"Scan Step {line.split()[-1]}"
-                except:
+                except Exception:
                     current_step_label = "Scan Step"
             elif "ORCA PROPERTIES" in uu or "ORCA PROPERTY" in uu:
                 current_step_label = "Property/Final"
