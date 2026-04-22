@@ -8,7 +8,7 @@ at module level in tests that need them.  `parser.py` and `utils.py` are
 loaded directly via `importlib.util` with no stubs at all, since they have
 no Qt or third-party dependencies.
 
-**Current status: 379 tests, all passing. `parser.py` coverage: 77%.
+**Current status: 382 tests, all passing. `parser.py` coverage: 79%.
 Static analysis (ruff): 9 minor issues (7 × E741 ambiguous names in quantum
 chemistry code, 2 × E402 intentional imports-after-metadata in `__init__.py`).
 All E722 bare-except violations resolved.**
@@ -328,12 +328,12 @@ collection-order dependencies.
 ## Coverage Summary
 
 > Measured via `coverage run --source=orca_result_analyzer -m unittest discover`
-> across all 379 tests.
+> across all 382 tests.
 
 | Module | Coverage | Notes |
 |---|---|---|
 | `utils.py` | **100%** | All branches hit |
-| `parser.py` | **77%** | All `parse_*` methods exercised; remaining 23% is NEB image step parsing, relaxed surface scan, NBO/FMO charges — none present in current sample files |
+| `parser.py` | **79%** | All `parse_*` methods exercised including relaxed surface scans; remaining 21% is NEB image step parsing and NBO/FMO charges |
 | `traj_analysis.py` | **~12%** | `compute_scan_points`, `update_display_values`, `recalc_energies`; Qt-dependent UI paths excluded |
 | `__init__.py` | **~20%** | `initialize()`, `handle_drop()` False paths; `open_orca_file()` excluded |
 | `vis.py` | *partial* | `_parse_cube` file-reading path only; `_build_grid`/`show_iso` require PyVista + display |
@@ -344,7 +344,6 @@ collection-order dependencies.
 | Gap | Lines | Why not covered |
 |---|---|---|
 | `parse_xyz_content` | 36–151 | No NEB `.xyz` multi-frame file in samples |
-| NEB / relaxed scan trajectory | 308–448 | No NEB or surface scan `.out` in samples |
 | Opt cycle alt energy formats | 483–507 | Require non-standard ORCA config |
 | NBO / FMO charges | 1110–1282 | Sample files do not include NBO analysis |
 | TDDFT short-table format (pattern B) | 1615–1628 | Benzene vex uses arrow format only |

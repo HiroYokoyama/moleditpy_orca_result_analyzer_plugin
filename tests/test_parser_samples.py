@@ -1110,6 +1110,39 @@ class TestNmrDetailOrca5(unittest.TestCase):
         self.assertAlmostEqual(total, 0.0, places=1)
 
 
+# ---------------------------------------------------------------------------
+# Relaxed Surface Scan  —  ORCA 6 (ethane-scan.out)
+# ---------------------------------------------------------------------------
+
+class TestRelaxedSurfaceScan(unittest.TestCase):
+    """ethane-scan.out — ORCA Relaxed Surface Scan."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("ethane-scan.out")
+
+    def test_scan_step_count(self):
+        """Should have 5 scan_steps (the finalized steps for the surface)."""
+        scan_steps = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"]
+        self.assertEqual(len(scan_steps), 5)
+
+    def test_total_trajectory_steps(self):
+        """Should have 37 total steps in the trajectory (scan steps + intermediate opt cycles)."""
+        self.assertEqual(len(self.p.data.get("scan_steps", [])), 37)
+
+    def test_scan_step_coords_and_energies(self):
+        scan_steps = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"]
+        self.assertEqual(scan_steps[0]["scan_coord"], -60.0)
+        self.assertAlmostEqual(scan_steps[0]["energy"], -79.791846796153)
+        self.assertEqual(scan_steps[-1]["scan_coord"], 60.0)
+        self.assertAlmostEqual(scan_steps[-1]["energy"], -79.791847846936)
+        
+        for step in scan_steps:
+            self.assertEqual(len(step["atoms"]), 8)
+            self.assertEqual(len(step["coords"]), 8)
+            self.assertIn("scan_coord", step)
+            self.assertIn("energy", step)
+
+
 if __name__ == "__main__":
     unittest.main()
-
