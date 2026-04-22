@@ -123,12 +123,22 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         file_info_layout.addWidget(lbl_current)
 
-        self.lbl_file_path = QLabel(self.file_path)
+        self.lbl_file_path = QLabel(os.path.basename(self.file_path))
         self.lbl_file_path.setStyleSheet(
-            "color: #0066cc; font-size: 9pt; background: transparent; border: none; padding: 0;"
+            "color: #0066cc; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
         )
-        self.lbl_file_path.setWordWrap(True)
+        self.lbl_file_path.setToolTip(self.file_path)
+        from PyQt6.QtWidgets import QSizePolicy
+        self.lbl_file_path.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         file_info_layout.addWidget(self.lbl_file_path)
+
+        self.lbl_file_dir = QLabel(os.path.dirname(self.file_path))
+        self.lbl_file_dir.setStyleSheet(
+            "color: #888; font-size: 8pt; background: transparent; border: none; padding: 0;"
+        )
+        self.lbl_file_dir.setToolTip(self.file_path)
+        self.lbl_file_dir.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        file_info_layout.addWidget(self.lbl_file_dir)
 
         # Updated Time Label
         self.lbl_updated = QLabel("Updated: ---")
@@ -477,7 +487,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "lbl_file_path", None) is None:
             return
 
-        self.lbl_file_path.setText(self.file_path)
+        self.lbl_file_path.setText(os.path.basename(self.file_path))
+        self.lbl_file_path.setToolTip(self.file_path)
+        if getattr(self, "lbl_file_dir", None) is not None:
+            self.lbl_file_dir.setText(os.path.dirname(self.file_path))
+            self.lbl_file_dir.setToolTip(self.file_path)
 
         # Updated Time
         mtime_str = "---"
