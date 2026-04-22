@@ -12,7 +12,27 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import QSize, Qt
+
+class ElidedLabel(QLabel):
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._full_text = text
+        super().setText(text)
+        
+    def setText(self, text):
+        self._full_text = text
+        self._update_elided_text()
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_elided_text()
+        
+    def _update_elided_text(self):
+        fm = self.fontMetrics()
+        # Elide in the middle to show start and end of path
+        elided = fm.elidedText(self._full_text, Qt.TextElideMode.ElideMiddle, self.width())
+        super().setText(elided)
 
 try:
     from rdkit import Chem
@@ -123,7 +143,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         file_info_layout.addWidget(lbl_current)
 
-        self.lbl_file_path = QLabel(os.path.basename(self.file_path))
+        self.lbl_file_path = ElidedLabel(os.path.basename(self.file_path))
         self.lbl_file_path.setStyleSheet(
             "color: #0066cc; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
         )
@@ -132,7 +152,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.lbl_file_path.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         file_info_layout.addWidget(self.lbl_file_path)
 
-        self.lbl_file_dir = QLabel(os.path.dirname(self.file_path))
+        self.lbl_file_dir = ElidedLabel(os.path.dirname(self.file_path))
         self.lbl_file_dir.setStyleSheet(
             "color: #0066cc; font-size: 9pt; background: transparent; border: none; padding: 0;"
         )
