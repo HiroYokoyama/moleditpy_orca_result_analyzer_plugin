@@ -589,7 +589,7 @@ class OrcaParser:
             if "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in line.upper():
                 # Read energy from this section
                 final_en = 0.0
-                for k in range(i, min(i + 300, len(self.lines))):
+                for k in range(i, min(i + 1500, len(self.lines))):
                     uu_k = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu_k:
                         try:
