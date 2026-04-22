@@ -143,13 +143,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         file_info_layout.addWidget(lbl_current)
 
-        self.lbl_file_path = ElidedLabel(os.path.basename(self.file_path))
+        self.lbl_file_path = QLabel(os.path.basename(self.file_path))
         self.lbl_file_path.setStyleSheet(
             "color: #0066cc; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
         )
         self.lbl_file_path.setToolTip(self.file_path)
-        from PyQt6.QtWidgets import QSizePolicy
-        self.lbl_file_path.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.lbl_file_path.setWordWrap(True)
         file_info_layout.addWidget(self.lbl_file_path)
 
         self.lbl_file_dir = ElidedLabel(os.path.dirname(self.file_path))
