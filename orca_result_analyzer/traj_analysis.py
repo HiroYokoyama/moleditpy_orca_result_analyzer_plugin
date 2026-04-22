@@ -397,12 +397,16 @@ class TrajectoryResultDialog(QDialog):
         sorted_ids = sorted(groups.keys())
         for sid in sorted_ids:
             g_steps = groups[sid]
-            # Filter for opt_cycle if exists, pick last
-            opt_cycles = [x for x in g_steps if x.get("type") == "opt_cycle"]
-            if opt_cycles:
-                final_points.append(opt_cycles[-1])
+            # Prefer opt_final (FINAL ENERGY EVALUATION) if present, else last opt_cycle
+            opt_final = [x for x in g_steps if x.get("type") == "opt_final"]
+            if opt_final:
+                final_points.append(opt_final[-1])
             else:
-                final_points.append(g_steps[-1])
+                opt_cycles = [x for x in g_steps if x.get("type") == "opt_cycle"]
+                if opt_cycles:
+                    final_points.append(opt_cycles[-1])
+                else:
+                    final_points.append(g_steps[-1])
 
         return final_points
 

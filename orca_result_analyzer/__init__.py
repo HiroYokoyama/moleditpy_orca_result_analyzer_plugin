@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.4.1"
+PLUGIN_VERSION = "2.5.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 
