@@ -8,6 +8,11 @@ at module level in tests that need them.  `parser.py` and `utils.py` are
 loaded directly via `importlib.util` with no stubs at all, since they have
 no Qt or third-party dependencies.
 
+**Current status: 379 tests, all passing. `parser.py` coverage: 77%.
+Static analysis (ruff): 9 minor issues (7 × E741 ambiguous names in quantum
+chemistry code, 2 × E402 intentional imports-after-metadata in `__init__.py`).
+All E722 bare-except violations resolved.**
+
 ## Running
 
 ```bash
@@ -156,8 +161,16 @@ Covers both ORCA 5 and ORCA 6 output for every sample type.
 | TDDFT state count | `5` | `5` |
 | first state energy (eV) | `5.494` | `5.494` |
 | states sorted ascending | ✓ | ✓ |
-| all states have transitions | ✓ | — |
+| all states have transitions | ✓ | ✓ |
 | state energy range | `5.0 – 8.5 eV` | — |
+| `osc_len` field present | ✓ (length gauge) | ✓ |
+| `osc_vel` field present | ✓ (velocity gauge) | ✓ |
+| `energy_nm` > 0 | ✓ | ✓ |
+| `energy_cm` > 0 | ✓ | ✓ |
+| eV × nm ≈ 1239.84 | ✓ | ✓ |
+| `osc` ≥ 0 | ✓ | ✓ |
+| CD fields: `rot_len`, `rot_vel`, `rotatory_strength` | ✓ (benzene is achiral → ≈0) | ✓ |
+| ORCA 5 vs 6 first-state eV within 0.05 | — | ✓ |
 | `opt_cycle` count | `0` | `0` |
 | atom count | `12` | `12` |
 | Mulliken count | `12` | — |
@@ -179,6 +192,42 @@ Covers both ORCA 5 and ORCA 6 output for every sample type.
 - `data["atoms"]` / `data["coords"]` always reflect the FINAL ENERGY EVALUATION geometry (last `CARTESIAN COORDINATES (ANGSTROEM)` in file), not a cycle snapshot.
 - `opt_final` step is appended after all `opt_cycle` steps; its coords equal `data["coords"]`.
 - Dipole magnitude is stored in **Debye** (read from the `Magnitude (Debye)` line). The parser scans up to 6 lines forward from `Total Dipole Moment` to find both magnitude lines, preferring Debye. Fallback to a.u. (√(x²+y²+z²)) only when neither magnitude line is found.
+
+#### `benzene-opt-nmr.out` / `benzene-opt-nmr_5.out` — NMR shielding (expanded)
+
+| Test assertion | ORCA 6 | ORCA 5 |
+|---|---|---|
+| NMR shielding count | `12` (6 C + 6 H) | `12` |
+| keys: `atom_idx`, `atom_sym`, `shielding` | ✓ | ✓ |
+| atom indices sequential | ✓ | ✓ |
+| C shieldings in 10–200 ppm | ✓ | ✓ (6 values) |
+| H shieldings in 10–50 ppm | ✓ | ✓ (6 values) |
+| `Mayer` charges present | ✓ | ✓ |
+| Mayer count = 12 | ✓ | ✓ |
+| Mayer sum ≈ 0.0 | ✓ | ✓ |
+| ORCA 5 vs 6 mean C shielding within 5 ppm | — | ✓ |
+
+#### `benzene-opt-ene.out` / `benzene-opt-ene_5.out` — Basis set + orbital energies + SCF trace
+
+| Test assertion | ORCA 6 | ORCA 5 |
+|---|---|---|
+| `basis_set_shells` count > 30 | ✓ | ✓ |
+| shells have `atom_idx`, `l`, `exps`, `coeffs` | ✓ | ✓ |
+| all `l` values ≥ 0 | ✓ | ✓ |
+| all exponents > 0 | ✓ | ✓ |
+| all `atom_idx` in range | ✓ | ✓ |
+| `orbital_energies` count > 20 | ✓ | ✓ |
+| keys: `index`, `occupation`, `energy_eh`, `energy_ev`, `spin`, `type` | ✓ | ✓ |
+| occupied and virtual orbitals present | ✓ | ✓ |
+| HOMO energy < 0 | ✓ | ✓ |
+| LUMO energy > HOMO | ✓ | ✓ |
+| spin = `restricted` | ✓ | ✓ |
+| `mos` list identical to `orbital_energies` | ✓ | ✓ |
+| `scf_traces` count ≥ 1 (ene) | ✓ | ✓ |
+| `scf_traces` count ≥ 2 (opt) | ✓ (`benzene-opt`) | ✓ (`benzene-opt_5`) |
+| trace keys: `step`, `iterations` | ✓ | ✓ |
+| all iteration energies < 0 | ✓ | ✓ |
+| opt trace labels contain cycle info | ✓ | ✓ |
 
 ---
 
@@ -278,14 +327,35 @@ collection-order dependencies.
 
 ## Coverage Summary
 
-| Module | Tests cover |
-|---|---|
-| `utils.py` | ~100% |
-| `parser.py` | All `parse_*` methods including thermal, orbital energies, MO coefficients, IR/Raman, Mayer charges, scan results, NEB path, opt convergence, multi-gradient blocks, `opt_final` step; integration-tested against 10 real ORCA output files (ORCA 5 and 6); ~85–90% of parser logic |
-| `vis.py` | `_parse_cube` file-reading path (dims, origin, step vectors, data array); `_build_grid` / `show_iso` excluded (require PyVista + display) |
-| `traj_analysis.py` | `compute_scan_points` (incl. `opt_final` preference), `update_display_values`, `recalc_energies`; Qt-dependent UI paths excluded |
-| `__init__.py` | `initialize()`, `handle_drop()` False paths; `open_orca_file()` excluded |
+> Measured via `coverage run --source=orca_result_analyzer -m unittest discover`
+> across all 379 tests.
 
-Modules with Qt UI code (`gui.py`, `scf_analysis.py`, `freq_analysis.py`,
-`mo_analysis.py`, `force_analysis.py`, etc.) require a live display to
-instantiate and are not covered in this headless suite.
+| Module | Coverage | Notes |
+|---|---|---|
+| `utils.py` | **100%** | All branches hit |
+| `parser.py` | **77%** | All `parse_*` methods exercised; remaining 23% is NEB image step parsing, relaxed surface scan, NBO/FMO charges — none present in current sample files |
+| `traj_analysis.py` | **~12%** | `compute_scan_points`, `update_display_values`, `recalc_energies`; Qt-dependent UI paths excluded |
+| `__init__.py` | **~20%** | `initialize()`, `handle_drop()` False paths; `open_orca_file()` excluded |
+| `vis.py` | *partial* | `_parse_cube` file-reading path only; `_build_grid`/`show_iso` require PyVista + display |
+| All Qt UI modules | **0%** | `gui.py`, `*_analysis.py`, etc. require a live display to instantiate |
+
+### parser.py — Known coverage gaps (require new sample files)
+
+| Gap | Lines | Why not covered |
+|---|---|---|
+| `parse_xyz_content` | 36–151 | No NEB `.xyz` multi-frame file in samples |
+| NEB / relaxed scan trajectory | 308–448 | No NEB or surface scan `.out` in samples |
+| Opt cycle alt energy formats | 483–507 | Require non-standard ORCA config |
+| NBO / FMO charges | 1110–1282 | Sample files do not include NBO analysis |
+| TDDFT short-table format (pattern B) | 1615–1628 | Benzene vex uses arrow format only |
+| CD spectrum (rot_vel path) | 1647–1654 | Covered only partially (benzene CD ≈0) |
+| `parse_scan_results_table` | 2285–2349 | No scan output in samples |
+
+## Static Analysis (ruff)
+
+| Status | Count | Code | Issue |
+|---|---|---|---|
+| ✅ Fixed | 0 | E722 | Bare `except` — all resolved |
+| ⚠️ Remaining | 7 | E741 | Ambiguous variable name `l` / `I` in quantum chemistry math (angular momentum) |
+| ⚠️ Remaining | 2 | E402 | Imports after plugin metadata constants in `__init__.py` (intentional) |
+
