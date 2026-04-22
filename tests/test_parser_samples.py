@@ -280,6 +280,23 @@ class TestAcetoneOptOrca6(unittest.TestCase):
         total = sum(e["charge"] for e in self.p.data["charges"]["Mulliken"])
         self.assertAlmostEqual(total, 0.0, places=2)
 
+    def test_dipole_present(self):
+        self.assertIsNotNone(self.p.data["dipole"])
+
+    def test_dipole_nonzero(self):
+        """Acetone is polar — dipole must be significant."""
+        mag = self.p.data["dipole"]["magnitude"]
+        self.assertGreater(mag, 1.0)
+
+    def test_dipole_magnitude_au(self):
+        """Acetone dipole ~1.097 a.u. (parser stores sqrt(x²+y²+z²) in a.u.)."""
+        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 1.097, places=2)
+
+    def test_dipole_vector_z_dominant(self):
+        """C=O axis is roughly along z — z component should be largest."""
+        vec = self.p.data["dipole"]["vector"]
+        self.assertGreater(abs(vec[2]), abs(vec[0]))
+
 
 # ---------------------------------------------------------------------------
 # Acetone geometry optimization  —  ORCA 5
@@ -315,6 +332,13 @@ class TestAcetoneOptOrca5(unittest.TestCase):
         for i, (fc, dc) in enumerate(zip(final_step["coords"], self.p.data["coords"])):
             for j in range(3):
                 self.assertAlmostEqual(fc[j], dc[j], places=5)
+
+    def test_dipole_present(self):
+        self.assertIsNotNone(self.p.data["dipole"])
+
+    def test_dipole_magnitude_au(self):
+        """Acetone dipole ~1.097 a.u."""
+        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 1.097, places=2)
 
 
 # ---------------------------------------------------------------------------
