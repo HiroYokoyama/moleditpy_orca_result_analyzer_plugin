@@ -134,7 +134,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
         self.lbl_file_dir = QLabel(os.path.dirname(self.file_path))
         self.lbl_file_dir.setStyleSheet(
-            "color: #888; font-size: 8pt; background: transparent; border: none; padding: 0;"
+            "color: #0066cc; font-size: 9pt; background: transparent; border: none; padding: 0;"
         )
         self.lbl_file_dir.setToolTip(self.file_path)
         self.lbl_file_dir.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
