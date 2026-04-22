@@ -922,14 +922,27 @@ class OrcaParser:
                     x, y, z = float(vec_str[0]), float(vec_str[1]), float(vec_str[2])
 
                     mag = 0.0
-                    if idx + 1 < len(self.lines):
-                        line2 = self.lines[idx + 1]
-                        if "Magnitude" in line2 and ":" in line2:
-                            mag = float(line2.split(":")[1].strip())
-                        else:
-                            import math
+                    mag_au = None
+                    mag_debye = None
+                    for k in range(idx + 1, min(idx + 7, len(self.lines))):
+                        lk = self.lines[k]
+                        if "Magnitude" in lk and ":" in lk:
+                            try:
+                                val = float(lk.split(":")[1].strip())
+                                if "Debye" in lk:
+                                    mag_debye = val
+                                else:
+                                    mag_au = val
+                            except Exception:
+                                pass
+                    if mag_debye is not None:
+                        mag = mag_debye
+                    elif mag_au is not None:
+                        mag = mag_au
+                    else:
+                        import math
 
-                            mag = math.sqrt(x * x + y * y + z * z)
+                        mag = math.sqrt(x * x + y * y + z * z)
 
                     self.data["dipoles"] = {"vector": (x, y, z), "magnitude": mag}
                     self.data["dipole"] = self.data["dipoles"]

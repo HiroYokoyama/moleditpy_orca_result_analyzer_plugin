@@ -286,11 +286,11 @@ class TestAcetoneOptOrca6(unittest.TestCase):
     def test_dipole_nonzero(self):
         """Acetone is polar — dipole must be significant."""
         mag = self.p.data["dipole"]["magnitude"]
-        self.assertGreater(mag, 1.0)
+        self.assertGreater(mag, 2.0)
 
-    def test_dipole_magnitude_au(self):
-        """Acetone dipole ~1.097 a.u. (parser stores sqrt(x²+y²+z²) in a.u.)."""
-        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 1.097, places=2)
+    def test_dipole_magnitude_debye(self):
+        """Acetone dipole ~2.787 Debye (parser reads Magnitude (Debye) line)."""
+        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 2.787, places=2)
 
     def test_dipole_vector_z_dominant(self):
         """C=O axis is roughly along z — z component should be largest."""
@@ -336,9 +336,9 @@ class TestAcetoneOptOrca5(unittest.TestCase):
     def test_dipole_present(self):
         self.assertIsNotNone(self.p.data["dipole"])
 
-    def test_dipole_magnitude_au(self):
-        """Acetone dipole ~1.097 a.u."""
-        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 1.097, places=2)
+    def test_dipole_magnitude_debye(self):
+        """Acetone dipole ~2.787 Debye."""
+        self.assertAlmostEqual(self.p.data["dipole"]["magnitude"], 2.787, places=2)
 
 
 # ---------------------------------------------------------------------------
