@@ -224,13 +224,13 @@ class TrajectoryResultDialog(QDialog):
         else:
             self.radio_full.setChecked(True)
 
+        self.radio_full.toggled.connect(self.on_traj_mode_changed)
+        self.radio_scan.toggled.connect(self.on_traj_mode_changed)
+
         # Only enable if distinction exists
         if len(self.scan_points) == len(self.all_steps):
             self.radio_full.setEnabled(False)
             self.radio_scan.setEnabled(False)
-        else:
-            self.radio_full.toggled.connect(self.on_traj_mode_changed)
-            self.radio_scan.toggled.connect(self.on_traj_mode_changed)
 
         # 2. Energy Group
         self.energy_grp = QButtonGroup(self)
@@ -282,6 +282,7 @@ class TrajectoryResultDialog(QDialog):
             self.radio_coord.setChecked(True)
         else:
             self.radio_idx.setChecked(True)
+            self.radio_coord.setEnabled(False)
 
         self.radio_idx.toggled.connect(self.on_x_axis_mode_changed)
         self.radio_coord.toggled.connect(self.on_x_axis_mode_changed)
@@ -511,6 +512,8 @@ class TrajectoryResultDialog(QDialog):
 
     def plot_data(self):
         self.canvas.axes.clear()
+        self._highlight_marker = None
+        self._highlight_line = None
 
         if self.show_coord_x:
             # Try to get scan values or NEB distances.
@@ -758,6 +761,20 @@ class TrajectoryResultDialog(QDialog):
             # Keep all_steps and scan_points consistent with the new data
             self.all_steps = steps
             self.scan_points = self.compute_scan_points(steps)
+            
+            # Update View toggles
+            has_distinction = len(self.scan_points) < len(self.all_steps)
+            self.radio_full.setEnabled(has_distinction)
+            self.radio_scan.setEnabled(has_distinction)
+            if not has_distinction:
+                self.radio_full.blockSignals(True)
+                self.radio_scan.blockSignals(True)
+                self.radio_full.setChecked(True)
+                self.radio_full.blockSignals(False)
+                self.radio_scan.blockSignals(False)
+                self.showing_scan_points = False
+                self.steps = self.all_steps
+
             # Recalculate global minimum
             self.global_min_e = min(s["energy"] for s in steps) if steps else 0
 
@@ -787,6 +804,7 @@ class TrajectoryResultDialog(QDialog):
             self.radio_idx.blockSignals(True)
             self.radio_coord.setChecked(self.show_coord_x)
             self.radio_idx.setChecked(not self.show_coord_x)
+            self.radio_coord.setEnabled(self.show_coord_x)
             self.radio_coord.blockSignals(False)
             self.radio_idx.blockSignals(False)
 
