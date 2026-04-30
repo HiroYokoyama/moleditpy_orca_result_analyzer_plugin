@@ -2108,13 +2108,17 @@ class NMRDialog(QDialog):
         if not v3d or not hasattr(v3d, "plotter"):
             return
 
-        # Get coordinates
-        coords = self.parent_dlg.parser.data.get("coords", [])
-        if not coords or atom_idx >= len(coords):
-            return
+        # Get coordinates from 3D viewer to match current view
+        if hasattr(v3d, "atom_positions_3d") and atom_idx < len(v3d.atom_positions_3d):
+            pos = v3d.atom_positions_3d[atom_idx]
+        else:
+            # Fallback to parser data
+            coords = self.parent_dlg.parser.data.get("coords", [])
+            if not coords or atom_idx >= len(coords):
+                return
+            pos = coords[atom_idx]
 
         try:
-            pos = coords[atom_idx]
             label_pos = [pos[0], pos[1], pos[2] + 0.4]  # Offset above atom
 
             label_name = f"nmr_label_{atom_idx}"
@@ -2534,14 +2538,25 @@ class NMRDialog(QDialog):
 
             # Highlight sphere size: 40% (1.4x) relative to VDW radii per user request
             radii = []
+            import re
             for i in valid_indices:
-                # Find atom symbol from parser data
-                atom_item = next(
-                    (d for d in self.data if i == d.get("atom_idx", None)), None
-                )
-                sym = atom_item.get("atom_sym", "C") if atom_item else "C"
+                try:
+                    # Try to match the exact radius used by the 3D viewer
+                    base_r = float(mw.view_3d_manager.glyph_source["radii"][i])
+                    if base_r < 0.1:
+                        raise ValueError("Radius too small")
+                except Exception:
+                    # Fallback to calculated radius if not available
+                    atom_item = next(
+                        (d for d in self.data if i == d.get("atom_idx", None)), None
+                    )
+                    sym = atom_item.get("atom_sym", "C") if atom_item else "C"
+                    # Strip isotopes like "13C" -> "C"
+                    clean_sym = re.sub(r"[^A-Za-z]", "", sym)
+                    base_r = VDW_RADII.get(clean_sym, 0.4)
+                
                 # Use 1.4x scaling factor (40% larger)
-                r = VDW_RADII.get(sym, 0.4) * 1.4
+                r = base_r * 1.4
                 radii.append(r)
 
             # Create glyphs for highlights
