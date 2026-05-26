@@ -1127,8 +1127,8 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
         self.assertEqual(len(scan_steps), 5)
 
     def test_total_trajectory_steps(self):
-        """Should have 37 total steps in the trajectory (scan steps + intermediate opt cycles)."""
-        self.assertEqual(len(self.p.data.get("scan_steps", [])), 37)
+        """Should have 41 total steps in the trajectory (5 scan steps + 31 intermediate cycles + 5 final evals)."""
+        self.assertEqual(len(self.p.data.get("scan_steps", [])), 41)
 
     def test_scan_step_coords_and_energies(self):
         scan_steps = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"]
@@ -1142,6 +1142,30 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
             self.assertEqual(len(step["coords"]), 8)
             self.assertIn("scan_coord", step)
             self.assertIn("energy", step)
+
+    def test_opt_final_count(self):
+        """Should have exactly 5 opt_final steps (one for each scan step)."""
+        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        self.assertEqual(len(opt_finals), 5)
+
+    def test_opt_final_scan_step_ids(self):
+        """Each opt_final must be correctly assigned to its corresponding scan_step_id."""
+        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        ids = [s["scan_step_id"] for s in opt_finals]
+        self.assertEqual(ids, [1, 2, 3, 4, 5])
+
+    def test_opt_final_energies(self):
+        """Each opt_final must have the correct energy matching the scan step final energy."""
+        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        expected_energies = [
+            -79.791846796153,
+            -79.789747119085,
+            -79.787432724318,
+            -79.789747334378,
+            -79.791847846936
+        ]
+        for opt_f, expected in zip(opt_finals, expected_energies):
+            self.assertAlmostEqual(opt_f["energy"], expected, places=8)
 
 
 if __name__ == "__main__":

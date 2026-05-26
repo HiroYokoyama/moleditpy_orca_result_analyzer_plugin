@@ -583,10 +583,7 @@ class OrcaParser:
                         }
                     )
 
-        # Append final optimized geometry from "FINAL ENERGY EVALUATION AT THE
-        # STATIONARY POINT" as an extra step so the trajectory viewer shows it.
-        for i, line in enumerate(self.lines):
-            if "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in line.upper():
+            elif "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in uu_line:
                 # Read energy from this section
                 final_en = 0.0
                 for k in range(i, min(i + 1500, len(self.lines))):
@@ -600,7 +597,8 @@ class OrcaParser:
                 f_atoms, f_coords, f_found = read_coords_from(i)
                 if f_found:
                     last_cycle = max(
-                        (s["step"] for s in self.data["scan_steps"] if s.get("type") == "opt_cycle"),
+                        (s["step"] for s in self.data["scan_steps"]
+                         if s.get("type") == "opt_cycle" and s.get("scan_step_id") == current_scan_step),
                         default=0,
                     )
                     self.data["scan_steps"].append(
@@ -615,7 +613,6 @@ class OrcaParser:
                             "gradients": [],
                         }
                     )
-                break  # Only one FINAL ENERGY EVALUATION per file
 
     def parse_mo_coeffs(self):
         self.data[

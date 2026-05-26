@@ -68,6 +68,8 @@ class TrajectoryResultDialog(QDialog):
         self.resize(800, 600)
         self.base_dir = base_dir
         self.gl_widget = gl_widget
+        # Filter out steps with zero energy (incomplete cycles in running calculations)
+        steps = [s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9]
         self.steps = steps  # Current steps to display
         self.charge = charge
         self.output_path = output_path
@@ -747,6 +749,9 @@ class TrajectoryResultDialog(QDialog):
                         self, "Error", "No valid steps found in XYZ file."
                     )
                 return
+
+            # Filter out steps with zero energy (incomplete cycles in running calculations)
+            steps = [s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9]
 
             # Merge dist from existing steps into new steps if lengths match
             # (Preserves Path Summary distances even if XYZ lacks them)
