@@ -69,7 +69,9 @@ class TrajectoryResultDialog(QDialog):
         self.base_dir = base_dir
         self.gl_widget = gl_widget
         # Filter out steps with zero energy (incomplete cycles in running calculations)
-        steps = [s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9]
+        steps = [
+            s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9
+        ]
         self.steps = steps  # Current steps to display
         self.charge = charge
         self.output_path = output_path
@@ -751,7 +753,11 @@ class TrajectoryResultDialog(QDialog):
                 return
 
             # Filter out steps with zero energy (incomplete cycles in running calculations)
-            steps = [s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9]
+            steps = [
+                s
+                for s in steps
+                if s.get("energy") is not None and abs(s["energy"]) > 1e-9
+            ]
 
             # Merge dist from existing steps into new steps if lengths match
             # (Preserves Path Summary distances even if XYZ lacks them)
@@ -766,7 +772,7 @@ class TrajectoryResultDialog(QDialog):
             # Keep all_steps and scan_points consistent with the new data
             self.all_steps = steps
             self.scan_points = self.compute_scan_points(steps)
-            
+
             # Update View toggles
             has_distinction = len(self.scan_points) < len(self.all_steps)
             self.radio_full.setEnabled(has_distinction)

@@ -20,19 +20,20 @@ import unittest
 
 _HERE = os.path.dirname(__file__)
 _SAMPLES = os.path.join(_HERE, "sample_outputs")
-_CUBE_FILE = os.path.join(_SAMPLES, "benzene-opt-ene_cubes", "benzene-opt-ene_MO_21.cube")
+_CUBE_FILE = os.path.join(
+    _SAMPLES, "benzene-opt-ene_cubes", "benzene-opt-ene_MO_21.cube"
+)
 _ENE_FILE = os.path.join(_SAMPLES, "benzene-opt-ene.out")
 
 _PARSER_SRC = os.path.normpath(
     os.path.join(_HERE, "..", "orca_result_analyzer", "parser.py")
 )
-_VIS_SRC = os.path.normpath(
-    os.path.join(_HERE, "..", "orca_result_analyzer", "vis.py")
-)
+_VIS_SRC = os.path.normpath(os.path.join(_HERE, "..", "orca_result_analyzer", "vis.py"))
 
 # ---------------------------------------------------------------------------
 # Bootstrap: parser (no Qt needed)
 # ---------------------------------------------------------------------------
+
 
 def _load_parser():
     spec = importlib.util.spec_from_file_location("orca_parser_cube_mo", _PARSER_SRC)
@@ -40,6 +41,7 @@ def _load_parser():
     sys.modules["orca_parser_cube_mo"] = mod
     spec.loader.exec_module(mod)
     return mod
+
 
 _parser_mod = _load_parser()
 OrcaParser = _parser_mod.OrcaParser
@@ -57,9 +59,10 @@ def _load_ene():
 # Standalone cube reader (mirrors vis._parse_cube, no PyVista required)
 # ---------------------------------------------------------------------------
 
+
 def _parse_cube_standalone(filepath):
     """Minimal cube reader for testing — equivalent to CubeVisualizer._parse_cube."""
-    import numpy as np
+
     with open(filepath, "r") as f:
         lines = f.readlines()
 
@@ -91,6 +94,7 @@ def _parse_cube_standalone(filepath):
 # ---------------------------------------------------------------------------
 # TestParseCube — benzene-opt-ene_MO_21.cube
 # ---------------------------------------------------------------------------
+
 
 class TestParseCube(unittest.TestCase):
     """Real cube file: HOMO-1 (MO 22) of benzene, 40x40x40 grid in Bohr."""
@@ -156,6 +160,7 @@ class TestParseCube(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # TestParseOrbitalEnergies — benzene-opt-ene.out
 # ---------------------------------------------------------------------------
+
 
 class TestParseOrbitalEnergies(unittest.TestCase):
     """ORBITAL ENERGIES section from benzene single-point (ORCA 6.1.1)."""
@@ -237,6 +242,7 @@ class TestParseOrbitalEnergies(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # TestParseMoCoeffs — benzene-opt-ene.out
 # ---------------------------------------------------------------------------
+
 
 class TestParseMoCoeffs(unittest.TestCase):
     """MOLECULAR ORBITALS (RHF, ROHF) section from benzene single-point."""

@@ -30,54 +30,96 @@ def _install_stubs(force=False):
 
     class _BaseWidget:
         """Stub base class for Qt widgets used as base classes."""
+
         def __init__(self, *args, **kwargs):
             pass
+
+        def closeEvent(self, event):
+            pass
+
         def __getattr__(self, name):
             return lambda *a, **kw: None
-
-    _pyqt6 = types.ModuleType("PyQt6")
-    _core = types.ModuleType("PyQt6.QtCore")
-    _widgets = types.ModuleType("PyQt6.QtWidgets")
-    _gui = types.ModuleType("PyQt6.QtGui")
 
     class _Qt:
         class Orientation:
             Horizontal = 1
+
         class WindowType:
             Window = 1
 
-    _core.Qt = _Qt
-    _core.QTimer = MagicMock()
+    existing_widgets = sys.modules.get("PyQt6.QtWidgets")
+    existing_core = sys.modules.get("PyQt6.QtCore")
+    existing_gui = sys.modules.get("PyQt6.QtGui")
+    existing_pyqt6 = sys.modules.get("PyQt6")
 
-    # QDialog is inherited → must be a real class
-    _widgets.QDialog = _BaseWidget
+    _TRAJ_WIDGET_MOCKS = [
+        "QVBoxLayout",
+        "QHBoxLayout",
+        "QLabel",
+        "QSlider",
+        "QRadioButton",
+        "QComboBox",
+        "QPushButton",
+        "QSpinBox",
+        "QFormLayout",
+        "QDialogButtonBox",
+        "QCheckBox",
+        "QFileDialog",
+        "QMessageBox",
+        "QApplication",
+        "QButtonGroup",
+    ]
 
-    # Remaining widgets are only instantiated → MagicMock() is fine
-    for name in [
-        "QVBoxLayout", "QHBoxLayout", "QLabel", "QSlider",
-        "QRadioButton", "QComboBox", "QPushButton", "QSpinBox",
-        "QFormLayout", "QDialogButtonBox", "QCheckBox", "QFileDialog",
-        "QMessageBox", "QApplication", "QButtonGroup",
-    ]:
-        setattr(_widgets, name, MagicMock())
+    if existing_widgets is not None:
+        # Patch
+        if not hasattr(existing_widgets, "QDialog"):
+            existing_widgets.QDialog = _BaseWidget
+        if not hasattr(existing_widgets, "QWidget"):
+            existing_widgets.QWidget = _BaseWidget
+        for name in _TRAJ_WIDGET_MOCKS:
+            if not hasattr(existing_widgets, name):
+                setattr(existing_widgets, name, MagicMock())
+        if existing_core is not None:
+            if not hasattr(existing_core, "Qt"):
+                existing_core.Qt = _Qt
+            if not hasattr(existing_core, "QTimer"):
+                existing_core.QTimer = MagicMock()
+        if existing_gui is not None:
+            if not hasattr(existing_gui, "QColor"):
+                existing_gui.QColor = MagicMock()
+    else:
+        _pyqt6 = existing_pyqt6 or types.ModuleType("PyQt6")
+        _core = existing_core or types.ModuleType("PyQt6.QtCore")
+        _widgets = types.ModuleType("PyQt6.QtWidgets")
+        _gui = existing_gui or types.ModuleType("PyQt6.QtGui")
 
-    _gui.QColor = MagicMock()
-    _pyqt6.QtCore = _core
-    _pyqt6.QtWidgets = _widgets
-    _pyqt6.QtGui = _gui
+        _core.Qt = _Qt
+        _core.QTimer = MagicMock()
+        _widgets.QDialog = _BaseWidget
+        _widgets.QWidget = _BaseWidget
+        for name in _TRAJ_WIDGET_MOCKS:
+            setattr(_widgets, name, MagicMock())
+        _gui.QColor = MagicMock()
 
-    sys.modules.update({
-        "PyQt6": _pyqt6,
-        "PyQt6.QtCore": _core,
-        "PyQt6.QtWidgets": _widgets,
-        "PyQt6.QtGui": _gui,
-    })
+        _pyqt6.QtCore = _core
+        _pyqt6.QtWidgets = _widgets
+        _pyqt6.QtGui = _gui
+
+        sys.modules.update(
+            {
+                "PyQt6": _pyqt6,
+                "PyQt6.QtCore": _core,
+                "PyQt6.QtWidgets": _widgets,
+                "PyQt6.QtGui": _gui,
+            }
+        )
 
     # --- matplotlib Qt backends ---
     # FigureCanvasQTAgg is inherited by MplCanvas → must be a real class
     class _BaseCanvas:
         def __init__(self, *args, **kwargs):
             pass
+
         def __getattr__(self, name):
             return lambda *a, **kw: None
 
@@ -92,16 +134,20 @@ def _install_stubs(force=False):
     _orca_pkg.__package__ = "orca_result_analyzer"
 
     _orca_utils = types.ModuleType("orca_result_analyzer.utils")
-    _orca_utils.get_default_export_path = lambda base, suffix="_analyzed", extension="": ""
+    _orca_utils.get_default_export_path = (
+        lambda base, suffix="_analyzed", extension="": ""
+    )
 
     _orca_spectrum = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _orca_spectrum.SpectrumWidget = MagicMock()
 
-    sys.modules.update({
-        "orca_result_analyzer": _orca_pkg,
-        "orca_result_analyzer.utils": _orca_utils,
-        "orca_result_analyzer.spectrum_widget": _orca_spectrum,
-    })
+    sys.modules.update(
+        {
+            "orca_result_analyzer": _orca_pkg,
+            "orca_result_analyzer.utils": _orca_utils,
+            "orca_result_analyzer.spectrum_widget": _orca_spectrum,
+        }
+    )
 
     # rdkit and PIL: both have try/except ImportError guards in traj_analysis.py.
     # Do NOT stub them here — matplotlib imports PIL internally and will break
@@ -133,6 +179,7 @@ TrajectoryResultDialog = _traj_mod.TrajectoryResultDialog
 # Minimal fake object for calling unbound logic methods with custom self
 # ---------------------------------------------------------------------------
 
+
 class _FakeDialog:
     """Minimal stand-in for TrajectoryResultDialog in pure-logic tests."""
 
@@ -152,6 +199,7 @@ class _FakeDialog:
 # ---------------------------------------------------------------------------
 # TestComputeScanPoints
 # ---------------------------------------------------------------------------
+
 
 class TestComputeScanPoints(unittest.TestCase):
     """compute_scan_points does not use self — call with None."""
@@ -200,7 +248,11 @@ class TestComputeScanPoints(unittest.TestCase):
         steps = [
             {"scan_step_id": 1, "type": "scan_step", "energy": -99.0},
             {"scan_step_id": 1, "type": "opt_cycle", "energy": -100.5},
-            {"scan_step_id": 1, "type": "opt_cycle", "energy": -100.8},  # last opt_cycle
+            {
+                "scan_step_id": 1,
+                "type": "opt_cycle",
+                "energy": -100.8,
+            },  # last opt_cycle
         ]
         result = TrajectoryResultDialog.compute_scan_points(None, steps)
         self.assertEqual(len(result), 1)
@@ -225,16 +277,17 @@ _EH_TO_EV = 27.211386246
 
 
 class TestUpdateDisplayValues(unittest.TestCase):
-
     def test_relative_kj_per_mol(self):
         steps = [{"energy": -100.00}, {"energy": -100.01}, {"energy": -99.99}]
         fake = _FakeDialog(steps, unit="kJ/mol", relative=True)
         # min_e = -100.01
         fake.min_e = -100.01
         TrajectoryResultDialog.update_display_values(fake)
-        expected = [(-100.00 - (-100.01)) * _EH_TO_KJ,
-                    0.0,
-                    (-99.99 - (-100.01)) * _EH_TO_KJ]
+        expected = [
+            (-100.00 - (-100.01)) * _EH_TO_KJ,
+            0.0,
+            (-99.99 - (-100.01)) * _EH_TO_KJ,
+        ]
         for got, exp in zip(fake.display_energies, expected):
             self.assertAlmostEqual(got, exp, places=3)
 
@@ -286,6 +339,7 @@ class TestUpdateDisplayValues(unittest.TestCase):
 # TestRecalcEnergies
 # ---------------------------------------------------------------------------
 
+
 class _FakeDialogRecalc:
     """Minimal stand-in for recalc_energies tests."""
 
@@ -306,7 +360,6 @@ class _FakeDialogRecalc:
 
 
 class TestRecalcEnergies(unittest.TestCase):
-
     def test_energies_extracted_from_steps(self):
         steps = [{"energy": -100.0}, {"energy": -100.5}, {"energy": -99.5}]
         fake = _FakeDialogRecalc(steps)

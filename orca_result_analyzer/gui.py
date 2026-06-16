@@ -15,8 +15,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent
 
+
 class _ClickFilter(QObject):
     """Qt event filter: detects non-drag left clicks on the 3D plotter widget."""
+
     def __init__(self, callback, press_callback=None, parent=None):
         super().__init__(parent)
         self._callback = callback
@@ -43,25 +45,29 @@ class _ClickFilter(QObject):
                     self._callback(rel.x(), rel.y(), obj)
         return False  # never consume -- camera interaction must keep working
 
+
 class ElidedLabel(QLabel):
     def __init__(self, text="", parent=None):
         super().__init__(parent)
         self._full_text = text
         super().setText(text)
-        
+
     def setText(self, text):
         self._full_text = text
         self._update_elided_text()
-        
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._update_elided_text()
-        
+
     def _update_elided_text(self):
         fm = self.fontMetrics()
         # Elide in the middle to show start and end of path
-        elided = fm.elidedText(self._full_text, Qt.TextElideMode.ElideMiddle, self.width())
+        elided = fm.elidedText(
+            self._full_text, Qt.TextElideMode.ElideMiddle, self.width()
+        )
         super().setText(elided)
+
 
 try:
     from rdkit import Chem
@@ -189,7 +195,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             "color: #0066cc; font-size: 9pt; background: transparent; border: none; padding: 0;"
         )
         self.lbl_file_dir.setToolTip(self.file_path)
-        self.lbl_file_dir.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.lbl_file_dir.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         file_info_layout.addWidget(self.lbl_file_dir)
 
         # Updated Time Label
@@ -394,11 +402,14 @@ class OrcaResultAnalyzerDialog(QDialog):
     def _enable_plotter_picking(self):
         """Install Qt event filter on the 3D plotter widget for atom click detection."""
         try:
-            if not hasattr(self, "mw"): return
+            if not hasattr(self, "mw"):
+                return
             v3d = getattr(self.mw, "view_3d_manager", None)
-            if not v3d: return
+            if not v3d:
+                return
             plotter = getattr(v3d, "plotter", None)
-            if not plotter: return
+            if not plotter:
+                return
             self._click_filter = _ClickFilter(
                 self._on_plotter_click,
                 press_callback=self._on_plotter_press,
@@ -411,7 +422,8 @@ class OrcaResultAnalyzerDialog(QDialog):
     def _disable_plotter_picking(self):
         """Remove the event filter from the 3D plotter widget."""
         try:
-            if not hasattr(self, "mw"): return
+            if not hasattr(self, "mw"):
+                return
             v3d = getattr(self.mw, "view_3d_manager", None)
             plotter = getattr(v3d, "plotter", None) if v3d else None
             if plotter and self._click_filter:
@@ -425,23 +437,30 @@ class OrcaResultAnalyzerDialog(QDialog):
         try:
             import vtk
             import numpy as np
-            if not hasattr(self, "mw"): return None
+
+            if not hasattr(self, "mw"):
+                return None
             v3d = getattr(self.mw, "view_3d_manager", None)
-            if not v3d: return None
+            if not v3d:
+                return None
             plotter = getattr(v3d, "plotter", None)
-            if not plotter: return None
+            if not plotter:
+                return None
             atom_actor = getattr(v3d, "atom_actor", None)
-            if atom_actor is None: return None
+            if atom_actor is None:
+                return None
             atom_positions = getattr(v3d, "atom_positions_3d", None)
-            if atom_positions is None or len(atom_positions) == 0: return None
+            if atom_positions is None or len(atom_positions) == 0:
+                return None
             vtk_y = widget.height() - y
             picker = vtk.vtkCellPicker()
             picker.SetTolerance(0.005)
             picker.Pick(x, vtk_y, 0, plotter.renderer)
-            if picker.GetActor() is not atom_actor: return None
+            if picker.GetActor() is not atom_actor:
+                return None
             pick_pos = picker.GetPickPosition()
             diffs = atom_positions - np.array(pick_pos)
-            return int(np.argmin((diffs ** 2).sum(axis=1)))
+            return int(np.argmin((diffs**2).sum(axis=1)))
         except Exception as e:
             logging.error("GUI _pick_atom_at error: %s", e)
             return None
@@ -450,7 +469,8 @@ class OrcaResultAnalyzerDialog(QDialog):
         self._pending_click_atom = None
         try:
             best_idx = self._pick_atom_at(x, y, widget)
-            if best_idx is None: return
+            if best_idx is None:
+                return
             self._pending_click_atom = best_idx
         except Exception as e:
             logging.error("GUI press handler error: %s", e)
@@ -458,11 +478,14 @@ class OrcaResultAnalyzerDialog(QDialog):
     def _on_plotter_click(self, x, y, widget):
         try:
             from PyQt6.QtWidgets import QApplication
+
             best_idx = getattr(self, "_pending_click_atom", None)
             self._pending_click_atom = None
-            if not hasattr(self, "mw"): return
+            if not hasattr(self, "mw"):
+                return
             e3d = getattr(self.mw, "edit_3d_manager", None)
-            if not e3d: return
+            if not e3d:
+                return
 
             if best_idx is None:
                 # Clicked empty space -> clear selection
@@ -478,11 +501,14 @@ class OrcaResultAnalyzerDialog(QDialog):
                 else:
                     e3d.selected_atoms_3d.add(best_idx)
             else:
-                if best_idx in e3d.selected_atoms_3d and len(e3d.selected_atoms_3d) == 1:
+                if (
+                    best_idx in e3d.selected_atoms_3d
+                    and len(e3d.selected_atoms_3d) == 1
+                ):
                     e3d.selected_atoms_3d.clear()
                 else:
                     e3d.selected_atoms_3d = {best_idx}
-                    
+
             if hasattr(e3d, "update_selection_visuals"):
                 e3d.update_selection_visuals()
         except Exception as e:
@@ -781,13 +807,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             # DetermineBonds on a read-only Mol silently fails.
             # Skip if any animation is currently playing (traj or freq) — the result
             # would be immediately overwritten and the cost is wasted.
-            _traj_playing = (
-                getattr(self, "traj_dlg", None) is not None
-                and getattr(self.traj_dlg, "is_playing", False)
+            _traj_playing = getattr(self, "traj_dlg", None) is not None and getattr(
+                self.traj_dlg, "is_playing", False
             )
-            _freq_playing = (
-                getattr(self, "freq_dlg", None) is not None
-                and getattr(self.freq_dlg, "is_playing", False)
+            _freq_playing = getattr(self, "freq_dlg", None) is not None and getattr(
+                self.freq_dlg, "is_playing", False
             )
             if rdDetermineBonds and not (_traj_playing or _freq_playing):
                 try:
@@ -830,12 +854,12 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.mw.view_3d_manager.plotter.render()
                 except Exception as _e:
                     logging.warning("[gui.py:592] silenced: %s", _e)
-        except Exception:
-            # self.logger.error(f"Error loading 3D: {e}")
-            # print(f"Error loading 3D: {e}")
-            import traceback
-
-            traceback.print_exc()
+        except Exception as e:
+            logging.error(
+                "[gui.py:load_structure_3d] Failed to load 3D structure: %s",
+                e,
+                exc_info=True,
+            )
 
     def show_mo_analyzer(self):
         self.load_structure_3d()

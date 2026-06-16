@@ -522,7 +522,7 @@ class FrequencyDialog(QDialog):
         # List
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
-            ["Mode", "Freq (cm⁻¹)", "IR (km/mol)", "Raman (Å⁴/amu)"]
+            ["Mode", "Freq (cm⁻¹)", "Unscaled (cm⁻¹)", "IR (km/mol)", "Raman (Å⁴/amu)"]
         )
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.tree.currentItemChanged.connect(self.on_mode_selected)
@@ -659,20 +659,28 @@ class FrequencyDialog(QDialog):
                 if is_trivial_5:
                     start_idx = 5
 
+        _imaginary_color = QColor("#cc0000")  # red for imaginary modes
+
         for i, f in enumerate(self.frequencies):
             if i < start_idx:
                 continue
 
-            freq_val = f["freq"] * a + b
-            # Always show both IR and Raman in columns
+            raw_freq = f["freq"]  # unscaled — used to decide imaginary
+            freq_val = raw_freq * a + b  # scaled — shown in the column
+            # Columns: Mode | Scaled | Unscaled | IR | Raman
             item = QTreeWidgetItem(
                 [
                     str(i),
                     f"{freq_val:.2f}",
+                    f"{raw_freq:.2f}",
                     f"{f.get('ir', 0.0):.2f}",
                     f"{f.get('raman', 0.0):.2f}",
                 ]
             )
+            # Colour imaginary modes red based on the unscaled frequency
+            if raw_freq < 0:
+                for col in range(5):
+                    item.setForeground(col, _imaginary_color)
             self.tree.addTopLevelItem(item)
 
     def update_preset_combo(self):
@@ -744,15 +752,21 @@ class FrequencyDialog(QDialog):
             self.update_data()
 
     def update_data(self):
-        # Update list values (scaling)
+        # Update list values (scaling); col 2 (Unscaled) is static — never touched here
         a = self.spin_sf_a.value()
         b = self.spin_sf_b.value()
+        _imaginary_color = QColor("#cc0000")
+        _default_color = QColor()  # invalid = palette default
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             item = root.child(i)
             idx = int(item.text(0))
-            old_f = self.frequencies[idx]["freq"]
-            item.setText(1, f"{old_f * a + b:.2f}")
+            raw_freq = self.frequencies[idx]["freq"]  # unscaled
+            item.setText(1, f"{raw_freq * a + b:.2f}")
+            # Re-apply (or remove) imaginary colouring using unscaled value
+            color = _imaginary_color if raw_freq < 0 else _default_color
+            for col in range(5):
+                item.setForeground(col, color)
 
         # Update spectrum window if it's open
         if self.spectrum_win is not None:

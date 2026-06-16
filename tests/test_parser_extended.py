@@ -66,10 +66,11 @@ Final Gibbs Free Energy    ...    -99.5 Eh
 
 
 class TestParseThermal(unittest.TestCase):
-
     def test_electronic_energy(self):
         p = _parse_method(_THERMAL_CONTENT, "parse_thermal")
-        self.assertAlmostEqual(p.data["thermal"]["electronic_energy"], -76.12345, places=4)
+        self.assertAlmostEqual(
+            p.data["thermal"]["electronic_energy"], -76.12345, places=4
+        )
 
     def test_zero_point_energy(self):
         p = _parse_method(_THERMAL_CONTENT, "parse_thermal")
@@ -89,7 +90,9 @@ class TestParseThermal(unittest.TestCase):
 
     def test_temperature_parsed(self):
         p = _parse_method(_THERMAL_CONTENT, "parse_thermal")
-        self.assertAlmostEqual(p.data["thermal"].get("temperature", 0.0), 298.15, places=2)
+        self.assertAlmostEqual(
+            p.data["thermal"].get("temperature", 0.0), 298.15, places=2
+        )
 
     def test_minimal_gibbs(self):
         p = _parse_method(_THERMAL_MINIMAL, "parse_thermal")
@@ -139,7 +142,6 @@ SPIN DOWN ORBITALS
 
 
 class TestParseOrbitalEnergies(unittest.TestCase):
-
     def test_restricted_count(self):
         p = _parse_method(_ORBITAL_RESTRICTED, "parse_orbital_energies")
         self.assertEqual(len(p.data["orbital_energies"]), 3)
@@ -244,7 +246,6 @@ Mode   freq   Activity   DepolarP
 
 
 class TestParseFrequenciesIR(unittest.TestCase):
-
     def test_ir_intensities_assigned(self):
         p = _parse_method(_FREQ_WITH_IR, "parse_frequencies")
         # Mode 3 has IR intensity 25.678
@@ -295,7 +296,6 @@ Mayer bond orders
 
 
 class TestParseChargesMayer(unittest.TestCase):
-
     def test_mayer_count(self):
         p = _parse_method(_MAYER_CONTENT, "parse_charges")
         self.assertEqual(len(p.data["charges"]["Mayer"]), 3)
@@ -318,7 +318,9 @@ class TestParseChargesMayer(unittest.TestCase):
         p = _parse_method(_MAYER_NO_VALENCY, "parse_charges")
         # No separate Mulliken block, so Mayer is also stored as Mulliken
         self.assertIn("Mulliken", p.data["charges"])
-        self.assertAlmostEqual(p.data["charges"]["Mulliken"][0]["charge"], -0.76543, places=4)
+        self.assertAlmostEqual(
+            p.data["charges"]["Mulliken"][0]["charge"], -0.76543, places=4
+        )
 
     def test_empty_content(self):
         p = _parse_method("", "parse_charges")
@@ -366,7 +368,6 @@ Actual Energy
 
 
 class TestParseScanResultsTable(unittest.TestCase):
-
     def test_builds_steps_from_summary(self):
         p = _parse_method(_SCAN_RESULTS_CONTENT, "parse_scan_results_table")
         self.assertEqual(len(p.data["scan_steps"]), 3)
@@ -425,7 +426,6 @@ Image Dist.(Ang.)    E(Eh)   dE(kcal/mol)  max(|Fp|)  RMS(Fp)
 
 
 class TestParseTrajectoryNeb(unittest.TestCase):
-
     def test_neb_image_count(self):
         p = _parse_method(_NEB_PATH_SUMMARY, "parse_trajectory")
         neb = [s for s in p.data["scan_steps"] if s.get("type") == "neb_image"]
@@ -470,7 +470,6 @@ CARTESIAN COORDINATES (ANGSTROEM)
 
 
 class TestParseOptCycleConvergence(unittest.TestCase):
-
     def test_convergence_dict_populated(self):
         p = _parse_method(_OPT_CONVERGENCE, "parse_trajectory")
         step = p.data["scan_steps"][0]
@@ -505,7 +504,6 @@ CARTESIAN GRADIENT
 
 
 class TestParseGradientsMultipleBlocks(unittest.TestCase):
-
     def test_two_blocks_stored_in_all_gradients(self):
         p = _parse_method(_TWO_GRADIENT_BLOCKS, "parse_gradients")
         self.assertEqual(len(p.data["all_gradients"]), 2)

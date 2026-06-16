@@ -8,7 +8,9 @@ import sys
 import importlib.util
 import unittest
 
-_SRC = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer", "utils.py"))
+_SRC = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer", "utils.py")
+)
 
 
 def _load_utils():
@@ -24,9 +26,10 @@ get_default_export_path = _utils.get_default_export_path
 
 
 class TestGetDefaultExportPath(unittest.TestCase):
-
     def test_csv_extension(self):
-        result = get_default_export_path("/some/dir/job.out", suffix="_scf_trace", extension=".csv")
+        result = get_default_export_path(
+            "/some/dir/job.out", suffix="_scf_trace", extension=".csv"
+        )
         self.assertEqual(result, os.path.join("/some/dir", "job_scf_trace.csv"))
 
     def test_default_suffix(self):

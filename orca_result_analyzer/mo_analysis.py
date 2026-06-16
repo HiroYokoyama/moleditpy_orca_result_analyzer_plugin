@@ -959,22 +959,40 @@ class MODialog(QDialog):
             return
         data = self.presets[name]
 
-        # Block signals to avoid partial updates? No, updates are fine.
-        self.spin_iso.setValue(data.get("iso", 0.02))
-        self.spin_opacity.setValue(data.get("opacity", 0.5))
+        # Block signals on all vis controls so intermediate changes do NOT each
+        # trigger a separate show_cube() call (which would alter other MOs).
+        for w in (
+            self.spin_iso,
+            self.spin_opacity,
+            self.combo_style,
+            self.check_smooth,
+        ):
+            w.blockSignals(True)
+        try:
+            self.spin_iso.setValue(data.get("iso", 0.02))
+            self.spin_opacity.setValue(data.get("opacity", 0.5))
 
-        style = data.get("style", "Surface")
-        idx = self.combo_style.findText(style)
-        if idx >= 0:
-            self.combo_style.setCurrentIndex(idx)
+            style = data.get("style", "Surface")
+            idx = self.combo_style.findText(style)
+            if idx >= 0:
+                self.combo_style.setCurrentIndex(idx)
 
-        cp = data.get("color_p", "#ff0000")
-        cn = data.get("color_n", "#0000ff")
-        self.set_btn_color(self.btn_color_p, cp)
-        self.set_btn_color(self.btn_color_n, cn)
+            cp = data.get("color_p", "#ff0000")
+            cn = data.get("color_n", "#0000ff")
+            self.set_btn_color(self.btn_color_p, cp)
+            self.set_btn_color(self.btn_color_n, cn)
 
-        self.check_smooth.setChecked(data.get("smooth_shading", True))
+            self.check_smooth.setChecked(data.get("smooth_shading", True))
+        finally:
+            for w in (
+                self.spin_iso,
+                self.spin_opacity,
+                self.combo_style,
+                self.check_smooth,
+            ):
+                w.blockSignals(False)
 
+        # One single redraw after all values are set
         self.update_vis_only()
         self.save_settings()  # Save last used
 

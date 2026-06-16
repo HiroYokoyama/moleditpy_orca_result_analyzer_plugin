@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
     QAbstractItemView,
 )
-from PyQt6.QtCore import Qt, QTimer, QObject, QEvent
+from PyQt6.QtCore import Qt, QTimer
 import pyvista as pv
 import numpy as np
 from .utils import get_default_export_path
@@ -52,7 +52,6 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import MaxNLocator
 from .nmr_custom_ref_dialog import CustomReferenceDialog
 from . import PLUGIN_VERSION
-
 
 
 class NMRDialog(QDialog):
@@ -316,8 +315,6 @@ class NMRDialog(QDialog):
         # Custom 3D highlight actors and names
         self._nmr_sphere_actors = []
         self._nmr_label_names = []  # Explicitly track label names for removal
-
-
 
     def _check_external_selection(self):
         """Poll main window for 3D selection changes"""
@@ -2539,6 +2536,7 @@ class NMRDialog(QDialog):
             # Highlight sphere size: 40% (1.4x) relative to VDW radii per user request
             radii = []
             import re
+
             for i in valid_indices:
                 try:
                     # Try to match the exact radius used by the 3D viewer
@@ -2554,7 +2552,7 @@ class NMRDialog(QDialog):
                     # Strip isotopes like "13C" -> "C"
                     clean_sym = re.sub(r"[^A-Za-z]", "", sym)
                     base_r = VDW_RADII.get(clean_sym, 0.4)
-                
+
                 # Use 1.4x scaling factor (40% larger)
                 r = base_r * 1.4
                 radii.append(r)
@@ -2582,8 +2580,20 @@ class NMRDialog(QDialog):
         except Exception as e:
             logging.warning("[nmr_analysis.py:2282] silenced: %s", e)
 
+    def reset_selection(self):
+        """Reset all NMR selection state — call this on document reset."""
+        self.sel_timer.stop()
+        try:
+            self.clear_peak_selection()
+        except Exception as _e:
+            logging.warning("[nmr_analysis.py:reset_selection] silenced: %s", _e)
+        self._last_synced_mw_selection = frozenset()
+        self.sel_timer.start(200)
+
     def closeEvent(self, event):
-        """Clean up labels when dialog closes"""
+        """Clean up labels and stop polling timer when dialog closes"""
+        # Stop the polling timer first so it cannot fire on a dead widget
+        self.sel_timer.stop()
         self.save_settings()
         self.clear_atom_labels()
         super().closeEvent(event)

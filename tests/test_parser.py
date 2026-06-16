@@ -32,6 +32,7 @@ OrcaParser = _parser_mod.OrcaParser
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse(content):
     """Load content via load_from_memory (runs parse_all)."""
     p = OrcaParser()
@@ -53,10 +54,12 @@ def _parse_method(content, method_name):
 # TestParseBasic
 # ---------------------------------------------------------------------------
 
-class TestParseBasic(unittest.TestCase):
 
+class TestParseBasic(unittest.TestCase):
     def test_scf_energy(self):
-        p = _parse_method("  FINAL SINGLE POINT ENERGY    -76.23456789\n", "parse_basic")
+        p = _parse_method(
+            "  FINAL SINGLE POINT ENERGY    -76.23456789\n", "parse_basic"
+        )
         self.assertAlmostEqual(p.data["scf_energy"], -76.23456789, places=6)
 
     def test_scf_energy_multiple_occurrences_last_wins(self):
@@ -76,7 +79,9 @@ class TestParseBasic(unittest.TestCase):
         self.assertTrue(p.data["converged"])
 
     def test_convergence_hurray(self):
-        p = _parse_method("  HURRAY  - the optimization has converged!\n", "parse_basic")
+        p = _parse_method(
+            "  HURRAY  - the optimization has converged!\n", "parse_basic"
+        )
         self.assertTrue(p.data["converged"])
 
     def test_not_converged_by_default(self):
@@ -136,7 +141,9 @@ class TestParseBasic(unittest.TestCase):
         self.assertTrue(p.data.get("is_scan", False))
 
     def test_is_neb_flag(self):
-        p = _parse_method("   NUDGED ELASTIC BAND calculation starting\n", "parse_basic")
+        p = _parse_method(
+            "   NUDGED ELASTIC BAND calculation starting\n", "parse_basic"
+        )
         self.assertTrue(p.data.get("is_neb", False))
 
 
@@ -189,7 +196,6 @@ SCF ITERATIONS
 
 
 class TestParseScfTrace(unittest.TestCase):
-
     def test_single_block_count(self):
         p = _parse_method(_SCF_SINGLE, "parse_scf_trace")
         self.assertEqual(len(p.data["scf_traces"]), 1)
@@ -257,7 +263,6 @@ Total Dipole Moment    :    0.00000   0.00000   1.85468
 
 
 class TestParseDipole(unittest.TestCase):
-
     def test_vector_parsed(self):
         p = _parse_method(_DIPOLE_WITH_MAG, "parse_dipole")
         self.assertIsNotNone(p.data["dipole"])
@@ -272,6 +277,7 @@ class TestParseDipole(unittest.TestCase):
 
     def test_magnitude_calculated_if_no_line(self):
         import math
+
         p = _parse_method(_DIPOLE_NO_MAG_LINE, "parse_dipole")
         expected = math.sqrt(0.0 + 0.0 + 1.85468**2)
         self.assertAlmostEqual(p.data["dipole"]["magnitude"], expected, places=4)
@@ -318,7 +324,6 @@ HIRSHFELD ANALYSIS
 
 
 class TestParseCharges(unittest.TestCase):
-
     def test_mulliken_count(self):
         p = _parse_method(_MULLIKEN, "parse_charges")
         self.assertEqual(len(p.data["charges"]["Mulliken"]), 3)
@@ -338,7 +343,9 @@ class TestParseCharges(unittest.TestCase):
     def test_loewdin_parsed(self):
         p = _parse_method(_LOEWDIN, "parse_charges")
         self.assertIn("Loewdin", p.data["charges"])
-        self.assertAlmostEqual(p.data["charges"]["Loewdin"][0]["charge"], -0.12345, places=4)
+        self.assertAlmostEqual(
+            p.data["charges"]["Loewdin"][0]["charge"], -0.12345, places=4
+        )
 
     def test_hirshfeld_has_spin(self):
         p = _parse_method(_HIRSHFELD, "parse_charges")
@@ -379,7 +386,6 @@ VIBRATIONAL FREQUENCIES
 
 
 class TestParseFrequencies(unittest.TestCase):
-
     def test_count(self):
         p = _parse_method(_VIBRATIONAL, "parse_frequencies")
         self.assertEqual(len(p.data["frequencies"]), 6)
@@ -445,7 +451,6 @@ SUMMARY OF ISOTROPIC COUPLING CONSTANTS (Hz)
 
 
 class TestParseNmr(unittest.TestCase):
-
     def test_shielding_count(self):
         p = _parse_method(_NMR_SHIELDING, "parse_nmr")
         self.assertEqual(len(p.data["nmr_shielding"]), 3)
@@ -453,8 +458,12 @@ class TestParseNmr(unittest.TestCase):
     def test_shielding_values(self):
         p = _parse_method(_NMR_SHIELDING, "parse_nmr")
         self.assertEqual(p.data["nmr_shielding"][0]["atom_sym"], "C")
-        self.assertAlmostEqual(p.data["nmr_shielding"][0]["shielding"], 123.456, places=2)
-        self.assertAlmostEqual(p.data["nmr_shielding"][1]["shielding"], 31.234, places=2)
+        self.assertAlmostEqual(
+            p.data["nmr_shielding"][0]["shielding"], 123.456, places=2
+        )
+        self.assertAlmostEqual(
+            p.data["nmr_shielding"][1]["shielding"], 31.234, places=2
+        )
 
     def test_empty_content(self):
         p = _parse_method("", "parse_nmr")
@@ -483,7 +492,6 @@ STATE  2:  E=   0.15678 au      4.267 eV    290.6 nm
 
 
 class TestParseTddft(unittest.TestCase):
-
     def test_states_count(self):
         p = _parse_method(_TDDFT_CONTENT, "parse_tddft")
         self.assertEqual(len(p.data["tddft"]), 2)
@@ -555,7 +563,6 @@ CARTESIAN COORDINATES (ANGSTROEM)
 
 
 class TestParseTrajectory(unittest.TestCase):
-
     def test_single_opt_cycle(self):
         p = _parse_method(_OPT_CYCLE_CONTENT, "parse_trajectory")
         steps = p.data["scan_steps"]
@@ -616,7 +623,6 @@ CARTESIAN GRADIENT NORM: 0.00123
 
 
 class TestParseGradients(unittest.TestCase):
-
     def test_colon_format_count(self):
         p = _parse_method(_GRADIENT_COLON, "parse_gradients")
         self.assertEqual(len(p.data["gradients"]), 3)
@@ -700,7 +706,6 @@ H     -0.75545    0.00000   -0.47116
 
 
 class TestParseXyzContent(unittest.TestCase):
-
     def test_multi_frame_count(self):
         p = OrcaParser()
         steps = p.parse_xyz_content(_XYZ_MULTI)

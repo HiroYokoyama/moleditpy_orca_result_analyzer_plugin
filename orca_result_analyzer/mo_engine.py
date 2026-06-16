@@ -33,6 +33,7 @@ class CubeWriter:
             from rdkit import Chem
 
             pt = Chem.GetPeriodicTable()
+
             def to_z(s):
                 return pt.GetAtomicNumber(s) if isinstance(s, str) else int(s)
         except Exception:

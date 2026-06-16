@@ -597,8 +597,12 @@ class OrcaParser:
                 f_atoms, f_coords, f_found = read_coords_from(i)
                 if f_found:
                     last_cycle = max(
-                        (s["step"] for s in self.data["scan_steps"]
-                         if s.get("type") == "opt_cycle" and s.get("scan_step_id") == current_scan_step),
+                        (
+                            s["step"]
+                            for s in self.data["scan_steps"]
+                            if s.get("type") == "opt_cycle"
+                            and s.get("scan_step_id") == current_scan_step
+                        ),
                         default=0,
                     )
                     self.data["scan_steps"].append(

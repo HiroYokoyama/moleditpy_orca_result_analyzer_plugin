@@ -38,6 +38,7 @@ OrcaParser = _parser_mod.OrcaParser
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load(filename):
     path = os.path.join(_SAMPLES, filename)
     p = OrcaParser()
@@ -59,6 +60,7 @@ def _opt_final(p):
 # Benzene geometry optimization  —  ORCA 6
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneOptOrca6(unittest.TestCase):
     """benzene-opt.out  (ORCA 6.1.1, 2 cycles, converged)"""
 
@@ -75,9 +77,7 @@ class TestBenzeneOptOrca6(unittest.TestCase):
         self.assertTrue(self.p.data["converged"])
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930734972084, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930734972084, places=6)
 
     def test_charge(self):
         self.assertEqual(self.p.data["charge"], 0)
@@ -98,7 +98,7 @@ class TestBenzeneOptOrca6(unittest.TestCase):
     def test_final_coords_first_atom(self):
         """data['coords'][0] must be the FINAL ENERGY EVALUATION geometry, not cycle 1."""
         x, y, z = self.p.data["coords"][0]
-        self.assertAlmostEqual(x,  0.805933, places=4)
+        self.assertAlmostEqual(x, 0.805933, places=4)
         self.assertAlmostEqual(y, -1.143600, places=4)
         self.assertAlmostEqual(z, -0.008261, places=4)
 
@@ -122,8 +122,9 @@ class TestBenzeneOptOrca6(unittest.TestCase):
         self.assertEqual(final_step["atoms"], self.p.data["atoms"])
         for i, (fc, dc) in enumerate(zip(final_step["coords"], self.p.data["coords"])):
             for j in range(3):
-                self.assertAlmostEqual(fc[j], dc[j], places=5,
-                    msg=f"atom {i} coord {j} mismatch")
+                self.assertAlmostEqual(
+                    fc[j], dc[j], places=5, msg=f"atom {i} coord {j} mismatch"
+                )
 
     def test_opt_final_energy(self):
         final_step = _opt_final(self.p)[0]
@@ -168,6 +169,7 @@ class TestBenzeneOptOrca6(unittest.TestCase):
 # Benzene geometry optimization  —  ORCA 5
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneOptOrca5(unittest.TestCase):
     """benzene-opt_5.out  (ORCA 5.0.4, 2 cycles, converged)"""
 
@@ -182,16 +184,14 @@ class TestBenzeneOptOrca5(unittest.TestCase):
         self.assertTrue(self.p.data["converged"])
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930718933873, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930718933873, places=6)
 
     def test_atom_count(self):
         self.assertEqual(len(self.p.data["atoms"]), 12)
 
     def test_final_coords_first_atom(self):
         x, y, z = self.p.data["coords"][0]
-        self.assertAlmostEqual(x,  0.805991, places=4)
+        self.assertAlmostEqual(x, 0.805991, places=4)
         self.assertAlmostEqual(y, -1.143635, places=4)
         self.assertAlmostEqual(z, -0.008264, places=4)
 
@@ -220,6 +220,7 @@ class TestBenzeneOptOrca5(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Acetone geometry optimization  —  ORCA 6
 # ---------------------------------------------------------------------------
+
 
 class TestAcetoneOptOrca6(unittest.TestCase):
     """acetone-opt.out  (ORCA 6.x, 5 cycles, converged)"""
@@ -264,8 +265,8 @@ class TestAcetoneOptOrca6(unittest.TestCase):
     def test_final_coords_first_atom(self):
         x, y, z = self.p.data["coords"][0]
         self.assertAlmostEqual(x, -1.274842, places=4)
-        self.assertAlmostEqual(y,  0.247667, places=4)
-        self.assertAlmostEqual(z,  0.079907, places=4)
+        self.assertAlmostEqual(y, 0.247667, places=4)
+        self.assertAlmostEqual(z, 0.079907, places=4)
 
     def test_cycle1_coords_differ_from_final(self):
         cycle1_coords = _opt_cycles(self.p)[0]["coords"][0]
@@ -301,6 +302,7 @@ class TestAcetoneOptOrca6(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Acetone geometry optimization  —  ORCA 5
 # ---------------------------------------------------------------------------
+
 
 class TestAcetoneOptOrca5(unittest.TestCase):
     """acetone-opt_5.out  (ORCA 5.x, 5 cycles, converged)"""
@@ -345,6 +347,7 @@ class TestAcetoneOptOrca5(unittest.TestCase):
 # Benzene single-point energy  —  ORCA 6
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneEneOrca6(unittest.TestCase):
     """benzene-opt-ene.out  (ORCA 6.1.1, SP, no optimization)"""
 
@@ -353,9 +356,7 @@ class TestBenzeneEneOrca6(unittest.TestCase):
         cls.p = _load("benzene-opt-ene.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930784926115, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930784926115, places=6)
 
     def test_converged(self):
         self.assertTrue(self.p.data["converged"])
@@ -381,6 +382,7 @@ class TestBenzeneEneOrca6(unittest.TestCase):
 # Benzene single-point energy  —  ORCA 5
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneEneOrca5(unittest.TestCase):
     """benzene-opt-ene_5.out  (ORCA 5.0.4, SP, no optimization)"""
 
@@ -389,9 +391,7 @@ class TestBenzeneEneOrca5(unittest.TestCase):
         cls.p = _load("benzene-opt-ene_5.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930718955827, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930718955827, places=6)
 
     def test_no_opt_cycles(self):
         self.assertEqual(len(_opt_cycles(self.p)), 0)
@@ -410,6 +410,7 @@ class TestBenzeneEneOrca5(unittest.TestCase):
 # Benzene NMR  —  ORCA 6
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneNmrOrca6(unittest.TestCase):
     """benzene-opt-nmr.out  (ORCA 6.1.1, NMR shielding)"""
 
@@ -418,9 +419,7 @@ class TestBenzeneNmrOrca6(unittest.TestCase):
         cls.p = _load("benzene-opt-nmr.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930784926115, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930784926115, places=6)
 
     def test_nmr_shielding_present(self):
         self.assertGreater(len(self.p.data["nmr_shielding"]), 0)
@@ -432,8 +431,7 @@ class TestBenzeneNmrOrca6(unittest.TestCase):
     def test_nmr_carbon_shielding_range(self):
         """Benzene carbon shielding should be roughly 40-80 ppm."""
         carbon_shields = [
-            e["shielding"] for e in self.p.data["nmr_shielding"]
-            if e["atom_sym"] == "C"
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"
         ]
         self.assertEqual(len(carbon_shields), 6)
         for s in carbon_shields:
@@ -442,8 +440,7 @@ class TestBenzeneNmrOrca6(unittest.TestCase):
     def test_nmr_hydrogen_shielding_range(self):
         """Benzene H shielding should be positive."""
         h_shields = [
-            e["shielding"] for e in self.p.data["nmr_shielding"]
-            if e["atom_sym"] == "H"
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "H"
         ]
         self.assertEqual(len(h_shields), 6)
         for s in h_shields:
@@ -457,6 +454,7 @@ class TestBenzeneNmrOrca6(unittest.TestCase):
 # Benzene NMR  —  ORCA 5
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneNmrOrca5(unittest.TestCase):
     """benzene-opt-nmr_5.out  (ORCA 5.0.4, NMR shielding)"""
 
@@ -465,9 +463,7 @@ class TestBenzeneNmrOrca5(unittest.TestCase):
         cls.p = _load("benzene-opt-nmr_5.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.930718955827, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.930718955827, places=6)
 
     def test_nmr_shielding_present(self):
         self.assertGreater(len(self.p.data["nmr_shielding"]), 0)
@@ -483,6 +479,7 @@ class TestBenzeneNmrOrca5(unittest.TestCase):
 # Benzene TDDFT excited states  —  ORCA 6
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneVexOrca6(unittest.TestCase):
     """benzene-opt-vex.out  (ORCA 6.1.1, TD-DFT, 5 states)"""
 
@@ -491,17 +488,13 @@ class TestBenzeneVexOrca6(unittest.TestCase):
         cls.p = _load("benzene-opt-vex.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.728888949460, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.728888949460, places=6)
 
     def test_tddft_state_count(self):
         self.assertEqual(len(self.p.data["tddft"]), 5)
 
     def test_tddft_first_state_ev(self):
-        self.assertAlmostEqual(
-            self.p.data["tddft"][0]["energy_ev"], 5.494, places=2
-        )
+        self.assertAlmostEqual(self.p.data["tddft"][0]["energy_ev"], 5.494, places=2)
 
     def test_tddft_states_sorted_ascending(self):
         evs = [s["energy_ev"] for s in self.p.data["tddft"]]
@@ -531,6 +524,7 @@ class TestBenzeneVexOrca6(unittest.TestCase):
 # Benzene TDDFT excited states  —  ORCA 5
 # ---------------------------------------------------------------------------
 
+
 class TestBenzeneVexOrca5(unittest.TestCase):
     """benzene-opt-vex_5.out  (ORCA 5.0.4, TD-DFT, 5 states)"""
 
@@ -539,17 +533,13 @@ class TestBenzeneVexOrca5(unittest.TestCase):
         cls.p = _load("benzene-opt-vex_5.out")
 
     def test_final_energy(self):
-        self.assertAlmostEqual(
-            self.p.data["scf_energy"], -231.728828351432, places=6
-        )
+        self.assertAlmostEqual(self.p.data["scf_energy"], -231.728828351432, places=6)
 
     def test_tddft_state_count(self):
         self.assertEqual(len(self.p.data["tddft"]), 5)
 
     def test_tddft_first_state_ev(self):
-        self.assertAlmostEqual(
-            self.p.data["tddft"][0]["energy_ev"], 5.494, places=2
-        )
+        self.assertAlmostEqual(self.p.data["tddft"][0]["energy_ev"], 5.494, places=2)
 
     def test_tddft_states_sorted_ascending(self):
         evs = [s["energy_ev"] for s in self.p.data["tddft"]]
@@ -565,6 +555,7 @@ class TestBenzeneVexOrca5(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Cross-version consistency
 # ---------------------------------------------------------------------------
+
 
 class TestVersionConsistency(unittest.TestCase):
     """Verify that ORCA 5 and 6 outputs yield structurally identical results."""
@@ -615,6 +606,7 @@ class TestVersionConsistency(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Basis Set  —  ORCA 6 (benzene-opt-ene.out has "BASIS SET IN INPUT FORMAT")
 # ---------------------------------------------------------------------------
+
 
 class TestBasisSetOrca6(unittest.TestCase):
     """benzene-opt-ene.out — parse_basis_set populates basis_set_shells."""
@@ -700,6 +692,7 @@ class TestBasisSetOrca5(unittest.TestCase):
 # Orbital Energies  —  ORCA 6 (benzene-opt-ene.out has ORBITAL ENERGIES)
 # ---------------------------------------------------------------------------
 
+
 class TestOrbitalEnergiesOrca6(unittest.TestCase):
     """benzene-opt-ene.out — parse_orbital_energies."""
 
@@ -712,7 +705,14 @@ class TestOrbitalEnergiesOrca6(unittest.TestCase):
 
     def test_orbital_energies_have_required_keys(self):
         for orb in self.p.data["orbital_energies"]:
-            for key in ("index", "occupation", "energy_eh", "energy_ev", "spin", "type"):
+            for key in (
+                "index",
+                "occupation",
+                "energy_eh",
+                "energy_ev",
+                "spin",
+                "type",
+            ):
                 self.assertIn(key, orb)
 
     def test_occupied_orbitals_present(self):
@@ -749,6 +749,7 @@ class TestOrbitalEnergiesOrca6(unittest.TestCase):
 # Orbital Energies  —  ORCA 5
 # ---------------------------------------------------------------------------
 
+
 class TestOrbitalEnergiesOrca5(unittest.TestCase):
     """benzene-opt-ene_5.out — parse_orbital_energies on ORCA 5."""
 
@@ -761,7 +762,14 @@ class TestOrbitalEnergiesOrca5(unittest.TestCase):
 
     def test_orbital_energies_have_required_keys(self):
         for orb in self.p.data["orbital_energies"]:
-            for key in ("index", "occupation", "energy_eh", "energy_ev", "spin", "type"):
+            for key in (
+                "index",
+                "occupation",
+                "energy_eh",
+                "energy_ev",
+                "spin",
+                "type",
+            ):
                 self.assertIn(key, orb)
 
     def test_occupied_orbitals_present(self):
@@ -801,6 +809,7 @@ class TestOrbitalEnergiesOrca5(unittest.TestCase):
 # SCF Trace  —  ORCA 6 (benzene-opt-ene.out: 1 SCF block; benzene-opt.out: 2+)
 # ---------------------------------------------------------------------------
 
+
 class TestScfTraceOrca6(unittest.TestCase):
     """parse_scf_trace — iteration energy traces."""
 
@@ -839,13 +848,22 @@ class TestScfTraceOrca6(unittest.TestCase):
 
     def test_scf_opt_cycle_labels(self):
         labels = [t["step"] for t in self.p_opt.data["scf_traces"]]
-        cycle_labels = [l for l in labels if "Cycle" in l or "Initial" in l or "Final" in l or "Post" in l or "Property" in l]
+        cycle_labels = [
+            l
+            for l in labels
+            if "Cycle" in l
+            or "Initial" in l
+            or "Final" in l
+            or "Post" in l
+            or "Property" in l
+        ]
         self.assertGreater(len(cycle_labels), 0)
 
 
 # ---------------------------------------------------------------------------
 # SCF Trace  —  ORCA 5
 # ---------------------------------------------------------------------------
+
 
 class TestScfTraceOrca5(unittest.TestCase):
     """ORCA 5 SCF trace: benzene-opt-ene_5.out (2 blocks) + benzene-opt_5.out (4 blocks)."""
@@ -884,13 +902,22 @@ class TestScfTraceOrca5(unittest.TestCase):
 
     def test_scf_opt_cycle_labels(self):
         labels = [t["step"] for t in self.p_opt.data["scf_traces"]]
-        cycle_labels = [l for l in labels if "Cycle" in l or "Initial" in l or "Final" in l or "Post" in l or "Property" in l]
+        cycle_labels = [
+            l
+            for l in labels
+            if "Cycle" in l
+            or "Initial" in l
+            or "Final" in l
+            or "Post" in l
+            or "Property" in l
+        ]
         self.assertGreater(len(cycle_labels), 0)
 
 
 # ---------------------------------------------------------------------------
 # TDDFT detail  —  ORCA 6 (benzene-opt-vex.out: absorption spectrum tables)
 # ---------------------------------------------------------------------------
+
 
 class TestTddftDetailOrca6(unittest.TestCase):
     """benzene-opt-vex.out — deeper TDDFT field coverage."""
@@ -1016,6 +1043,7 @@ class TestTddftDetailOrca5(unittest.TestCase):
 # NMR detail  —  ORCA 6 (benzene-opt-nmr.out has Mayer bond orders)
 # ---------------------------------------------------------------------------
 
+
 class TestNmrDetailOrca6(unittest.TestCase):
     """benzene-opt-nmr.out — NMR shielding fields + Mayer charges."""
 
@@ -1034,14 +1062,18 @@ class TestNmrDetailOrca6(unittest.TestCase):
 
     def test_nmr_shielding_carbon_value_range(self):
         """Benzene C shielding ~40-80 ppm (absolute)."""
-        c_vals = [e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"]
+        c_vals = [
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"
+        ]
         for v in c_vals:
             self.assertGreater(v, 10.0)
             self.assertLess(v, 200.0)
 
     def test_nmr_shielding_hydrogen_value_range(self):
         """Benzene H shielding ~20-35 ppm (absolute)."""
-        h_vals = [e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "H"]
+        h_vals = [
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "H"
+        ]
         for v in h_vals:
             self.assertGreater(v, 10.0)
             self.assertLess(v, 50.0)
@@ -1078,14 +1110,18 @@ class TestNmrDetailOrca5(unittest.TestCase):
         self.assertEqual(idxs, sorted(idxs))
 
     def test_nmr_carbon_shielding_range(self):
-        c_vals = [e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"]
+        c_vals = [
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"
+        ]
         self.assertEqual(len(c_vals), 6)
         for v in c_vals:
             self.assertGreater(v, 10.0)
             self.assertLess(v, 200.0)
 
     def test_nmr_hydrogen_shielding_range(self):
-        h_vals = [e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "H"]
+        h_vals = [
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "H"
+        ]
         self.assertEqual(len(h_vals), 6)
         for v in h_vals:
             self.assertGreater(v, 10.0)
@@ -1094,7 +1130,9 @@ class TestNmrDetailOrca5(unittest.TestCase):
     def test_nmr_shielding_consistent_with_orca6(self):
         """Mean C shielding diff between ORCA 5 and 6 should be < 5 ppm."""
         p6 = _load("benzene-opt-nmr.out")
-        c5 = [e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"]
+        c5 = [
+            e["shielding"] for e in self.p.data["nmr_shielding"] if e["atom_sym"] == "C"
+        ]
         c6 = [e["shielding"] for e in p6.data["nmr_shielding"] if e["atom_sym"] == "C"]
         mean_diff = abs(sum(c5) / len(c5) - sum(c6) / len(c6))
         self.assertLess(mean_diff, 5.0)
@@ -1114,6 +1152,7 @@ class TestNmrDetailOrca5(unittest.TestCase):
 # Relaxed Surface Scan  —  ORCA 6 (ethane-scan.out)
 # ---------------------------------------------------------------------------
 
+
 class TestRelaxedSurfaceScan(unittest.TestCase):
     """ethane-scan.out — ORCA Relaxed Surface Scan."""
 
@@ -1123,7 +1162,9 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
 
     def test_scan_step_count(self):
         """Should have 5 scan_steps (the finalized steps for the surface)."""
-        scan_steps = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"]
+        scan_steps = [
+            s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"
+        ]
         self.assertEqual(len(scan_steps), 5)
 
     def test_total_trajectory_steps(self):
@@ -1131,12 +1172,14 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
         self.assertEqual(len(self.p.data.get("scan_steps", [])), 41)
 
     def test_scan_step_coords_and_energies(self):
-        scan_steps = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"]
+        scan_steps = [
+            s for s in self.p.data.get("scan_steps", []) if s["type"] == "scan_step"
+        ]
         self.assertEqual(scan_steps[0]["scan_coord"], -60.0)
         self.assertAlmostEqual(scan_steps[0]["energy"], -79.791846796153)
         self.assertEqual(scan_steps[-1]["scan_coord"], 60.0)
         self.assertAlmostEqual(scan_steps[-1]["energy"], -79.791847846936)
-        
+
         for step in scan_steps:
             self.assertEqual(len(step["atoms"]), 8)
             self.assertEqual(len(step["coords"]), 8)
@@ -1145,24 +1188,30 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
 
     def test_opt_final_count(self):
         """Should have exactly 5 opt_final steps (one for each scan step)."""
-        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        opt_finals = [
+            s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"
+        ]
         self.assertEqual(len(opt_finals), 5)
 
     def test_opt_final_scan_step_ids(self):
         """Each opt_final must be correctly assigned to its corresponding scan_step_id."""
-        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        opt_finals = [
+            s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"
+        ]
         ids = [s["scan_step_id"] for s in opt_finals]
         self.assertEqual(ids, [1, 2, 3, 4, 5])
 
     def test_opt_final_energies(self):
         """Each opt_final must have the correct energy matching the scan step final energy."""
-        opt_finals = [s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"]
+        opt_finals = [
+            s for s in self.p.data.get("scan_steps", []) if s["type"] == "opt_final"
+        ]
         expected_energies = [
             -79.791846796153,
             -79.789747119085,
             -79.787432724318,
             -79.789747334378,
-            -79.791847846936
+            -79.791847846936,
         ]
         for opt_f, expected in zip(opt_finals, expected_energies):
             self.assertAlmostEqual(opt_f["energy"], expected, places=8)

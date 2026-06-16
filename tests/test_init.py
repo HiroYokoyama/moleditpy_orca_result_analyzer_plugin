@@ -24,16 +24,27 @@ _SRC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 
 def _install_qt_stubs():
     """Install minimal PyQt6 stubs needed for __init__.py import."""
-    _pyqt6 = types.ModuleType("PyQt6")
-    _widgets = types.ModuleType("PyQt6.QtWidgets")
-    _widgets.QMessageBox = MagicMock()
-    _widgets.QFileDialog = MagicMock()
-    _pyqt6.QtWidgets = _widgets
+    existing_widgets = sys.modules.get("PyQt6.QtWidgets")
+    existing_pyqt6 = sys.modules.get("PyQt6")
 
-    sys.modules.update({
-        "PyQt6": _pyqt6,
-        "PyQt6.QtWidgets": _widgets,
-    })
+    if existing_widgets is not None:
+        if not hasattr(existing_widgets, "QMessageBox"):
+            existing_widgets.QMessageBox = MagicMock()
+        if not hasattr(existing_widgets, "QFileDialog"):
+            existing_widgets.QFileDialog = MagicMock()
+    else:
+        _pyqt6 = existing_pyqt6 or types.ModuleType("PyQt6")
+        _widgets = types.ModuleType("PyQt6.QtWidgets")
+        _widgets.QMessageBox = MagicMock()
+        _widgets.QFileDialog = MagicMock()
+        _pyqt6.QtWidgets = _widgets
+
+        sys.modules.update(
+            {
+                "PyQt6": _pyqt6,
+                "PyQt6.QtWidgets": _widgets,
+            }
+        )
 
 
 def _load_init_module():
@@ -43,9 +54,7 @@ def _load_init_module():
     init_src = os.path.normpath(
         os.path.join(_SRC_DIR, "orca_result_analyzer", "__init__.py")
     )
-    spec = importlib.util.spec_from_file_location(
-        "orca_result_analyzer_init", init_src
-    )
+    spec = importlib.util.spec_from_file_location("orca_result_analyzer_init", init_src)
     mod = importlib.util.module_from_spec(spec)
     mod.__package__ = "orca_result_analyzer"
     sys.modules["orca_result_analyzer_init"] = mod
@@ -60,7 +69,7 @@ class StubContext:
     """Mirrors the PluginContext API surface used by initialize()."""
 
     def __init__(self):
-        self.file_openers = {}   # ext → (callback, priority)
+        self.file_openers = {}  # ext → (callback, priority)
         self.drop_handlers = []  # list of (handler, priority)
         self.menu_actions = {}
 
@@ -81,8 +90,8 @@ class StubContext:
 # TestMetadata
 # ---------------------------------------------------------------------------
 
-class TestMetadata(unittest.TestCase):
 
+class TestMetadata(unittest.TestCase):
     def test_plugin_name_present(self):
         self.assertTrue(hasattr(_init_mod, "PLUGIN_NAME"))
         self.assertIsInstance(_init_mod.PLUGIN_NAME, str)
@@ -103,8 +112,8 @@ class TestMetadata(unittest.TestCase):
 # TestInitialize — registration contract
 # ---------------------------------------------------------------------------
 
-class TestInitialize(unittest.TestCase):
 
+class TestInitialize(unittest.TestCase):
     def _make_ctx(self):
         ctx = StubContext()
         _init_mod.initialize(ctx)
@@ -135,6 +144,7 @@ class TestInitialize(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # TestDropHandler — non-Qt code paths
 # ---------------------------------------------------------------------------
+
 
 class TestDropHandler(unittest.TestCase):
     """
@@ -193,8 +203,8 @@ class TestDropHandler(unittest.TestCase):
 # TestInitializeIdempotent
 # ---------------------------------------------------------------------------
 
-class TestInitializeIdempotent(unittest.TestCase):
 
+class TestInitializeIdempotent(unittest.TestCase):
     def test_multiple_initialize_calls_do_not_duplicate(self):
         """Each initialize() call on a fresh context should register exactly once."""
         ctx = StubContext()
