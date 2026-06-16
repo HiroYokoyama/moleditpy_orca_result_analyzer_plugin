@@ -279,6 +279,9 @@ class TDDFTDialog(QDialog):
         self._info_placeholder.setStyleSheet(
             "color: #999; font-size: 9.5pt; font-style: italic;"
         )
+        self._info_placeholder.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+        )
         vbox.addWidget(self._info_placeholder)
 
         # ── State header label (hidden until selection) ──

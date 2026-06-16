@@ -665,6 +665,28 @@ class TestMOApplyPresetSignalBlock(unittest.TestCase):
         MODialog.apply_preset(dlg, "DoesNotExist")
         dlg.update_vis_only.assert_not_called()
 
+    def test_show_cube_updates_last_cube_path(self):
+        dlg = _make_mo_dialog()
+        dlg.mw = MagicMock()
+        dlg.get_color_hex = MagicMock(return_value="#ffffff")
+        dlg.combo_style = MagicMock()
+        dlg.combo_style.currentText = MagicMock(return_value="Surface")
+        dlg.spin_iso = MagicMock()
+        dlg.spin_iso.value = MagicMock(return_value=0.02)
+        dlg.spin_opacity = MagicMock()
+        dlg.spin_opacity.value = MagicMock(return_value=0.5)
+        dlg.check_smooth = MagicMock()
+        dlg.check_smooth.isChecked = MagicMock(return_value=True)
+
+        mock_vis = MagicMock()
+        mock_vis.load_file = MagicMock(return_value=True)
+        _mo_mod.CubeVisualizer = MagicMock(return_value=mock_vis)
+
+        dlg.last_cube_path = "old_path.cube"
+        MODialog.show_cube(dlg, "new_path.cube")
+
+        self.assertEqual(dlg.last_cube_path, "new_path.cube")
+
 
 if __name__ == "__main__":
     unittest.main()

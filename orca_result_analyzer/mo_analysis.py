@@ -1046,6 +1046,7 @@ class MODialog(QDialog):
                 smooth_shading=self.check_smooth.isChecked(),
             )
             mw.plotter.render()
+            self.last_cube_path = path
 
     def closeEvent(self, event):
         """Clean up 3D actors when closing"""
