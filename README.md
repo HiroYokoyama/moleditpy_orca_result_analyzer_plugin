@@ -1,5 +1,8 @@
 # MoleditPy ORCA Result Analyzer Plugin
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20726012.svg)](https://doi.org/10.5281/zenodo.20726012)
+[![Tests](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml)
+
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
 Repo: [https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
