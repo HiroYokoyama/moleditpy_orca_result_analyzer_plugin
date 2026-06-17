@@ -53,7 +53,14 @@ _install_stubs()
 
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Clean up placeholder parent package if stubbed by other tests
+if "orca_result_analyzer" in sys.modules:
+    _mod = sys.modules["orca_result_analyzer"]
+    if not hasattr(_mod, "initialize") or getattr(_mod, "__file__", None) is None:
+        sys.modules.pop("orca_result_analyzer")
+
 from orca_result_analyzer import initialize, PLUGIN_NAME, PLUGIN_VERSION
+
 
 
 # ---------------------------------------------------------------------------
