@@ -236,52 +236,32 @@ def _install_stubs():
         "QCheckBox": _QCheckBox,
     }
 
-    if existing_widgets is not None:
-        # Cooperative patching
-        for name in _WIDGET_MOCKS:
-            if not hasattr(existing_widgets, name):
-                setattr(existing_widgets, name, MagicMock)
-        for name, cls in _WIDGET_CLASSES.items():
-            if not hasattr(existing_widgets, name):
-                setattr(existing_widgets, name, cls)
+    # Build and install new stubs, overriding any existing PyQt6 modules to avoid
+    # constructing real widgets (which requires a QApplication and crashes headlessly).
+    _pyqt6 = types.ModuleType("PyQt6")
+    _core = types.ModuleType("PyQt6.QtCore")
+    _core.Qt = MagicMock()
+    _core.QTimer = _QTimer
+    _widgets = types.ModuleType("PyQt6.QtWidgets")
+    for name in _WIDGET_MOCKS:
+        setattr(_widgets, name, MagicMock)
+    for name, cls in _WIDGET_CLASSES.items():
+        setattr(_widgets, name, cls)
+    _pyqt6.QtWidgets = _widgets
+    _pyqt6.QtCore = _core
+    _gui = types.ModuleType("PyQt6.QtGui")
+    _gui.QColor = _QColor
+    _gui.QBrush = MagicMock
+    _pyqt6.QtGui = _gui
 
-        if existing_core is not None:
-            if not hasattr(existing_core, "QTimer"):
-                existing_core.QTimer = _QTimer
-            if not hasattr(existing_core, "Qt"):
-                existing_core.Qt = MagicMock()
-
-        if existing_gui is not None:
-            if not hasattr(existing_gui, "QColor"):
-                existing_gui.QColor = _QColor
-            if not hasattr(existing_gui, "QBrush"):
-                existing_gui.QBrush = MagicMock
-    else:
-        # Build new stubs
-        _pyqt6 = existing_pyqt6 or types.ModuleType("PyQt6")
-        _core = existing_core or types.ModuleType("PyQt6.QtCore")
-        _core.Qt = MagicMock()
-        _core.QTimer = _QTimer
-        _widgets = types.ModuleType("PyQt6.QtWidgets")
-        for name in _WIDGET_MOCKS:
-            setattr(_widgets, name, MagicMock)
-        for name, cls in _WIDGET_CLASSES.items():
-            setattr(_widgets, name, cls)
-        _pyqt6.QtWidgets = _widgets
-        _pyqt6.QtCore = _core
-        _gui = existing_gui or types.ModuleType("PyQt6.QtGui")
-        _gui.QColor = _QColor
-        _gui.QBrush = MagicMock
-        _pyqt6.QtGui = _gui
-
-        sys.modules.update(
-            {
-                "PyQt6": _pyqt6,
-                "PyQt6.QtWidgets": _widgets,
-                "PyQt6.QtCore": _core,
-                "PyQt6.QtGui": _gui,
-            }
-        )
+    sys.modules.update(
+        {
+            "PyQt6": _pyqt6,
+            "PyQt6.QtWidgets": _widgets,
+            "PyQt6.QtCore": _core,
+            "PyQt6.QtGui": _gui,
+        }
+    )
 
     # pyvista stub
     _pv = types.ModuleType("pyvista")
@@ -341,6 +321,16 @@ FrequencyDialog = _fa_mod.FrequencyDialog
 _REAL_COLOR = "#cc0000"  # the red used for imaginary modes
 
 
+def _color_name(brush_or_color) -> str:
+    """Helper to extract hex color name from a QBrush or QColor (stubs or real)."""
+    if hasattr(brush_or_color, "color"):
+        return brush_or_color.color().name()
+    if hasattr(brush_or_color, "name"):
+        return brush_or_color.name()
+    return ""
+
+
+
 def _make_dialog(frequencies):
     """Instantiate FrequencyDialog with minimal mocked parent."""
     mw = MagicMock()
@@ -392,7 +382,7 @@ class TestPopulateListColouring(unittest.TestCase):
         items = self._get_items(dlg)
         self.assertEqual(len(items), 1)
         fg = items[0].foreground(0)
-        self.assertNotEqual(fg.name(), _REAL_COLOR)
+        self.assertNotEqual(_color_name(fg), _REAL_COLOR)
 
     def test_negative_freq_is_red(self):
         freqs = [{"freq": -50.0, "ir": 0.0, "raman": 0.0}]
@@ -402,7 +392,7 @@ class TestPopulateListColouring(unittest.TestCase):
         self.assertEqual(len(items), 1)
         for col in range(5):
             self.assertEqual(
-                items[0].foreground(col).name(),
+                _color_name(items[0].foreground(col)),
                 _REAL_COLOR,
                 f"col {col} not red for imaginary mode",
             )
@@ -414,7 +404,7 @@ class TestPopulateListColouring(unittest.TestCase):
         dlg.populate_list()
         items = self._get_items(dlg)
         fg = items[0].foreground(0)
-        self.assertNotEqual(fg.name(), _REAL_COLOR)
+        self.assertNotEqual(_color_name(fg), _REAL_COLOR)
 
     def test_mixed_modes_colouring(self):
         freqs = [
@@ -428,11 +418,11 @@ class TestPopulateListColouring(unittest.TestCase):
         items = self._get_items(dlg)
         self.assertEqual(len(items), 4)
         # imaginary
-        self.assertEqual(items[0].foreground(0).name(), _REAL_COLOR)
-        self.assertEqual(items[2].foreground(0).name(), _REAL_COLOR)
+        self.assertEqual(_color_name(items[0].foreground(0)), _REAL_COLOR)
+        self.assertEqual(_color_name(items[2].foreground(0)), _REAL_COLOR)
         # real
-        self.assertNotEqual(items[1].foreground(0).name(), _REAL_COLOR)
-        self.assertNotEqual(items[3].foreground(0).name(), _REAL_COLOR)
+        self.assertNotEqual(_color_name(items[1].foreground(0)), _REAL_COLOR)
+        self.assertNotEqual(_color_name(items[3].foreground(0)), _REAL_COLOR)
 
     def test_all_five_columns_coloured(self):
         freqs = [{"freq": -75.0, "ir": 0.0, "raman": 0.0}]
@@ -441,7 +431,7 @@ class TestPopulateListColouring(unittest.TestCase):
         items = self._get_items(dlg)
         for col in range(5):
             self.assertEqual(
-                items[0].foreground(col).name(),
+                _color_name(items[0].foreground(col)),
                 _REAL_COLOR,
                 f"column {col} should be red",
             )
@@ -523,13 +513,13 @@ class TestUpdateDataColouring(unittest.TestCase):
         # With a=-2, b=0 the scaled value would be +100, but unscaled=-50 → red
         items = self._populate_then_update(freqs, new_a=-2.0, new_b=0.0)
         for col in range(5):
-            self.assertEqual(items[0].foreground(col).name(), _REAL_COLOR)
+            self.assertEqual(_color_name(items[0].foreground(col)), _REAL_COLOR)
 
     def test_real_mode_not_red_after_scaling(self):
         freqs = [{"freq": 1000.0, "ir": 5.0, "raman": 0.0}]
         items = self._populate_then_update(freqs, new_a=0.96, new_b=10.0)
         for col in range(5):
-            self.assertNotEqual(items[0].foreground(col).name(), _REAL_COLOR)
+            self.assertNotEqual(_color_name(items[0].foreground(col)), _REAL_COLOR)
 
     def test_scaled_column_updates(self):
         freqs = [{"freq": 1000.0, "ir": 0.0, "raman": 0.0}]
