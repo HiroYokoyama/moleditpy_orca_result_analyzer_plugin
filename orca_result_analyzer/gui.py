@@ -838,7 +838,9 @@ class OrcaResultAnalyzerDialog(QDialog):
                 self.mw.is_xyz_derived = True
 
                 # Enter 3D mode which enables export/analysis buttons and hides 2D panel
-                if hasattr(self.mw.ui_manager, "_enter_3d_viewer_ui_mode"):
+                if hasattr(self.context, 'enter_3d_viewer_mode'):
+                    self.context.enter_3d_viewer_mode()
+                elif hasattr(self.mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     self.mw.ui_manager._enter_3d_viewer_ui_mode()
                 elif hasattr(self.mw.ui_manager, "_enable_3d_features"):
                     self.mw.ui_manager._enable_3d_features(True)

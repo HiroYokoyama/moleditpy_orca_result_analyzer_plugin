@@ -1,7 +1,8 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "2.6.0"
+PLUGIN_VERSION = "3.0.0"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
+PLUGIN_SUPPORTED_MOLEDITPY_VERSION = "4.*"
 
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
 import logging

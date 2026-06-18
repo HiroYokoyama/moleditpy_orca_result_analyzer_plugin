@@ -831,7 +831,12 @@ class TrajectoryResultDialog(QDialog):
 
             # Enter 3D mode which enables export/analysis buttons and hides 2D panel
             if hasattr(mw, "ui_manager"):
-                if hasattr(mw.ui_manager, "_enter_3d_viewer_ui_mode"):
+                if hasattr(mw.ui_manager, "enter_3d_viewer_mode"):
+                    try:
+                        mw.ui_manager.enter_3d_viewer_mode()
+                    except Exception as _e:
+                        logging.warning("[traj_analysis.py] silenced: %s", _e)
+                elif hasattr(mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
                     except Exception as _e:
