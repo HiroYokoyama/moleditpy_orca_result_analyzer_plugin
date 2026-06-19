@@ -72,6 +72,8 @@ class StubContext:
         self.file_openers = {}  # ext → (callback, priority)
         self.drop_handlers = []  # list of (handler, priority)
         self.menu_actions = {}
+        self._windows = {}
+        self.mark_project_modified_call_count = 0
 
     def register_file_opener(self, ext, callback, priority=0):
         self.file_openers[ext] = (callback, priority)
@@ -84,6 +86,15 @@ class StubContext:
 
     def get_main_window(self):
         return MagicMock()
+
+    def register_window(self, window_id: str, window) -> None:
+        self._windows[window_id] = window
+
+    def get_window(self, window_id: str):
+        return self._windows.get(window_id)
+
+    def mark_project_modified(self) -> None:
+        self.mark_project_modified_call_count += 1
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +222,44 @@ class TestInitializeIdempotent(unittest.TestCase):
         _init_mod.initialize(ctx)
         self.assertEqual(len(ctx.drop_handlers), 1)
         self.assertEqual(len(ctx.file_openers), 1)
+
+
+# ---------------------------------------------------------------------------
+# TestContextRegistryAPI — stub completeness for V4 context registry
+# ---------------------------------------------------------------------------
+
+
+class TestContextRegistryAPI(unittest.TestCase):
+    """Verify StubContext implements all V4 registry methods the plugin uses,
+    and that initialize() does not call any methods absent from the stub."""
+
+    def setUp(self):
+        self.ctx = StubContext()
+        _init_mod.initialize(self.ctx)
+
+    def test_stub_has_register_window(self):
+        self.assertTrue(callable(getattr(self.ctx, "register_window", None)))
+
+    def test_stub_has_get_window(self):
+        self.assertTrue(callable(getattr(self.ctx, "get_window", None)))
+
+    def test_stub_has_mark_project_modified(self):
+        self.assertTrue(callable(getattr(self.ctx, "mark_project_modified", None)))
+
+    def test_registry_roundtrip(self):
+        sentinel = object()
+        self.ctx.register_window("test_win", sentinel)
+        self.assertIs(self.ctx.get_window("test_win"), sentinel)
+
+    def test_get_window_returns_none_for_unknown(self):
+        self.assertIsNone(self.ctx.get_window("no_such_window"))
+
+    def test_initialize_does_not_raise_with_full_stub(self):
+        ctx2 = StubContext()
+        try:
+            _init_mod.initialize(ctx2)
+        except AttributeError as exc:
+            self.fail(f"initialize() called a context method not on StubContext: {exc}")
 
 
 if __name__ == "__main__":

@@ -114,12 +114,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         self._enable_plotter_picking()
 
         # Update main window title to reflect ORCA result
-        if hasattr(self.mw, "init_manager"):
-            self.mw.init_manager.current_file_path = self.file_path
-        if hasattr(self.mw, "state_manager") and hasattr(
-            self.mw.state_manager, "update_window_title"
-        ):
-            self.mw.state_manager.update_window_title()
+        mw = context.get_main_window() if context is not None else self.mw
+        if mw is not None and hasattr(mw, "init_manager"):
+            mw.init_manager.current_file_path = self.file_path
+        if context is not None:
+            context.mark_project_modified()
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -838,7 +837,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 self.mw.is_xyz_derived = True
 
                 # Enter 3D mode which enables export/analysis buttons and hides 2D panel
-                if hasattr(self.context, 'enter_3d_viewer_mode'):
+                if hasattr(self.context, "enter_3d_viewer_mode"):
                     self.context.enter_3d_viewer_mode()
                 elif hasattr(self.mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     self.mw.ui_manager._enter_3d_viewer_ui_mode()
