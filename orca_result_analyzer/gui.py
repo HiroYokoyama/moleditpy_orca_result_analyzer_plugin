@@ -636,10 +636,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             # --- Sync with Main Window Title ---
             if hasattr(self.mw, "init_manager"):
                 self.mw.init_manager.current_file_path = path
-            if hasattr(self.mw, "state_manager") and hasattr(
-                self.mw.state_manager, "update_window_title"
-            ):
-                self.mw.state_manager.update_window_title()
+            if self.context is not None:
+                self.context.mark_project_modified()
 
             # Update File Info Labels
             self.update_file_info_labels()
