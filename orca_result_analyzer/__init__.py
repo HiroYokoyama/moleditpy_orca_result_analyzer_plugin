@@ -7,11 +7,14 @@ PLUGIN_SUPPORTED_MOLEDITPY_VERSION = "4.*"
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
 import logging
 
-# Global reference to keep window alive
+# Global references — avoid injecting attributes onto MainWindow
 _analyzer_window = None
+_context = None  # Stored from initialize() so run() doesn't construct PluginContext manually
 
 
 def initialize(context):
+    global _context
+    _context = context
     """
     Initialize the ORCA Result Analyzer plugin.
     Registers file openers for .out with HIGH PRIORITY (100).
@@ -134,9 +137,7 @@ def run(mw):
     if not path:
         return
 
-    from moleditpy.plugins.plugin_interface import PluginContext
-
-    context = PluginContext(mw.plugin_manager, PLUGIN_NAME)
+    context = _context
 
     global _analyzer_window
     QApplication.processEvents()
