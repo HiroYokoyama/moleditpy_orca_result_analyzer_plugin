@@ -513,8 +513,8 @@ class NMRDialog(QDialog):
 
         # 6. UIのクリーンアップ
         self.clear_peak_selection()
-        if hasattr(self.parent_dlg, "mw") and hasattr(self.parent_dlg.mw, "statusBar"):
-            self.parent_dlg.mw.statusBar().showMessage(
+        if self.parent_dlg and self.parent_dlg.context:
+            self.parent_dlg.context.show_status_message(
                 f"Merged {len(selected_indices)} atoms into one peak.", 5000
             )
 
@@ -1178,10 +1178,9 @@ class NMRDialog(QDialog):
         # Now that we switched inputs (if we were in All), this should work
         self.combo_ref.setCurrentText(ref_name)
 
-        if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-            self.parent_dlg.mw.statusBar().showMessage(
-                f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.",
-                5000,
+        if self.parent_dlg and self.parent_dlg.context:
+            self.parent_dlg.context.show_status_message(
+                f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.", 5000
             )
         else:
             print(f"Added reference '{ref_name}'")
@@ -1245,8 +1244,8 @@ class NMRDialog(QDialog):
                     del self.reference_standards[current_nucleus][current_ref]
                     self.save_settings()
                     self.update_reference_combo()
-                    if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-                        self.parent_dlg.mw.statusBar().showMessage(
+                    if self.parent_dlg and self.parent_dlg.context:
+                        self.parent_dlg.context.show_status_message(
                             f"Reference '{current_ref}' removed.", 5000
                         )
                     else:
@@ -1736,8 +1735,8 @@ class NMRDialog(QDialog):
         if filename:
             try:
                 self.figure.savefig(filename, dpi=300, bbox_inches="tight")
-                if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-                    self.parent_dlg.mw.statusBar().showMessage(
+                if self.parent_dlg and self.parent_dlg.context:
+                    self.parent_dlg.context.show_status_message(
                         f"Spectrum exported to: {os.path.basename(filename)}", 5000
                     )
                 else:
@@ -1826,8 +1825,8 @@ class NMRDialog(QDialog):
                         # Fallback
                         f.write("# No peak data available.\n")
 
-            if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-                self.parent_dlg.mw.statusBar().showMessage(
+            if self.parent_dlg and self.parent_dlg.context:
+                self.parent_dlg.context.show_status_message(
                     f"Spectrum data exported to: {os.path.basename(filename)}", 5000
                 )
             else:
@@ -1869,8 +1868,8 @@ class NMRDialog(QDialog):
                         cols.append(text)
                     f.write(",".join(cols) + "\n")
 
-            if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-                self.parent_dlg.mw.statusBar().showMessage(
+            if self.parent_dlg and self.parent_dlg.context:
+                self.parent_dlg.context.show_status_message(
                     f"Table data exported to: {os.path.basename(filename)}", 5000
                 )
             else:
@@ -1955,10 +1954,8 @@ class NMRDialog(QDialog):
                 cols.append(it.text() if it else "")
             text += "\t".join(cols) + "\n"
         QApplication.clipboard().setText(text)
-        if self.parent_dlg and hasattr(self.parent_dlg, "mw"):
-            self.parent_dlg.mw.statusBar().showMessage(
-                "Table data copied to clipboard!", 5000
-            )
+        if self.parent_dlg and self.parent_dlg.context:
+            self.parent_dlg.context.show_status_message("Table data copied to clipboard!", 5000)
         else:
             print("Table data copied to clipboard!")
 

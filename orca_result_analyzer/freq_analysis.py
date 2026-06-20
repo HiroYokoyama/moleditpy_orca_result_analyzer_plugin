@@ -399,10 +399,8 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                if self.freq_dialog and self.freq_dialog.mw:
-                    self.freq_dialog.mw.statusBar().showMessage(
-                        f"Data saved to: {os.path.basename(path)}", 5000
-                    )
+                if self.freq_dialog and self.freq_dialog.context:
+                    self.freq_dialog.context.show_status_message(f"Data saved to: {os.path.basename(path)}", 5000)
                 else:
                     print(f"Data saved to: {path}")
             else:
@@ -420,10 +418,8 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                if self.freq_dialog and self.freq_dialog.mw:
-                    self.freq_dialog.mw.statusBar().showMessage(
-                        f"Stick data saved to: {os.path.basename(path)}", 5000
-                    )
+                if self.freq_dialog and self.freq_dialog.context:
+                    self.freq_dialog.context.show_status_message(f"Stick data saved to: {os.path.basename(path)}", 5000)
                 else:
                     print(f"Stick data saved to: {path}")
             else:
@@ -442,9 +438,10 @@ class FreqSpectrumWindow(QWidget):
 
 
 class FrequencyDialog(QDialog):
-    def __init__(self, parent, frequencies, atoms, coords):
+    def __init__(self, parent, frequencies, atoms, coords, context=None):
         super().__init__(parent)
         self.mw = parent
+        self.context = context
         self.frequencies = frequencies  # List of dicts
         self.atoms = atoms
         self.base_coords = coords
@@ -952,7 +949,10 @@ class FrequencyDialog(QDialog):
                 nz = bz + vz * factor
                 conf.SetAtomPosition(i, Point3D(nx, ny, nz))
 
-            self.mw.view_3d_manager.draw_molecule_3d(mol)
+            if self.context:
+                self.context.draw_molecule_3d(mol)
+            else:
+                self.mw.view_3d_manager.draw_molecule_3d(mol)
 
             # Update vectors if enabled
             if self.chk_vector.isChecked():
@@ -1018,7 +1018,10 @@ class FrequencyDialog(QDialog):
             conf = mol.GetConformer()
             for i, (bx, by, bz) in enumerate(self.base_coords):
                 conf.SetAtomPosition(i, Point3D(bx, by, bz))
-            self.mw.view_3d_manager.draw_molecule_3d(mol)
+            if self.context:
+                self.context.draw_molecule_3d(mol)
+            else:
+                self.mw.view_3d_manager.draw_molecule_3d(mol)
         except Exception as e:
             print(f"Error in reset_geometry: {e}")
             import traceback
@@ -1125,9 +1128,9 @@ class FrequencyDialog(QDialog):
                     nz = bz + vz * factor
                     conf.SetAtomPosition(j, Point3D(nx, ny, nz))
 
-                if hasattr(mw, "view_3d_manager") and hasattr(
-                    mw.view_3d_manager, "draw_molecule_3d"
-                ):
+                if self.context:
+                    self.context.draw_molecule_3d(mol)
+                elif hasattr(mw, "view_3d_manager"):
                     mw.view_3d_manager.draw_molecule_3d(mol)
                 QApplication.processEvents()
                 mw.plotter.render()
@@ -1177,10 +1180,8 @@ class FrequencyDialog(QDialog):
                     loop=0,
                     disposal=2,
                 )
-                if self.mw and hasattr(self.mw, "statusBar"):
-                    self.mw.statusBar().showMessage(
-                        f"GIF saved to: {os.path.basename(path)}", 5000
-                    )
+                if self.context:
+                    self.context.show_status_message(f"GIF saved to: {os.path.basename(path)}", 5000)
                 else:
                     print(f"GIF saved to: {path}")
 

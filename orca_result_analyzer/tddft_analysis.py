@@ -586,8 +586,8 @@ class TDDFTDialog(QDialog):
             with open(self.settings_file, "w") as f:
                 json.dump(all_settings, f, indent=2)
 
-            if hasattr(self.parent(), "mw") and self.parent().mw:
-                self.parent().mw.statusBar().showMessage("TDDFT settings saved.", 3000)
+            if self.parent() and self.parent().context:
+                self.parent().context.show_status_message("TDDFT settings saved.", 3000)
         except Exception as e:
             logging.warning("[tddft_analysis.py:save_settings] Error: %s", e)
 
@@ -647,10 +647,8 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                if hasattr(self.parent(), "mw") and self.parent().mw:
-                    self.parent().mw.statusBar().showMessage(
-                        f"Data saved to {path}", 5000
-                    )
+                if self.parent() and self.parent().context:
+                    self.parent().context.show_status_message(f"Data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
@@ -666,10 +664,8 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                if hasattr(self.parent(), "mw") and self.parent().mw:
-                    self.parent().mw.statusBar().showMessage(
-                        f"Stick data saved to {path}", 5000
-                    )
+                if self.parent() and self.parent().context:
+                    self.parent().context.show_status_message(f"Stick data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
@@ -756,10 +752,8 @@ class TDDFTDialog(QDialog):
 
                     f.write("\n")
 
-            if hasattr(self.parent(), "mw") and self.parent().mw:
-                self.parent().mw.statusBar().showMessage(
-                    f"Report saved to {path}", 5000
-                )
+            if self.parent() and self.parent().context:
+                self.parent().context.show_status_message(f"Report saved to {path}", 5000)
             else:
                 QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
 

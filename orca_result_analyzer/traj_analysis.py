@@ -62,12 +62,14 @@ class TrajectoryResultDialog(QDialog):
         base_dir=None,
         output_path=None,
         predicted_trj=None,
+        context=None,
     ):
         super().__init__()
         self.setWindowTitle(title)
         self.resize(800, 600)
         self.base_dir = base_dir
         self.gl_widget = gl_widget
+        self.context = context
         # Filter out steps with zero energy (incomplete cycles in running calculations)
         steps = [
             s for s in steps if s.get("energy") is not None and abs(s["energy"]) > 1e-9
@@ -706,9 +708,9 @@ class TrajectoryResultDialog(QDialog):
         if hasattr(self.gl_widget, "current_mol"):
             self.gl_widget.current_mol = final_mol
 
-        if hasattr(self.gl_widget, "view_3d_manager") and hasattr(
-            self.gl_widget.view_3d_manager, "draw_molecule_3d"
-        ):
+        if self.context:
+            self.context.draw_molecule_3d(final_mol)
+        elif hasattr(self.gl_widget, "view_3d_manager"):
             self.gl_widget.view_3d_manager.draw_molecule_3d(final_mol)
         elif hasattr(self.gl_widget, "draw_molecule_3d"):
             self.gl_widget.draw_molecule_3d(final_mol)
@@ -857,7 +859,12 @@ class TrajectoryResultDialog(QDialog):
                     logging.warning("[traj_analysis.py:711] silenced: %s", _e)
 
             # Reset Camera
-            if hasattr(mw, "plotter") and mw.plotter:
+            if self.context:
+                try:
+                    self.context.reset_3d_camera()
+                except Exception as _e:
+                    logging.warning("[traj_analysis.py:717] silenced: %s", _e)
+            elif hasattr(mw, "plotter") and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
                 except Exception as _e:
@@ -973,10 +980,8 @@ class TrajectoryResultDialog(QDialog):
         )
         if path:
             self.canvas.fig.savefig(path, dpi=300)
-            if self.gl_widget and hasattr(self.gl_widget, "statusBar"):
-                self.gl_widget.statusBar().showMessage(
-                    f"Graph saved to: {os.path.basename(path)}", 5000
-                )
+            if self.context:
+                self.context.show_status_message(f"Graph saved to: {os.path.basename(path)}", 5000)
             else:
                 pass
 
@@ -1034,12 +1039,8 @@ class TrajectoryResultDialog(QDialog):
                                 cv = step.get("dist")
                             row.insert(1, cv if cv is not None else "")
                         writer.writerow(row)
-                if self.gl_widget and hasattr(self.gl_widget, "statusBar"):
-                    self.gl_widget.statusBar().showMessage(
-                        f"Data saved to: {os.path.basename(path)}", 5000
-                    )
-                else:
-                    pass
+                if self.context:
+                    self.context.show_status_message(f"Data saved to: {os.path.basename(path)}", 5000)
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -1167,12 +1168,8 @@ class TrajectoryResultDialog(QDialog):
                     loop=0,
                     disposal=2,
                 )
-                if self.gl_widget and hasattr(self.gl_widget, "statusBar"):
-                    self.gl_widget.statusBar().showMessage(
-                        f"GIF saved to: {os.path.basename(path)}", 5000
-                    )
-                else:
-                    pass
+                if self.context:
+                    self.context.show_status_message(f"GIF saved to: {os.path.basename(path)}", 5000)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")

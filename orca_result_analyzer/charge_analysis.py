@@ -384,25 +384,14 @@ class ChargeDialog(QDialog):
                 self.chk_show_labels.setChecked(False)
 
             # Redraw molecule with default CPK colors
-            if (
-                hasattr(self.parent_dlg.mw, "current_mol")
-                and self.parent_dlg.mw.current_mol
-            ):
-                if hasattr(self.parent_dlg.mw, "view_3d_manager"):
-                    self.parent_dlg.mw.view_3d_manager.draw_molecule_3d(
-                        self.parent_dlg.mw.current_mol
-                    )
+            if self.parent_dlg.mw.current_mol:
+                self.parent_dlg.context.draw_molecule_3d(self.parent_dlg.mw.current_mol)
 
             # Render
             if hasattr(self.parent_dlg.mw, "plotter"):
                 self.parent_dlg.mw.plotter.render()
 
-            if self.parent_dlg.mw and hasattr(self.parent_dlg.mw, "statusBar"):
-                self.parent_dlg.mw.statusBar().showMessage(
-                    "Colors reset to CPK default.", 5000
-                )
-            else:
-                print("Colors reset to CPK default.")
+            self.parent_dlg.context.show_status_message("Colors reset to CPK default.", 5000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
@@ -546,14 +535,8 @@ class ChargeDialog(QDialog):
                     mw.view_3d_manager.update_atom_color_override(idx, color)
 
             # Redraw molecule once after all colors are set
-            if (
-                hasattr(self.parent_dlg.mw, "current_mol")
-                and self.parent_dlg.mw.current_mol
-            ):
-                if hasattr(self.parent_dlg.mw, "view_3d_manager"):
-                    self.parent_dlg.mw.view_3d_manager.draw_molecule_3d(
-                        self.parent_dlg.mw.current_mol
-                    )
+            if self.parent_dlg.mw.current_mol:
+                self.parent_dlg.context.draw_molecule_3d(self.parent_dlg.mw.current_mol)
 
             # Add charge labels if checkbox is enabled
             if self.chk_show_labels.isChecked():
@@ -637,12 +620,9 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, "plotter"):
                 self.parent_dlg.mw.plotter.render()
 
-            if self.parent_dlg.mw and hasattr(self.parent_dlg.mw, "statusBar"):
-                self.parent_dlg.mw.statusBar().showMessage(
-                    f"Applied '{self.current_scheme}' coloring to 3D view.", 5000
-                )
-            else:
-                print(f"Applied '{self.current_scheme}' coloring.")
+            self.parent_dlg.context.show_status_message(
+                f"Applied '{self.current_scheme}' coloring to 3D view.", 5000
+            )
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
@@ -727,14 +707,7 @@ class ChargeDialog(QDialog):
 
             # print(f"Data exported to {filename}")
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
-            if hasattr(self.parent_dlg, "mw") and self.parent_dlg.mw:
-                self.parent_dlg.mw.statusBar().showMessage(
-                    f"Data exported to {filename}", 5000
-                )
-            elif hasattr(self.parent_dlg, "context"):
-                self.parent_dlg.context.get_main_window().statusBar().showMessage(
-                    f"Data exported to {filename}", 5000
-                )
+            self.parent_dlg.context.show_status_message(f"Data exported to {filename}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
         finally:

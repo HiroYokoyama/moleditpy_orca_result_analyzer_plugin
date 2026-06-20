@@ -620,9 +620,8 @@ class OrcaResultAnalyzerDialog(QDialog):
                             new_parser.data["coords"] = trj_steps[-1]["coords"]
 
                         # print(f"Loaded NEB Trajectory: {len(trj_steps)} frames from {os.path.basename(trj_path)}")
-                        self.mw.statusBar().showMessage(
-                            f"Loaded NEB Trajectory from {os.path.basename(trj_path)}",
-                            5000,
+                        self.context.show_status_message(
+                            f"Loaded NEB Trajectory from {os.path.basename(trj_path)}", 5000
                         )
                 except Exception as e:
                     # print(f"Failed to load associated TRJ: {e}")
@@ -648,7 +647,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             # QMessageBox.information(self, "Loaded", f"Successfully loaded:\n{os.path.basename(path)}")
             # print(f"Successfully loaded: {os.path.basename(path)}")
-            self.mw.statusBar().showMessage(
+            self.context.show_status_message(
                 f"Successfully loaded: {os.path.basename(path)}", 5000
             )
 
@@ -824,10 +823,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             if hasattr(self.mw, "current_mol"):
                 self.mw.current_mol = final_mol
 
-            if hasattr(self.mw, "view_3d_manager") and hasattr(
-                self.mw.view_3d_manager, "draw_molecule_3d"
-            ):
-                self.mw.view_3d_manager.draw_molecule_3d(final_mol)
+            self.context.draw_molecule_3d(final_mol)
 
             # Sync with main window features
             if hasattr(self.mw, "ui_manager"):
@@ -845,14 +841,12 @@ class OrcaResultAnalyzerDialog(QDialog):
                         self.mw.ui_manager.minimize_2d_panel()
 
             # Reset 3D camera to fit molecule
-            if hasattr(self.mw, "view_3d_manager") and hasattr(
-                self.mw.view_3d_manager, "plotter"
-            ):
-                try:
-                    self.mw.view_3d_manager.plotter.reset_camera()
+            try:
+                self.context.reset_3d_camera()
+                if hasattr(self.mw, "view_3d_manager") and hasattr(self.mw.view_3d_manager, "plotter"):
                     self.mw.view_3d_manager.plotter.render()
-                except Exception as _e:
-                    logging.warning("[gui.py:592] silenced: %s", _e)
+            except Exception as _e:
+                logging.warning("[gui.py:592] silenced: %s", _e)
         except Exception as e:
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",
@@ -892,7 +886,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "freq_dlg", None) is not None and self.freq_dlg is not None:
             self.freq_dlg.close()
 
-        self.freq_dlg = FrequencyDialog(self.mw, freqs, atoms, coords)
+        self.freq_dlg = FrequencyDialog(self.mw, freqs, atoms, coords, context=self.context)
         self.freq_dlg.show()
 
     def show_trajectory(self):
@@ -915,6 +909,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             base_dir=base_dir,
             output_path=self.file_path,
             predicted_trj=parsed_trj,
+            context=self.context,
         )
         self.traj_dlg.show()
 

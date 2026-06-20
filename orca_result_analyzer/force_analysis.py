@@ -492,14 +492,8 @@ class ForceViewerDialog(QDialog):
         final_mol = mol.GetMol()
 
         # Update in main window
-        mw = None
-        if hasattr(self.parent_dlg, "context") and self.parent_dlg.context:
-            mw = self.parent_dlg.context.get_main_window()
-        elif hasattr(self.parent_dlg, "mw"):
-            mw = self.parent_dlg.mw
-
-        if mw and hasattr(mw, "view_3d_manager"):
-            mw.view_3d_manager.draw_molecule_3d(final_mol)
+        if self.parent_dlg.context:
+            self.parent_dlg.context.draw_molecule_3d(final_mol)
 
     def populate_force_table(self):
         """Populate the force and gradient table from current gradient data"""
