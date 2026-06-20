@@ -330,7 +330,6 @@ def _color_name(brush_or_color) -> str:
     return ""
 
 
-
 def _make_dialog(frequencies):
     """Instantiate FrequencyDialog with minimal mocked parent."""
     mw = MagicMock()

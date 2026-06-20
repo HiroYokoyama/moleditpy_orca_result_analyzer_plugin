@@ -981,7 +981,9 @@ class TrajectoryResultDialog(QDialog):
         if path:
             self.canvas.fig.savefig(path, dpi=300)
             if self.context:
-                self.context.show_status_message(f"Graph saved to: {os.path.basename(path)}", 5000)
+                self.context.show_status_message(
+                    f"Graph saved to: {os.path.basename(path)}", 5000
+                )
             else:
                 pass
 
@@ -1040,7 +1042,9 @@ class TrajectoryResultDialog(QDialog):
                             row.insert(1, cv if cv is not None else "")
                         writer.writerow(row)
                 if self.context:
-                    self.context.show_status_message(f"Data saved to: {os.path.basename(path)}", 5000)
+                    self.context.show_status_message(
+                        f"Data saved to: {os.path.basename(path)}", 5000
+                    )
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -1169,7 +1173,9 @@ class TrajectoryResultDialog(QDialog):
                     disposal=2,
                 )
                 if self.context:
-                    self.context.show_status_message(f"GIF saved to: {os.path.basename(path)}", 5000)
+                    self.context.show_status_message(
+                        f"GIF saved to: {os.path.basename(path)}", 5000
+                    )
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")

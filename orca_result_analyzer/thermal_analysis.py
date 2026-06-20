@@ -199,6 +199,8 @@ class ThermalTableDialog(QDialog):
                         writer.writerow([p, v])
                 # print(f"Data exported to {path}")
                 if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(f"Data exported to {path}", 5000)
+                    self.parent().context.show_status_message(
+                        f"Data exported to {path}", 5000
+                    )
             except Exception:
                 pass  # Simple error handling

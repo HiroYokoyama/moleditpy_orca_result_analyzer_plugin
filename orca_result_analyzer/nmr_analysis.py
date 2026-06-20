@@ -1180,7 +1180,8 @@ class NMRDialog(QDialog):
 
         if self.parent_dlg and self.parent_dlg.context:
             self.parent_dlg.context.show_status_message(
-                f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.", 5000
+                f"Added reference '{ref_name}' for {len(nucleus_data)} nucleus/nuclei.",
+                5000,
             )
         else:
             print(f"Added reference '{ref_name}'")
@@ -1955,7 +1956,9 @@ class NMRDialog(QDialog):
             text += "\t".join(cols) + "\n"
         QApplication.clipboard().setText(text)
         if self.parent_dlg and self.parent_dlg.context:
-            self.parent_dlg.context.show_status_message("Table data copied to clipboard!", 5000)
+            self.parent_dlg.context.show_status_message(
+                "Table data copied to clipboard!", 5000
+            )
         else:
             print("Table data copied to clipboard!")
 

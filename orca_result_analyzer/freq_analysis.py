@@ -400,7 +400,9 @@ class FreqSpectrumWindow(QWidget):
             success = self.spectrum.save_csv(path)
             if success:
                 if self.freq_dialog and self.freq_dialog.context:
-                    self.freq_dialog.context.show_status_message(f"Data saved to: {os.path.basename(path)}", 5000)
+                    self.freq_dialog.context.show_status_message(
+                        f"Data saved to: {os.path.basename(path)}", 5000
+                    )
                 else:
                     print(f"Data saved to: {path}")
             else:
@@ -419,7 +421,9 @@ class FreqSpectrumWindow(QWidget):
             success = self.spectrum.save_sticks_csv(path)
             if success:
                 if self.freq_dialog and self.freq_dialog.context:
-                    self.freq_dialog.context.show_status_message(f"Stick data saved to: {os.path.basename(path)}", 5000)
+                    self.freq_dialog.context.show_status_message(
+                        f"Stick data saved to: {os.path.basename(path)}", 5000
+                    )
                 else:
                     print(f"Stick data saved to: {path}")
             else:
@@ -1181,7 +1185,9 @@ class FrequencyDialog(QDialog):
                     disposal=2,
                 )
                 if self.context:
-                    self.context.show_status_message(f"GIF saved to: {os.path.basename(path)}", 5000)
+                    self.context.show_status_message(
+                        f"GIF saved to: {os.path.basename(path)}", 5000
+                    )
                 else:
                     print(f"GIF saved to: {path}")
 

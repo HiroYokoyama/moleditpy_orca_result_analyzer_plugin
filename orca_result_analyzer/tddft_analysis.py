@@ -648,7 +648,9 @@ class TDDFTDialog(QDialog):
             success = self.spectrum.save_csv(path)
             if success:
                 if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(f"Data saved to {path}", 5000)
+                    self.parent().context.show_status_message(
+                        f"Data saved to {path}", 5000
+                    )
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
@@ -665,7 +667,9 @@ class TDDFTDialog(QDialog):
             success = self.spectrum.save_sticks_csv(path)
             if success:
                 if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(f"Stick data saved to {path}", 5000)
+                    self.parent().context.show_status_message(
+                        f"Stick data saved to {path}", 5000
+                    )
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
@@ -753,7 +757,9 @@ class TDDFTDialog(QDialog):
                     f.write("\n")
 
             if self.parent() and self.parent().context:
-                self.parent().context.show_status_message(f"Report saved to {path}", 5000)
+                self.parent().context.show_status_message(
+                    f"Report saved to {path}", 5000
+                )
             else:
                 QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
 

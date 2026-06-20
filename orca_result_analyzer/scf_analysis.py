@@ -218,6 +218,8 @@ class SCFTraceDialog(QDialog):
                         writer.writerow([d["iter"], d["energy"]])
             # print(f"Data exported to {path}")
             if self.parent() and self.parent().context:
-                self.parent().context.show_status_message(f"Data exported to {path}", 5000)
+                self.parent().context.show_status_message(
+                    f"Data exported to {path}", 5000
+                )
         except Exception as e:
             print(f"Error exporting CSV: {e}")

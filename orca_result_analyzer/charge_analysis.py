@@ -391,7 +391,9 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, "plotter"):
                 self.parent_dlg.mw.plotter.render()
 
-            self.parent_dlg.context.show_status_message("Colors reset to CPK default.", 5000)
+            self.parent_dlg.context.show_status_message(
+                "Colors reset to CPK default.", 5000
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
@@ -707,7 +709,9 @@ class ChargeDialog(QDialog):
 
             # print(f"Data exported to {filename}")
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
-            self.parent_dlg.context.show_status_message(f"Data exported to {filename}", 5000)
+            self.parent_dlg.context.show_status_message(
+                f"Data exported to {filename}", 5000
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
         finally:

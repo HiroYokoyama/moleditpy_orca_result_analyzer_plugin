@@ -621,7 +621,8 @@ class OrcaResultAnalyzerDialog(QDialog):
 
                         # print(f"Loaded NEB Trajectory: {len(trj_steps)} frames from {os.path.basename(trj_path)}")
                         self.context.show_status_message(
-                            f"Loaded NEB Trajectory from {os.path.basename(trj_path)}", 5000
+                            f"Loaded NEB Trajectory from {os.path.basename(trj_path)}",
+                            5000,
                         )
                 except Exception as e:
                     # print(f"Failed to load associated TRJ: {e}")
@@ -843,7 +844,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             # Reset 3D camera to fit molecule
             try:
                 self.context.reset_3d_camera()
-                if hasattr(self.mw, "view_3d_manager") and hasattr(self.mw.view_3d_manager, "plotter"):
+                if hasattr(self.mw, "view_3d_manager") and hasattr(
+                    self.mw.view_3d_manager, "plotter"
+                ):
                     self.mw.view_3d_manager.plotter.render()
             except Exception as _e:
                 logging.warning("[gui.py:592] silenced: %s", _e)
@@ -886,7 +889,9 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "freq_dlg", None) is not None and self.freq_dlg is not None:
             self.freq_dlg.close()
 
-        self.freq_dlg = FrequencyDialog(self.mw, freqs, atoms, coords, context=self.context)
+        self.freq_dlg = FrequencyDialog(
+            self.mw, freqs, atoms, coords, context=self.context
+        )
         self.freq_dlg.show()
 
     def show_trajectory(self):
