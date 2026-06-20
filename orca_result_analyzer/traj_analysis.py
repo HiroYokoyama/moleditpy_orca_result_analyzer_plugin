@@ -843,9 +843,9 @@ class TrajectoryResultDialog(QDialog):
                         mw.ui_manager._enter_3d_viewer_ui_mode()
                     except Exception as _e:
                         logging.warning("[traj_analysis.py:699] silenced: %s", _e)
-                elif hasattr(mw.ui_manager, "_enable_3d_features"):
+                else:
                     try:
-                        mw.ui_manager._enable_3d_features(True)
+                        self.context.set_3d_features_enabled(True)
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
                     except Exception as _e:

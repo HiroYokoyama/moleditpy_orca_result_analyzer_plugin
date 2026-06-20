@@ -836,8 +836,8 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.context.enter_3d_viewer_mode()
                 elif hasattr(self.mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     self.mw.ui_manager._enter_3d_viewer_ui_mode()
-                elif hasattr(self.mw.ui_manager, "_enable_3d_features"):
-                    self.mw.ui_manager._enable_3d_features(True)
+                else:
+                    self.context.set_3d_features_enabled(True)
                     if hasattr(self.mw.ui_manager, "minimize_2d_panel"):
                         self.mw.ui_manager.minimize_2d_panel()
 
