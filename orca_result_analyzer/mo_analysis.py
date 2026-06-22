@@ -1,3 +1,4 @@
+import csv
 import os
 import tempfile
 import numpy as np
@@ -1080,8 +1081,6 @@ class MODialog(QDialog):
             return
 
         try:
-            import csv
-
             with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["ID", "Occupation", "Energy (eV)", "Energy (Eh)"])

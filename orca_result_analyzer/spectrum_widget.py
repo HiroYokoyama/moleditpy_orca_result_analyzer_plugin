@@ -1,3 +1,4 @@
+import csv
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal, Qt
 import numpy as np
@@ -140,8 +141,6 @@ class SpectrumWidget(QWidget):
         self.canvas.figure.savefig(path, dpi=300, bbox_inches="tight")
 
     def save_csv(self, path):
-        import csv
-
         # Filter valid data
         points = []
         for item in self.data_list:
@@ -226,8 +225,6 @@ class SpectrumWidget(QWidget):
             return False
 
     def save_sticks_csv(self, path):
-        import csv
-
         # Filter valid data
         points = []
         for item in self.data_list:

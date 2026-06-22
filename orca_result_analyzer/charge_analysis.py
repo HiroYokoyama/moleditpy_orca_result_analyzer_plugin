@@ -1,3 +1,4 @@
+import csv
 import os
 import json
 import numpy as np
@@ -642,8 +643,6 @@ class ChargeDialog(QDialog):
             return
 
         try:
-            import csv
-
             data = self.all_charges.get(self.current_type, [])
             if not data:
                 return

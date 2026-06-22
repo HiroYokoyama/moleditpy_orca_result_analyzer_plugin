@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QButtonGroup,
 )
 from PyQt6.QtCore import Qt, QTimer
+from .parser import OrcaParser
 from .utils import get_default_export_path
 import logging
 
@@ -743,8 +744,6 @@ class TrajectoryResultDialog(QDialog):
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
-            from .parser import OrcaParser
-
             parser = OrcaParser()
             steps = parser.parse_xyz_content(content)
             if not steps:

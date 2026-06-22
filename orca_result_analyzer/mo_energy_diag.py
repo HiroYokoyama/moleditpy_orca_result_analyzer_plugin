@@ -1,3 +1,4 @@
+import glob
 import os
 import math
 from PyQt6.QtWidgets import (
@@ -250,7 +251,6 @@ class EnergyDiagramDialog(QDialog):
             # QMessageBox.information(self, "Info", "No result directory linked.")
             return
 
-        import glob
         # Pattern matching
         # Files like: "15_HOMO.cube" or "16_LUMO.cube" or "15_MO_15.cube"
 
