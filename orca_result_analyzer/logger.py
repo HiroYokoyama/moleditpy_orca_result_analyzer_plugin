@@ -39,6 +39,6 @@ class Logger:
             fh.setFormatter(formatter)
             logger.addHandler(fh)
         except Exception as e:
-            print(f"Failed to setup file logging: {e}")
+            sys.stderr.write(f"Failed to setup file logging: {e}\n")
 
         return logger

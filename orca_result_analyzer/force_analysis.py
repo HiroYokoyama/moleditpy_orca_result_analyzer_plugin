@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (
@@ -173,7 +174,7 @@ class ForceViewerDialog(QDialog):
                 if self.btn_visualize.isChecked():
                     self.update_vectors()
         except Exception as _e:
-            logging.warning("[force_analysis.py:151] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
 
     def _setup_trajectory_controls(self, layout):
         """Setup trajectory navigation controls"""
@@ -371,8 +372,6 @@ class ForceViewerDialog(QDialog):
             return
 
         # split into 2 columns
-        import math
-
         half = math.ceil(num_items / 2)
         col1_items = items[:half]
         col2_items = items[half:]
@@ -443,8 +442,6 @@ class ForceViewerDialog(QDialog):
             if self.btn_visualize.isChecked():
                 self.update_vectors()
 
-            # print(f"Force Viewer: Reloaded from {os.path.basename(self.parser.filename)}")
-
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reload data: {e}")
         finally:
@@ -487,7 +484,7 @@ class ForceViewerDialog(QDialog):
                 rdDetermineBonds.DetermineConnectivity(mol)
                 rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
             except Exception as _e:
-                logging.warning("[force_analysis.py:420] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         final_mol = mol.GetMol()
 
@@ -633,7 +630,7 @@ class ForceViewerDialog(QDialog):
             mw.plotter.render()
 
         except Exception as e:
-            print(f"Error drawing force vectors: {e}")
+            logging.warning("Error drawing force vectors: %s", e)
 
     def clear_vectors(self):
         """Clear all force vector actors"""
@@ -650,7 +647,7 @@ class ForceViewerDialog(QDialog):
             try:
                 mw.plotter.remove_actor(actor)
             except Exception as _e:
-                logging.warning("[force_analysis.py:581] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         self.actors = []
         mw.plotter.render()
@@ -664,7 +661,7 @@ class ForceViewerDialog(QDialog):
     def load_settings(self):
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
 
                 settings = all_settings.get("force_settings", {})
@@ -675,16 +672,16 @@ class ForceViewerDialog(QDialog):
                     self.force_color = settings["force_color"]
 
             except Exception as e:
-                print(f"Error loading force settings: {e}")
+                logging.warning("Error loading force settings: %s", e)
 
     def save_settings(self):
         all_settings = {}
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception as _e:
-                logging.warning("[force_analysis.py:615] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         force_settings = {
             # "scale": self.spin_scale.value(), # Do not save scale
@@ -695,7 +692,7 @@ class ForceViewerDialog(QDialog):
         all_settings["force_settings"] = force_settings
 
         try:
-            with open(self.settings_file, "w") as f:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving force settings: {e}")
+            logging.warning("Error saving force settings: %s", e)

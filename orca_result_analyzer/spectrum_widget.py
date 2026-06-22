@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
@@ -125,20 +125,14 @@ class SpectrumWidget(QWidget):
         self.plot_spectrum()
 
     def set_sticks(self, state):
-        from PyQt6.QtCore import Qt
-
         self.show_sticks = state == Qt.CheckState.Checked.value or state
         self.plot_spectrum()
 
     def set_gaussian(self, state):
-        from PyQt6.QtCore import Qt
-
         self.show_gaussian = state == Qt.CheckState.Checked.value or state
         self.plot_spectrum()
 
     def set_markers(self, state):
-        from PyQt6.QtCore import Qt
-
         self.show_markers = state == Qt.CheckState.Checked.value or state
         self.plot_spectrum()
 
@@ -228,7 +222,7 @@ class SpectrumWidget(QWidget):
                     writer.writerow([display_x[i], curve_y[i]])
             return True
         except Exception as e:
-            print(f"Error saving CSV: {e}")
+            logging.warning("Error saving CSV: %s", e)
             return False
 
     def save_sticks_csv(self, path):
@@ -273,7 +267,7 @@ class SpectrumWidget(QWidget):
                 self.ax2.remove()
                 del self.ax2
             except Exception as _e:
-                logging.warning("[spectrum_widget.py:249] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         self.plot_spectrum()
 
     def plot_spectrum(self):
@@ -284,7 +278,7 @@ class SpectrumWidget(QWidget):
                 try:
                     self.ax2.clear()
                 except Exception as _e:
-                    logging.warning("[spectrum_widget.py:258] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             if getattr(self, "scaling_factor", None) is None:
                 self.scaling_factor = 1.0

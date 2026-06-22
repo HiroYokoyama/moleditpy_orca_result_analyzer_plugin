@@ -85,7 +85,7 @@ class ChargeDialog(QDialog):
 
         if os.path.exists(settings_file):
             try:
-                with open(settings_file, "r") as f:
+                with open(settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
 
                 # Load from "charge_settings" key
@@ -103,7 +103,7 @@ class ChargeDialog(QDialog):
                 if "last_charge_scheme" in settings_data:
                     self.current_scheme = settings_data["last_charge_scheme"]
             except Exception as e:
-                print(f"Error loading settings: {e}")
+                logging.warning("Error loading settings: %s", e)
 
         main_layout = QVBoxLayout(self)
 
@@ -274,10 +274,10 @@ class ChargeDialog(QDialog):
         all_settings = {}
         if os.path.exists(settings_file):
             try:
-                with open(settings_file, "r") as f:
+                with open(settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception as _e:
-                logging.warning("[charge_analysis.py:248] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         # Prepare charge-specific data
         charge_data = {}
@@ -297,10 +297,10 @@ class ChargeDialog(QDialog):
         all_settings["charge_settings"] = charge_data
 
         try:
-            with open(settings_file, "w") as f:
+            with open(settings_file, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving settings: {e}")
+            logging.warning("Error saving settings: %s", e)
 
     def toggle_labels(self):
         """Toggle charge value labels in 3D view"""
@@ -312,7 +312,7 @@ class ChargeDialog(QDialog):
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
                 except Exception as _e:
-                    logging.warning("[charge_analysis.py:286] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             self._charge_labels = []
 
         if not show:
@@ -371,7 +371,7 @@ class ChargeDialog(QDialog):
                     self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     delattr(self, "_charge_scalar_bar")
                 except Exception as _e:
-                    logging.warning("[charge_analysis.py:342] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             # Remove labels if exist
             if getattr(self, "_charge_labels", None) is not None:
@@ -379,7 +379,7 @@ class ChargeDialog(QDialog):
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(actor)
                     except Exception as _e:
-                        logging.warning("[charge_analysis.py:349] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 self._charge_labels = []
                 self.chk_show_labels.setChecked(False)
 
@@ -553,9 +553,7 @@ class ChargeDialog(QDialog):
                             try:
                                 self.parent_dlg.mw.plotter.remove_actor(actor)
                             except Exception as _e:
-                                logging.warning(
-                                    "[charge_analysis.py:513] silenced: %s", _e
-                                )
+                                logging.warning("silenced: %s", _e)
 
                     self._charge_labels = []
                     for i, item in enumerate(data):
@@ -588,7 +586,7 @@ class ChargeDialog(QDialog):
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     except Exception as _e:
-                        logging.warning("[charge_analysis.py:543] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
                 # Create dummy mesh for scalar bar
                 dummy = pv.Box()
@@ -616,7 +614,7 @@ class ChargeDialog(QDialog):
                     },
                 )
             except Exception as e:
-                print(f"Error adding scalar bar: {e}")
+                logging.warning("Error adding scalar bar: %s", e)
 
             # Trigger update
             if hasattr(self.parent_dlg.mw, "plotter"):
@@ -697,7 +695,7 @@ class ChargeDialog(QDialog):
             }
             display_headers = [header_map.get(k, k.capitalize()) for k in headers]
 
-            with open(filename, "w", newline="") as f:
+            with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(display_headers)
 
@@ -706,8 +704,6 @@ class ChargeDialog(QDialog):
                     for k in headers:
                         row.append(item.get(k, ""))
                     writer.writerow(row)
-
-            # print(f"Data exported to {filename}")
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
             self.parent_dlg.context.show_status_message(
                 f"Data exported to {filename}", 5000
@@ -724,7 +720,7 @@ class ChargeDialog(QDialog):
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
             except Exception as _e:
-                logging.warning("[charge_analysis.py:656] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         # Remove labels
         if getattr(self, "_charge_labels", None) is not None:
@@ -732,7 +728,7 @@ class ChargeDialog(QDialog):
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
                 except Exception as _e:
-                    logging.warning("[charge_analysis.py:663] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
         if hasattr(self.parent_dlg.mw, "plotter"):
             self.parent_dlg.mw.plotter.render()

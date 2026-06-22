@@ -1,0 +1,13 @@
+[MASTER]
+# Required to resolve PyQt6 C extensions at analysis time
+extension-pkg-whitelist = PyQt6
+
+[MESSAGES CONTROL]
+disable =
+    W0201, E0203,  # Qt pattern: attributes set in init_ui() called from __init__
+    W0718,         # Broad except intentional in GUI event handlers
+    W0613,         # Qt override signatures require unused args
+    R0801          # Settings load/save boilerplate duplicated across dialog classes
+
+[FORMAT]
+max-line-length = 100

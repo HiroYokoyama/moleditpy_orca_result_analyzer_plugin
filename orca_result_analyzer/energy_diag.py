@@ -1,4 +1,5 @@
 import os
+import math
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -12,7 +13,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QToolTip,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QPainter, QPen, QColor, QFont, QAction
 
 try:
@@ -472,8 +473,6 @@ class EnergyDiagramDialog(QDialog):
 
         # Reset Hit Zones
         self.hit_zones = []  # List of (QRect, index, label)
-        from PyQt6.QtCore import QRect
-
         w = self.width()
         h = self.height()
 
@@ -523,8 +522,6 @@ class EnergyDiagramDialog(QDialog):
             range_disp = 1.0
 
         # 2. Calculate Nice Step in Display Units
-        import math
-
         target_ticks = 10
         raw_step = range_disp / target_ticks
 

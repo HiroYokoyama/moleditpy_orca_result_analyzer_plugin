@@ -28,7 +28,6 @@ import math
 import numpy as np
 import os
 import json
-import traceback
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
 from .utils import get_default_export_path
@@ -75,7 +74,7 @@ class FreqSpectrumWindow(QWidget):
         settings_file = self.freq_dialog.settings_file
         if os.path.exists(settings_file):
             try:
-                with open(settings_file, "r") as f:
+                with open(settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
                 settings = all_settings.get("freq_settings", {})
                 if "spec_sigma" in settings:
@@ -89,7 +88,7 @@ class FreqSpectrumWindow(QWidget):
                 if "spec_auto_y" in settings:
                     self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
             except Exception as _e:
-                logging.warning("[freq_analysis.py:63] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -404,7 +403,7 @@ class FreqSpectrumWindow(QWidget):
                         f"Data saved to: {os.path.basename(path)}", 5000
                     )
                 else:
-                    print(f"Data saved to: {path}")
+                    logging.info("Data saved to: %s", path)
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
@@ -425,7 +424,7 @@ class FreqSpectrumWindow(QWidget):
                         f"Stick data saved to: {os.path.basename(path)}", 5000
                     )
                 else:
-                    print(f"Stick data saved to: {path}")
+                    logging.info("Stick data saved to: %s", path)
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
@@ -815,7 +814,7 @@ class FrequencyDialog(QDialog):
                     )
                     break
             except Exception as _e:
-                logging.warning("[freq_analysis.py:718] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             it += 1
 
     def on_mode_selected(self, current, previous):
@@ -856,7 +855,7 @@ class FrequencyDialog(QDialog):
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
             except Exception as _e:
-                logging.warning("[freq_analysis.py:756] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             self.vector_actor = None
 
         # 2. Reset geometry
@@ -890,7 +889,7 @@ class FrequencyDialog(QDialog):
 
             self.mw.plotter.render()
         except Exception as e:
-            print(f"Error in FrequencyDialog.update_view: {e}")
+            logging.warning("Error in FrequencyDialog.update_view: %s", e)
 
     def start_animation(self):
         if self.current_mode_idx < 0:
@@ -963,8 +962,7 @@ class FrequencyDialog(QDialog):
                 self.update_vectors_at_displaced_position()
 
         except Exception as e:
-            print(f"Error in animate_frame: {e}")
-            traceback.print_exc()
+            logging.warning("Error in animate_frame: %s", e)
 
     def update_vectors_at_displaced_position(self):
         """Redraw vectors at current displaced atomic positions"""
@@ -972,7 +970,7 @@ class FrequencyDialog(QDialog):
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
             except Exception as _e:
-                logging.warning("[freq_analysis.py:857] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             self.vector_actor = None
 
         vecs = self.frequencies[self.current_mode_idx].get("vector", [])
@@ -1014,7 +1012,7 @@ class FrequencyDialog(QDialog):
                     arrows, color=self.vector_color, name="vib_vectors"
                 )
         except Exception as e:
-            print(f"Error updating vectors: {e}")
+            logging.warning("Error updating vectors: %s", e)
 
     def reset_geometry(self):
         try:
@@ -1027,10 +1025,7 @@ class FrequencyDialog(QDialog):
             else:
                 self.mw.view_3d_manager.draw_molecule_3d(mol)
         except Exception as e:
-            print(f"Error in reset_geometry: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logging.warning("Error in reset_geometry: %s", e)
 
     def save_gif(self):
         if not HAS_PIL:
@@ -1189,7 +1184,7 @@ class FrequencyDialog(QDialog):
                         f"GIF saved to: {os.path.basename(path)}", 5000
                     )
                 else:
-                    print(f"GIF saved to: {path}")
+                    logging.info("GIF saved to: %s", path)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
@@ -1220,7 +1215,7 @@ class FrequencyDialog(QDialog):
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
             except Exception as _e:
-                logging.warning("[freq_analysis.py:1051] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         if self.spectrum_win:
             self.spectrum_win.close()
 
@@ -1233,7 +1228,7 @@ class FrequencyDialog(QDialog):
     def load_settings(self):
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
 
                 settings = all_settings.get("freq_settings", {})
@@ -1270,16 +1265,16 @@ class FrequencyDialog(QDialog):
                     self.spin_fps.setValue(int(settings["fps"]))
 
             except Exception as e:
-                print(f"Error loading freq settings: {e}")
+                logging.warning("Error loading freq settings: %s", e)
 
     def save_settings(self):
         all_settings = {}
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception as _e:
-                logging.warning("[freq_analysis.py:1101] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         freq_settings = {
             "sf_a": self.spin_sf_a.value(),
@@ -1316,7 +1311,7 @@ class FrequencyDialog(QDialog):
         all_settings["freq_settings"] = freq_settings
 
         try:
-            with open(self.settings_file, "w") as f:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving freq settings: {e}")
+            logging.warning("Error saving freq settings: %s", e)

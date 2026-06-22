@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import logging
 from PyQt6.QtWidgets import (
@@ -19,6 +20,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QButtonGroup,
     QAbstractItemView,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer
 import pyvista as pv
@@ -428,7 +430,7 @@ class NMRDialog(QDialog):
         """Load NMR settings from JSON"""
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     settings = json.load(f)
 
                 nmr_settings = settings.get("nmr_settings", {})
@@ -445,7 +447,7 @@ class NMRDialog(QDialog):
                     for ref_name, ref_val in refs.items():
                         self.reference_standards[nucleus][ref_name] = ref_val
             except Exception as e:
-                print(f"Error loading NMR settings: {e}")
+                logging.warning("Error loading NMR settings: %s", e)
 
     def merge_selected_peaks(self):
         """Merge selected peaks into a single entry with isotope validation"""
@@ -553,19 +555,19 @@ class NMRDialog(QDialog):
     def save_merged_peaks(self):
         """Save merged peaks to JSON file"""
         try:
-            with open(self.merged_peaks_file, "w") as f:
+            with open(self.merged_peaks_file, "w", encoding="utf-8") as f:
                 json.dump(self.merged_peaks, f, indent=2)
         except Exception as e:
-            print(f"Error saving merged peaks: {e}")
+            logging.warning("Error saving merged peaks: %s", e)
 
     def load_merged_peaks(self):
         """Load merged peaks from JSON file"""
         if os.path.exists(self.merged_peaks_file):
             try:
-                with open(self.merged_peaks_file, "r") as f:
+                with open(self.merged_peaks_file, "r", encoding="utf-8") as f:
                     self.merged_peaks = json.load(f)
             except Exception as e:
-                print(f"Error loading merged peaks: {e}")
+                logging.warning("Error loading merged peaks: %s", e)
                 self.merged_peaks = []
         else:
             self.merged_peaks = []
@@ -576,10 +578,10 @@ class NMRDialog(QDialog):
         # 既存の設定を読み込む（MO設定などを消さないため）
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception as _e:
-                logging.warning("[nmr_analysis.py:538] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         # Extract custom references only (non-default)
         # Extract custom references only (non-default)
@@ -639,10 +641,10 @@ class NMRDialog(QDialog):
         all_settings["nmr_settings"] = current_nmr_settings
 
         try:
-            with open(self.settings_file, "w") as f:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
-            print(f"Error saving NMR settings: {e}")
+            logging.warning("Error saving NMR settings: %s", e)
 
     def reset_zoom(self, event):
         """Reset plot zoom on double click"""
@@ -714,8 +716,6 @@ class NMRDialog(QDialog):
         ref_sel_row.addWidget(QLabel("Standard:"))
         self.combo_ref = QComboBox()
         self.combo_ref.setMinimumWidth(250)
-        from PyQt6.QtWidgets import QSizePolicy
-
         self.combo_ref.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
@@ -1184,7 +1184,7 @@ class NMRDialog(QDialog):
                 5000,
             )
         else:
-            print(f"Added reference '{ref_name}'")
+            logging.info("Reference '%s' added.", ref_name)
 
     def delete_custom_reference(self):
         """Delete currently selected custom reference"""
@@ -1250,7 +1250,7 @@ class NMRDialog(QDialog):
                             f"Reference '{current_ref}' removed.", 5000
                         )
                     else:
-                        print(f"Reference '{current_ref}' removed.")
+                        logging.info("Reference '%s' removed.", current_ref)
                 else:
                     # Should not happen if UI is consistent
                     QMessageBox.warning(
@@ -1329,7 +1329,6 @@ class NMRDialog(QDialog):
         # Get nucleus key to handle isotopes
         key = self.get_nucleus_key(nucleus)
         # Try key, then generic element (e.g. "Pt" if "195Pt" not in defaults), then fallback
-        import re
 
         element_only = re.sub(r"[^A-Z]", "", key)
 
@@ -1600,7 +1599,7 @@ class NMRDialog(QDialog):
                 try:
                     artist.remove()
                 except Exception as _e:
-                    logging.warning("[nmr_analysis.py:1463] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             self.highlight_artists = []
             self.canvas.draw_idle()
             return
@@ -1614,7 +1613,7 @@ class NMRDialog(QDialog):
             try:
                 artist.remove()
             except Exception as _e:
-                logging.warning("[nmr_analysis.py:1477] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         self.highlight_artists = []
 
         # Add red highlights and text labels for selected peaks
@@ -1741,7 +1740,7 @@ class NMRDialog(QDialog):
                         f"Spectrum exported to: {os.path.basename(filename)}", 5000
                     )
                 else:
-                    print(f"Spectrum exported to: {filename}")
+                    logging.info("Spectrum exported to: %s", filename)
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
@@ -1763,7 +1762,7 @@ class NMRDialog(QDialog):
             return
 
         try:
-            with open(filename, "w") as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 # Check mode
                 is_real = (
                     getattr(self, "chk_real_spectrum", None) is not None
@@ -1784,13 +1783,13 @@ class NMRDialog(QDialog):
                         # Let's try to extract x,y data from the first non-stem line.
 
                         line = None
-                        for l in ax.lines:
+                        for ln in ax.lines:
                             # Stems are Line2D but usually handled differently.
                             # nmrsim plot is a standard plot.
-                            if l.get_marker() == "None" and l.get_linestyle() == "-":
-                                line = l
+                            if ln.get_marker() == "None" and ln.get_linestyle() == "-":
+                                line = ln
                                 # If we have multiple, the 'blue' one is the spectrum.
-                                if l.get_color() == "b":
+                                if ln.get_color() == "b":
                                     break
 
                         if line:
@@ -1831,7 +1830,7 @@ class NMRDialog(QDialog):
                     f"Spectrum data exported to: {os.path.basename(filename)}", 5000
                 )
             else:
-                print(f"Spectrum data exported to: {filename}")
+                logging.info("Spectrum data exported to: %s", filename)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
@@ -1850,7 +1849,7 @@ class NMRDialog(QDialog):
             return
 
         try:
-            with open(filename, "w") as f:
+            with open(filename, "w", encoding="utf-8") as f:
                 # Headers
                 headers = []
                 for c in range(self.table.columnCount()):
@@ -1874,7 +1873,7 @@ class NMRDialog(QDialog):
                     f"Table data exported to: {os.path.basename(filename)}", 5000
                 )
             else:
-                print(f"Table data exported to: {filename}")
+                logging.info("Table data exported to: %s", filename)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
@@ -1960,7 +1959,7 @@ class NMRDialog(QDialog):
                 "Table data copied to clipboard!", 5000
             )
         else:
-            print("Table data copied to clipboard!")
+            logging.info("Table data copied to clipboard.")
 
     def toggle_simulation_controls(self):
         """Enable/Disable simulation spinboxes based on checkbox state"""
@@ -2081,13 +2080,10 @@ class NMRDialog(QDialog):
                     try:
                         e3d.update_3d_selection_display()
                     except Exception as _e:
-                        logging.warning("[nmr_analysis.py:1880] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
             # Draw yellow highlights for NMR selection
             self.draw_custom_nmr_highlights_3d(all_peak_indices)
-
-            # Debug print to confirming highlighting path is taken
-            # print(f"Highlighting {len(self.selected_peak_indices)} peaks with {len(atom_coords)} atoms")
 
             # Render once after all labels added
             v3d = getattr(self.parent_dlg.mw, "view_3d_manager", None)
@@ -2132,7 +2128,7 @@ class NMRDialog(QDialog):
             self._atom_labels.append(actor)
             self._nmr_label_names.append(label_name)
         except Exception as e:
-            logging.warning("[nmr_analysis.py:1924] silenced: %s", e)
+            logging.warning("silenced: %s", e)
 
     def highlight_atom_in_3d(self, atom_idx, atom_sym):
         """Highlight selected atom with a label in 3D viewer (legacy - now uses update_selected_labels)"""
@@ -2148,7 +2144,7 @@ class NMRDialog(QDialog):
             try:
                 artist.remove()
             except Exception as _e:
-                logging.warning("[nmr_analysis.py:1941] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         self.highlight_artists = []
 
         # Clear 3D labels
@@ -2163,7 +2159,7 @@ class NMRDialog(QDialog):
                 try:
                     e3d.update_3d_selection_display()
                 except Exception as _e:
-                    logging.warning("[nmr_analysis.py:1956] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
         # Redraw spectrum
         if getattr(self, "canvas", None) is not None:
@@ -2208,8 +2204,6 @@ class NMRDialog(QDialog):
 
         ratio = 1.0
         lookup_sym = target_nuc_sym.upper()
-
-        import re
 
         element_only = re.sub(r"[^A-Z]", "", lookup_sym)
 
@@ -2354,8 +2348,8 @@ class NMRDialog(QDialog):
                 for i in range(0, len(vs), chunk_size):
                     v_chunk = vs[i : i + chunk_size]
                     i_chunk = is_[i : i + chunk_size]
-                    for v, I in zip(v_chunk, i_chunk):
-                        y_total += I * (
+                    for v, inten in zip(v_chunk, i_chunk):
+                        y_total += inten * (
                             gamma / (np.pi * ((x_hz_grid - v) ** 2 + gamma**2))
                         )
 
@@ -2462,7 +2456,7 @@ class NMRDialog(QDialog):
         try:
             plotter.remove_actor("nmr_selection_highlights")
         except Exception as _e:
-            logging.warning("[nmr_analysis.py:2182] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
 
         # 2. Clear labels by tracked name
         if getattr(self, "_nmr_label_names", None) is not None:
@@ -2470,7 +2464,7 @@ class NMRDialog(QDialog):
                 try:
                     plotter.remove_actor(name)
                 except Exception as _e:
-                    logging.warning("[nmr_analysis.py:2190] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             self._nmr_label_names = []
 
         # 3. Fallback: Clear labels by list reference
@@ -2478,7 +2472,7 @@ class NMRDialog(QDialog):
             try:
                 plotter.remove_actor(actor)
             except Exception as _e:
-                logging.warning("[nmr_analysis.py:2198] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         self._atom_labels = []
 
         # 4. Clean up private spheres actor list
@@ -2487,13 +2481,13 @@ class NMRDialog(QDialog):
                 try:
                     plotter.remove_actor(actor)
                 except Exception as _e:
-                    logging.warning("[nmr_analysis.py:2207] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             self._nmr_sphere_actors = []
 
         try:
             plotter.render()
         except Exception as _e:
-            logging.warning("[nmr_analysis.py:2213] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
 
     def draw_custom_nmr_highlights_3d(self, atom_indices):
         """Draw yellow highlight spheres for selected atoms in 3D viewer"""
@@ -2508,7 +2502,7 @@ class NMRDialog(QDialog):
         try:
             plotter.remove_actor("nmr_selection_highlights")
         except Exception as _e:
-            logging.warning("[nmr_analysis.py:2228] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
 
         # Clear tracker list to prevent stale references
         self._nmr_sphere_actors = []
@@ -2518,7 +2512,7 @@ class NMRDialog(QDialog):
             try:
                 plotter.render()
             except Exception as _e:
-                logging.warning("[nmr_analysis.py:2238] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             return
 
         indices = list(atom_indices)
@@ -2535,7 +2529,6 @@ class NMRDialog(QDialog):
 
             # Highlight sphere size: 40% (1.4x) relative to VDW radii per user request
             radii = []
-            import re
 
             for i in valid_indices:
                 try:
@@ -2578,7 +2571,7 @@ class NMRDialog(QDialog):
             plotter.render()
 
         except Exception as e:
-            logging.warning("[nmr_analysis.py:2282] silenced: %s", e)
+            logging.warning("silenced: %s", e)
 
     def reset_selection(self):
         """Reset all NMR selection state — call this on document reset."""

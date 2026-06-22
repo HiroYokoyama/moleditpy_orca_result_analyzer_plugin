@@ -29,6 +29,7 @@ except ImportError:
     except Exception:
         SpectrumWidget = None
 from .utils import get_default_export_path
+import datetime
 import logging
 
 
@@ -496,7 +497,7 @@ class TDDFTDialog(QDialog):
     def load_settings(self):
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
 
                 settings = all_settings.get("tddft_settings", {})
@@ -567,7 +568,7 @@ class TDDFTDialog(QDialog):
         all_settings = {}
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, "r") as f:
+                with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception as _e:
                 logging.warning("[tddft_analysis.py:save_settings] silenced: %s", _e)
@@ -583,7 +584,7 @@ class TDDFTDialog(QDialog):
 
         try:
             os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-            with open(self.settings_file, "w") as f:
+            with open(self.settings_file, "w", encoding="utf-8") as f:
                 json.dump(all_settings, f, indent=2)
 
             if self.parent() and self.parent().context:
@@ -686,8 +687,6 @@ class TDDFTDialog(QDialog):
         )
         if not path:
             return
-
-        import datetime
 
         try:
             with open(path, "w", encoding="utf-8") as f:

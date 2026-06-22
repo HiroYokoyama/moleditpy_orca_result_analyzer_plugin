@@ -83,7 +83,7 @@ class SCFTraceDialog(QDialog):
         try:
             plt.close(self.figure)
         except Exception as _e:
-            logging.warning("[scf_analysis.py:71] silenced: %s", _e)
+            logging.warning("silenced: %s", _e)
         super().closeEvent(event)
 
     def update_plot(self):
@@ -193,7 +193,7 @@ class SCFTraceDialog(QDialog):
         try:
             if idx == -1:
                 # Export all
-                with open(path, "w", newline="") as f:
+                with open(path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerow(
                         [
@@ -211,15 +211,14 @@ class SCFTraceDialog(QDialog):
                             cum_idx += 1
             else:
                 trace = self.scf_traces[idx]
-                with open(path, "w", newline="") as f:
+                with open(path, "w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerow(["Iteration", "Energy (Eh)"])
                     for d in trace.get("iterations", []):
                         writer.writerow([d["iter"], d["energy"]])
-            # print(f"Data exported to {path}")
             if self.parent() and self.parent().context:
                 self.parent().context.show_status_message(
                     f"Data exported to {path}", 5000
                 )
         except Exception as e:
-            print(f"Error exporting CSV: {e}")
+            logging.warning("Error exporting CSV: %s", e)

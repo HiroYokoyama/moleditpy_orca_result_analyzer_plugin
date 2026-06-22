@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -11,9 +12,11 @@ from PyQt6.QtWidgets import (
     QMenuBar,
     QFileDialog,
     QSizePolicy,
+    QApplication,
 )
 from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent
+from .parser import OrcaParser
 
 
 class _ClickFilter(QObject):
@@ -79,20 +82,19 @@ except ImportError:
     rdDetermineBonds = None
 
 # Imported Modules for Analysis
-from .mo_analysis import MODialog
-from .freq_analysis import FrequencyDialog
-from .traj_analysis import TrajectoryResultDialog
-from .force_analysis import ForceViewerDialog
-from .charge_analysis import ChargeDialog
-from .dipole_analysis import DipoleDialog
-from .nmr_analysis import NMRDialog
-from .tddft_analysis import TDDFTDialog
-from .thermal_analysis import ThermalTableDialog
-from .scf_analysis import SCFTraceDialog
+from .mo_analysis import MODialog  # noqa: E402
+from .freq_analysis import FrequencyDialog  # noqa: E402
+from .traj_analysis import TrajectoryResultDialog  # noqa: E402
+from .force_analysis import ForceViewerDialog  # noqa: E402
+from .charge_analysis import ChargeDialog  # noqa: E402
+from .dipole_analysis import DipoleDialog  # noqa: E402
+from .nmr_analysis import NMRDialog  # noqa: E402
+from .tddft_analysis import TDDFTDialog  # noqa: E402
+from .thermal_analysis import ThermalTableDialog  # noqa: E402
+from .scf_analysis import SCFTraceDialog  # noqa: E402
 
-from . import PLUGIN_VERSION
-import logging
-# from .logger import Logger
+from . import PLUGIN_VERSION  # noqa: E402
+import logging  # noqa: E402
 
 
 class OrcaResultAnalyzerDialog(QDialog):
@@ -105,8 +107,6 @@ class OrcaResultAnalyzerDialog(QDialog):
 
         self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
-
-        # self.logger = Logger.get_logger("OrcaResultAnalyzerDialog")
         self.init_ui()
 
         # Install global picking logic
@@ -476,8 +476,6 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def _on_plotter_click(self, x, y, widget):
         try:
-            from PyQt6.QtWidgets import QApplication
-
             best_idx = getattr(self, "_pending_click_atom", None)
             self._pending_click_atom = None
             if not hasattr(self, "mw"):
@@ -534,7 +532,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                     try:
                         dlg.close()
                     except Exception as _e:
-                        logging.warning("[gui.py:319] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 setattr(self, attr, None)
 
     def closeEvent(self, event):
@@ -577,8 +575,6 @@ class OrcaResultAnalyzerDialog(QDialog):
                 with open(path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
 
-            from .parser import OrcaParser
-
             new_parser = OrcaParser()
             new_parser.load_from_memory(content, path)
 
@@ -619,16 +615,12 @@ class OrcaResultAnalyzerDialog(QDialog):
                             new_parser.data["atoms"] = trj_steps[-1]["atoms"]
                             new_parser.data["coords"] = trj_steps[-1]["coords"]
 
-                        # print(f"Loaded NEB Trajectory: {len(trj_steps)} frames from {os.path.basename(trj_path)}")
                         self.context.show_status_message(
                             f"Loaded NEB Trajectory from {os.path.basename(trj_path)}",
                             5000,
                         )
                 except Exception as e:
-                    # print(f"Failed to load associated TRJ: {e}")
-                    logging.warning("[gui.py:404] silenced: %s", e)
-            else:
-                pass
+                    logging.warning("silenced: %s", e)
 
             self.parser = new_parser
             self.file_path = path
@@ -646,8 +638,6 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_structure_3d()
             self.update_button_states()
 
-            # QMessageBox.information(self, "Loaded", f"Successfully loaded:\n{os.path.basename(path)}")
-            # print(f"Successfully loaded: {os.path.basename(path)}")
             self.context.show_status_message(
                 f"Successfully loaded: {os.path.basename(path)}", 5000
             )
@@ -670,12 +660,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         mtime_str = "---"
         if self.file_path and os.path.exists(self.file_path):
             try:
-                from datetime import datetime
-
                 dt = datetime.fromtimestamp(os.path.getmtime(self.file_path))
                 mtime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
             except Exception as _e:
-                logging.warning("[gui.py:446] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         if getattr(self, "lbl_updated", None) is not None:
             self.lbl_updated.setText(f"Updated: {mtime_str}")
@@ -849,7 +837,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 ):
                     self.mw.view_3d_manager.plotter.render()
             except Exception as _e:
-                logging.warning("[gui.py:592] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         except Exception as e:
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",

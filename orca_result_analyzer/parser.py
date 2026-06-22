@@ -1,6 +1,6 @@
+import math
 import re
 import logging
-# from .logger import Logger
 
 
 class OrcaParser:
@@ -58,15 +58,6 @@ class OrcaParser:
             # Comment line (extract energy if possible)
             comment = lines[i].strip()
 
-            # Filter out TS/CI steps if requested (User requirement: "if ts or ci present, do not use that in graph")
-            # We want to filter "TS" or "CI" labels but NOT "CI-NEB" which is the method name
-            import re
-            # Check for TS or CI as whole words
-            # Exclude strict "CI-NEB" matches from being flagged if "CI" is found
-            # Simple approach: Check word boundaries.
-            # If "CI-NEB" is present, we might still have "CI" separately?
-            # Let's assume labels like "Image 5 (CI)" or "TS Structure"
-
             is_excluded = False
             upper_comment = comment.upper()
 
@@ -101,7 +92,7 @@ class OrcaParser:
                 try:
                     energy = float(e_match.group(1))
                 except Exception as _e:
-                    logging.warning("[parser.py:94] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             else:
                 # Fallback: Just take the last float (usually energy)
                 floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
@@ -109,7 +100,7 @@ class OrcaParser:
                     try:
                         energy = float(floats[-1])
                     except Exception as _e:
-                        logging.warning("[parser.py:100] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
             d_match = re.search(
@@ -121,7 +112,7 @@ class OrcaParser:
                 try:
                     dist_val = float(d_match.group(1))
                 except Exception as _e:
-                    logging.warning("[parser.py:106] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             i += 1
 
@@ -179,7 +170,7 @@ class OrcaParser:
                 try:
                     self.data["version"] = line.split("Version")[-1].strip().split()[0]
                 except Exception as _e:
-                    logging.warning("[parser.py:161] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             line = line.strip()
             uu = line.upper()
@@ -187,7 +178,7 @@ class OrcaParser:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
                 except Exception as _e:
-                    logging.warning("[parser.py:168] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             if "TOTAL CHARGE" in uu:
                 # Could be "Total Charge 0" or "Total Charge ... 0"
                 try:
@@ -195,7 +186,7 @@ class OrcaParser:
                     val = int(parts[-1])
                     self.data["charge"] = val
                 except Exception as _e:
-                    logging.warning("[parser.py:175] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             if "MULTIPLICITY" in uu:
                 try:
@@ -203,7 +194,7 @@ class OrcaParser:
                     val = int(parts[-1])
                     self.data["mult"] = val
                 except Exception as _e:
-                    logging.warning("[parser.py:182] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             if (
                 "SCF CONVERGED" in uu
                 or "OPTIMIZATION CONVERGED" in uu
@@ -230,7 +221,7 @@ class OrcaParser:
                     try:
                         self.data["neb_trj_file"] = line.split()[-1].strip()
                     except Exception as _e:
-                        logging.warning("[parser.py:199] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
             if "CARTESIAN COORDINATES (ANGSTROEM)" in uu:
                 # Read geometry
@@ -342,7 +333,7 @@ class OrcaParser:
                                     }
                                 )
                             except Exception as _e:
-                                logging.warning("[parser.py:303] silenced: %s", _e)
+                                logging.warning("silenced: %s", _e)
                         curr += 1
 
             # Scan Step Header
@@ -370,26 +361,26 @@ class OrcaParser:
                             # Format: Actual scan coordinate      ...   1.500000
                             coord_val = float(self.lines[k].split()[-1])
                         except Exception as _e:
-                            logging.warning("[parser.py:331] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     if "FINAL SINGLE POINT ENERGY" in uu:
                         try:
                             en = float(self.lines[k].split()[-1])
                         except Exception as _e:
-                            logging.warning("[parser.py:334] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
                         except Exception as _e:
-                            logging.warning("[parser.py:340] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
                         except Exception as _e:
-                            logging.warning("[parser.py:346] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -492,19 +483,19 @@ class OrcaParser:
                         try:
                             en = float(self.lines[k].split()[-1])
                         except Exception as _e:
-                            logging.warning("[parser.py:441] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
                         except Exception as _e:
-                            logging.warning("[parser.py:446] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
                         except Exception as _e:
-                            logging.warning("[parser.py:451] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -700,7 +691,7 @@ class OrcaParser:
                         [int(p) for p in parts]
                         is_header = True
                 except Exception as _e:
-                    logging.warning("[parser.py:590] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
                 if is_header:
                     current_mos = [int(p) for p in parts]
@@ -757,9 +748,9 @@ class OrcaParser:
                                         self.data["mo_coeffs"][key]["occ"] = occs[k]
                                 curr += 2  # Skip these 2 lines
                             except Exception as _e:
-                                logging.warning("[parser.py:635] silenced: %s", _e)
+                                logging.warning("silenced: %s", _e)
                     except Exception as _e:
-                        logging.warning("[parser.py:636] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
                     curr += 1
                     continue
@@ -804,9 +795,9 @@ class OrcaParser:
                                             }
                                         )
                                 except Exception as _e:
-                                    logging.warning("[parser.py:678] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
                     except Exception as _e:
-                        logging.warning("[parser.py:679] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
 
     def parse_scan(self):
@@ -886,7 +877,7 @@ class OrcaParser:
                             {"atom_idx": idx, "atom_sym": sym, "vector": [vx, vy, vz]}
                         )
                     except Exception as _e:
-                        logging.warning("[parser.py:748] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
 
             if block_grads:
@@ -941,14 +932,12 @@ class OrcaParser:
                     elif mag_au is not None:
                         mag = mag_au
                     else:
-                        import math
-
                         mag = math.sqrt(x * x + y * y + z * z)
 
                     self.data["dipoles"] = {"vector": (x, y, z), "magnitude": mag}
                     self.data["dipole"] = self.data["dipoles"]
             except Exception as _e:
-                logging.warning("[parser.py:798] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
     def parse_charges(self):
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}
@@ -1044,7 +1033,7 @@ class OrcaParser:
 
                         res.append(atom_data)
                     except Exception as _e:
-                        logging.warning("[parser.py:879] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
             return res
 
@@ -1099,7 +1088,7 @@ class OrcaParser:
                             {"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra}
                         )
                     except Exception as _e:
-                        logging.warning("[parser.py:926] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
             if mayer_res:
                 self.data["charges"]["Mayer"] = mayer_res
@@ -1167,7 +1156,7 @@ class OrcaParser:
                                 }
                             )
                         except Exception as _e:
-                            logging.warning("[parser.py:990] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     curr += 1
 
             # 2. Fallback if no summary found (or parsing failed), try simple block near nbo_start
@@ -1204,7 +1193,7 @@ class OrcaParser:
                                 {"atom_idx": idx - 1, "atom_sym": sym, "charge": chg}
                             )
                         except Exception as _e:
-                            logging.warning("[parser.py:1023] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     curr += 1
 
             if nbo_charges:
@@ -1276,7 +1265,7 @@ class OrcaParser:
                                 }
                             )
                         except Exception as _e:
-                            logging.warning("[parser.py:1091] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
                     curr += 1
 
                 if fmo_data:
@@ -1329,7 +1318,7 @@ class OrcaParser:
                             {"atom_idx": idx, "atom_sym": sym, "shielding": val}
                         )
                     except Exception as _e:
-                        logging.warning("[parser.py:1142] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
 
         # Parse Couplings
@@ -1426,7 +1415,7 @@ class OrcaParser:
                                             }
                                         )
                         except Exception as _e:
-                            logging.warning("[parser.py:1232] silenced: %s", _e)
+                            logging.warning("silenced: %s", _e)
 
                 curr += 1
 
@@ -1595,17 +1584,17 @@ class OrcaParser:
                                 try:
                                     entry["energy_ev"] = float(parts[arrow_idx + 2])
                                 except Exception as _e:
-                                    logging.warning("[parser.py:1394] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
 
                                 try:
                                     entry["energy_cm"] = float(parts[arrow_idx + 3])
                                 except Exception as _e:
-                                    logging.warning("[parser.py:1397] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
 
                                 try:
                                     entry["energy_nm"] = float(parts[arrow_idx + 4])
                                 except Exception as _e:
-                                    logging.warning("[parser.py:1400] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
                     except Exception:
                         pass  # パース失敗行はスキップ
 
@@ -1626,7 +1615,7 @@ class OrcaParser:
                         if entry["energy_nm"] == 0:
                             entry["energy_nm"] = float(parts[2])
                     except Exception as _e:
-                        logging.warning("[parser.py:1420] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
                 curr += 1
 
@@ -1672,7 +1661,6 @@ class OrcaParser:
         valid_items.sort(key=lambda x: x["energy_ev"])
 
         self.data["tddft"] = valid_items
-        # print(self.data["tddft"])
 
     def parse_thermal(self):
         self.data["thermal"] = {}
@@ -1745,7 +1733,7 @@ class OrcaParser:
                                     val = float(val_matches[-1])
                                     self.data["thermal"][val_key] = val
                                 except ValueError as _e:
-                                    logging.warning("[parser.py:1531] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
                         else:
                             # Fallback: take the last numeric match
                             matches = re.findall(
@@ -1756,7 +1744,7 @@ class OrcaParser:
                                     val = float(matches[-1])
                                     self.data["thermal"][val_key] = val
                                 except ValueError as _e:
-                                    logging.warning("[parser.py:1539] silenced: %s", _e)
+                                    logging.warning("silenced: %s", _e)
                 curr += 1
 
             # Post-processing: Calculate H correction (H - E_el) more accurately
@@ -1794,7 +1782,7 @@ class OrcaParser:
                     self.data["scf_energy"] = val
                     break
                 except Exception as _e:
-                    logging.warning("[parser.py:1573] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
     def parse_frequencies(self):
         self.data["frequencies"] = []
@@ -1841,7 +1829,7 @@ class OrcaParser:
                             {"freq": val, "ir": 0.0, "raman": 0.0, "vector": []}
                         )
                     except Exception as _e:
-                        logging.warning("[parser.py:1618] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 elif len(self.data["frequencies"]) > 0 and ":" not in line:
                     # Maybe end of block
                     break
@@ -1872,7 +1860,7 @@ class OrcaParser:
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["ir"] = inten
                     except Exception as _e:
-                        logging.warning("[parser.py:1646] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
 
         # 3. Raman
@@ -1900,7 +1888,7 @@ class OrcaParser:
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["raman"] = act
                     except Exception as _e:
-                        logging.warning("[parser.py:1671] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 curr += 1
 
         # 4. Normal Modes
@@ -2041,239 +2029,9 @@ class OrcaParser:
                         self.data["orbital_energies"].append(orb_data)
                         self.data["mos"].append(orb_data)
                     except Exception as _e:
-                        logging.warning("[parser.py:1793] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
 
                 curr += 1
-
-    # COMMENTED OUT: Hessian file parsing no longer needed
-    # Force analysis now uses only output file gradient data
-    # def parse_hessian_file(self, filepath):
-    #     """Parse ORCA Hessian (.hess) file to extract force constants"""
-    #     try:
-    #         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-    #             content = f.read()
-    #     except Exception as e:
-    #         print(f"Error reading Hessian file: {e}")
-    #         return None
-    #
-    #     lines = content.splitlines()
-    #     hessian_data = {
-    #         "matrix": [],
-    #         "frequencies": [],
-    #         "normal_modes": [],
-    #         "atoms": [],
-    #         "coords": [],
-    #         "gradient_vec": []
-    #     }
-    #
-    #     i = 0
-    #     while i < len(lines):
-    #         line = lines[i].strip()
-    #
-    #         # Parse Hessian matrix
-    #         if line == "$hessian":
-    #             i += 1
-    #             if i < len(lines):
-    #                 n_coords = int(lines[i].strip())
-    #                 i += 1
-    #
-    #                 # Read matrix in blocks
-    #                 matrix = [[] for _ in range(n_coords)]
-    #
-    #                 while i < len(lines):
-    #                     line = lines[i].strip()
-    #                     if line.startswith("$"):
-    #                         break
-    #
-    #                     parts = line.split()
-    #                     if len(parts) > 1 and parts[0].isdigit():
-    #                         # Check if it's a header line (all integers)
-    #                         is_header = True
-    #                         try:
-    #                             for p in parts:
-    #                                 if "." in p: # Floats usually have decimal points in ORCA
-    #                                     is_header = False
-    #                                     break
-    #                                 # Attempt to parse as float? ORCA floats are 1.23E-01
-    #                                 # Integers don't have '.' usually
-    #                         except:
-    #                             pass
-    #
-    #                         if is_header:
-    #                             # Double check: try parsing all as ints
-    #                             try:
-    #                                 [int(x) for x in parts]
-    #                                 # It is a header, skip it
-    #                                 i += 1
-    #                                 continue
-    #                             except ValueError:
-    #                                 # Not all ints, so it's data
-    #                                 pass
-    #
-    #                         row_idx = int(parts[0])
-    #                         values = [float(x) for x in parts[1:]]
-    #                         if row_idx < len(matrix):
-    #                             matrix[row_idx].extend(values)
-    #
-    #                     i += 1
-    #
-    #                 hessian_data["matrix"] = matrix
-    #
-    #         # Parse frequencies
-    #         elif line == "$vibrational_frequencies":
-    #             i += 1
-    #             if i < len(lines):
-    #                 n_freq = int(lines[i].strip())
-    #                 i += 1
-    #
-    #                 frequencies = []
-    #                 for _ in range(n_freq):
-    #                     if i >= len(lines):
-    #                         break
-    #                     parts = lines[i].strip().split()
-    #                     if len(parts) >= 2:
-    #                         frequencies.append(float(parts[1]))
-    #                     i += 1
-    #
-    #                 hessian_data["frequencies"] = frequencies
-    #
-    #         # Parse normal modes
-    #         elif line == "$normal_modes":
-    #             i += 1
-    #             if i < len(lines):
-    #                 dims = lines[i].strip().split() # rows cols
-    #                 if len(dims) >= 2:
-    #                     n_rows = int(dims[0]) # 3 * n_atoms
-    #                     n_cols = int(dims[1]) # n_freq
-    #                     i += 1
-    #
-    #                     # Initialize normal modes matrix (n_rows x n_cols)
-    #                     # We want to store per mode, so list of n_cols vectors of length n_rows
-    #                     modes = [[] for _ in range(n_cols)]
-    #
-    #                     while i < len(lines):
-    #                         line = lines[i].strip()
-    #                         if line.startswith("$"):
-    #                             break
-    #
-    #                         # Block headers: 0 1 2 3 ...
-    #                         parts = line.split()
-    #                         if not parts:
-    #                             i += 1
-    #                             continue
-    #
-    #                         # Check if header line (likely integer indices)
-    #                         try:
-    #                             # If all are integers, it's a header line
-    #                             col_indices = [int(x) for x in parts]
-    #                             i += 1 # Move to data
-    #
-    #                             # Read data rows for this block
-    #                             for r in range(n_rows):
-    #                                 if i >= len(lines): break
-    #                                 line = lines[i].strip()
-    #                                 parts = line.split()
-    #                                 # First part is row index
-    #                                 if len(parts) > 1:
-    #                                     # row_idx = int(parts[0])
-    #                                     vals = [float(x) for x in parts[1:]]
-    #                                     for k, col_idx in enumerate(col_indices):
-    #                                         if col_idx < len(modes):
-    #                                             modes[col_idx].append(vals[k])
-    #                                 i += 1
-    #                         except ValueError:
-    #                             # Not a header line? Should not happen if format is strict
-    #                             i += 1
-    #
-    #                     # Reformat to list of vectors (tuples) for each mode
-    #                     # Each mode is list of 3N floats. Convert to list of (x,y,z)
-    #                     formatted_modes = []
-    #                     for m in modes:
-    #                         vecs = []
-    #                         for k in range(0, len(m), 3):
-    #                             if k+2 < len(m):
-    #                                 vecs.append((m[k], m[k+1], m[k+2]))
-    #                         formatted_modes.append(vecs)
-    #
-    #                     hessian_data["normal_modes"] = formatted_modes
-    #
-    #         # Parse atoms
-    #         elif line == "$atoms":
-    #             i += 1
-    #             if i < len(lines):
-    #                 n_atoms = int(lines[i].strip())
-    #                 i += 1
-    #
-    #                 atoms = []
-    #                 coords = []
-    #                 for _ in range(n_atoms):
-    #                     if i >= len(lines):
-    #                         break
-    #                     parts = lines[i].strip().split()
-    #                     if len(parts) >= 5:
-    #                         atoms.append(parts[0])
-    #                         # Convert Bohr to Angstrom
-    #                         BOHR_TO_ANG = 0.529177249
-    #                         coords.append([
-    #                             float(parts[2]) * BOHR_TO_ANG,
-    #                             float(parts[3]) * BOHR_TO_ANG,
-    #                             float(parts[4]) * BOHR_TO_ANG
-    #                         ])
-    #                     i += 1
-    #
-    #                 hessian_data["atoms"] = atoms
-    #                 hessian_data["coords"] = coords
-    #
-    #         # Parse Gradient (Forces)
-    #         elif line == "$gradient":
-    #             i += 1
-    #             if i < len(lines):
-    #                 try:
-    #                     n_grad = int(lines[i].strip())
-    #                     i += 1
-    #
-    #                     gradients_vec = []
-    #                     for _ in range(n_grad):
-    #                         if i >= len(lines): break
-    #
-    #                         parts = lines[i].strip().split()
-    #                         if not parts:
-    #                             i += 1
-    #                             continue
-    #
-    #                         val = 0.0
-    #                         # Robust parsing: Check format "index value" vs "value"
-    #                         if len(parts) >= 2:
-    #                             # Assume "index value" format usually
-    #                             # Check if first part is int
-    #                             try:
-    #                                 # If parts[0] is int, parts[1] is value
-    #                                 idx = int(parts[0])
-    #                                 val = float(parts[1])
-    #                             except ValueError:
-    #                                 # Maybe format is "value value"? Unlikely for gradient (1D)
-    #                                 # Or parts[0] is actually the float value?
-    #                                 try:
-    #                                     val = float(parts[0])
-    #                                 except:
-    #                                     pass
-    #                         elif len(parts) == 1:
-    #                             # Just value
-    #                             try:
-    #                                 val = float(parts[0])
-    #                             except: pass
-    #
-    #                         gradients_vec.append(val)
-    #                         i += 1
-    #
-    #                     hessian_data["gradient_vec"] = gradients_vec
-    #                 except ValueError:
-    #                      print("Error parsing number of gradients")
-    #                      i += 1
-    #
-    #         i += 1
-    #
-    #     return hessian_data
 
     def parse_scan_results_table(self):
         """
@@ -2430,7 +2188,7 @@ class OrcaParser:
 
                     continue
                 except Exception as _e:
-                    logging.warning("[parser.py:2173] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             curr += 1
             if curr > start_idx + 5000:
@@ -2562,4 +2320,3 @@ class OrcaParser:
                         i = idx
                         continue
             i += 1
-        # print(f"OrcaParser: Parsed {len(self.data['scf_traces'])} SCF trace blocks.")

@@ -179,7 +179,7 @@ class TrajectoryResultDialog(QDialog):
                         loaded = True
                         break
                     except Exception as e:
-                        logging.warning("[traj_analysis.py:133] silenced: %s", e)
+                        logging.warning("silenced: %s", e)
 
             if not loaded and self.base_dir:
                 # 2. Heuristic: look for unique *_MEP_trj.xyz in base_dir
@@ -194,7 +194,7 @@ class TrajectoryResultDialog(QDialog):
                         self.load_external_trj(full_path, silent=True)
                         loaded = True
                 except Exception as _e:
-                    logging.warning("[traj_analysis.py:144] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             if not loaded:
                 # 3. Last resort: prompt user
@@ -599,12 +599,12 @@ class TrajectoryResultDialog(QDialog):
             try:
                 self._highlight_marker.remove()
             except Exception as _e:
-                logging.warning("[traj_analysis.py:520] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
             except Exception as _e:
-                logging.warning("[traj_analysis.py:523] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
 
         y = self.display_energies[idx]
 
@@ -842,33 +842,33 @@ class TrajectoryResultDialog(QDialog):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
                     except Exception as _e:
-                        logging.warning("[traj_analysis.py:699] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
                 else:
                     try:
                         self.context.set_3d_features_enabled(True)
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
                     except Exception as _e:
-                        logging.warning("[traj_analysis.py:705] silenced: %s", _e)
+                        logging.warning("silenced: %s", _e)
             elif hasattr(mw, "init_manager") and hasattr(mw.init_manager, "splitter"):
                 # Fallback for manual splitter manipulation if ui_manager is missing
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
                 except Exception as _e:
-                    logging.warning("[traj_analysis.py:711] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             # Reset Camera
             if self.context:
                 try:
                     self.context.reset_3d_camera()
                 except Exception as _e:
-                    logging.warning("[traj_analysis.py:717] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
             elif hasattr(mw, "plotter") and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
                 except Exception as _e:
-                    logging.warning("[traj_analysis.py:717] silenced: %s", _e)
+                    logging.warning("silenced: %s", _e)
 
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
@@ -997,13 +997,13 @@ class TrajectoryResultDialog(QDialog):
             try:
                 self._highlight_marker.remove()
             except Exception as _e:
-                logging.warning("[traj_analysis.py:828] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             del self._highlight_marker
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
             except Exception as _e:
-                logging.warning("[traj_analysis.py:832] silenced: %s", _e)
+                logging.warning("silenced: %s", _e)
             del self._highlight_line
 
         self.lbl_info.setText("Selection Cleared")
