@@ -16,6 +16,20 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 
+_TABLE_STYLE = """
+    QTableWidget { gridline-color: #e6e6e6; background: #ffffff; }
+    QTableWidget::item { padding: 4px 8px; }
+    QTableWidget::item:selected { background: #cfe5ff; color: #000; }
+    QHeaderView::section {
+        background-color: #f3f3f3;
+        padding: 5px 8px;
+        border: none;
+        border-bottom: 1px solid #cccccc;
+        font-weight: bold;
+    }
+"""
+
+
 class PropertiesDialog(QDialog):
     def __init__(self, parent, data):
         super().__init__(parent)
@@ -51,6 +65,9 @@ class PropertiesDialog(QDialog):
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.setStyleSheet(_TABLE_STYLE)
         for r, (name, value) in enumerate(rows):
             table.setItem(r, 0, QTableWidgetItem(name))
             val_item = QTableWidgetItem(value)
@@ -58,10 +75,11 @@ class PropertiesDialog(QDialog):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
             table.setItem(r, 1, val_item)
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.ResizeToContents
-        )
+        table.verticalHeader().setDefaultSectionSize(26)
+        header = table.horizontalHeader()
+        header.setHighlightSections(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(table)
 
         btn_row = QHBoxLayout()

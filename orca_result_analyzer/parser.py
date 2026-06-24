@@ -1074,11 +1074,14 @@ class OrcaParser:
                 break
             m = pattern.match(line)
             if m:
+                atoms_str = m.group(3).strip()
+                atom_indices = [int(n) - 1 for n in re.findall(r"\d+", atoms_str)]
                 orbitals.append(
                     {
                         "index": int(m.group(1)),
                         "type": m.group(2),
-                        "atoms": m.group(3).strip(),
+                        "atoms": atoms_str,
+                        "atom_indices": atom_indices,
                         "occupancy": float(m.group(4)),
                         "energy": float(m.group(5)),
                     }
