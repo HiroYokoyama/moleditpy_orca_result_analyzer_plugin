@@ -34,7 +34,7 @@ class PropertiesDialog(QDialog):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Properties")
-        self.resize(540, 460)
+        self.resize(440, 400)
 
         rows = []
         energy = data.get("scf_energy")
