@@ -1958,17 +1958,11 @@ class OrcaParser:
                 and "---" in self.lines[i + 1]
             ):
                 start_indices.append((i, "restricted"))  # Default
-            elif (
-                "SPIN UP ORBITALS" in uu
-                and i + 1 < len(self.lines)
-                and "---" in self.lines[i + 1]
-            ):
+            elif "SPIN UP ORBITALS" in uu:
+                # Real ORCA prints the "NO OCC E(Eh) E(eV)" column header on the
+                # next line (not a "---" separator), so do not require one here.
                 start_indices.append((i, "alpha"))
-            elif (
-                "SPIN DOWN ORBITALS" in uu
-                and i + 1 < len(self.lines)
-                and "---" in self.lines[i + 1]
-            ):
+            elif "SPIN DOWN ORBITALS" in uu:
                 start_indices.append((i, "beta"))
 
         if not start_indices:
@@ -1979,14 +1973,25 @@ class OrcaParser:
         for idx, spin in start_indices:
             final_indices[spin] = idx
 
+        # Open-shell/UHF: explicit spin sections exist. The generic
+        # "ORBITAL ENERGIES" header points at the alpha block and would
+        # otherwise be read as a single "restricted" block (swallowing the
+        # alpha orbitals and dropping the entire beta manifold), so discard it
+        # in favor of the dedicated alpha/beta blocks.
+        if "alpha" in final_indices or "beta" in final_indices:
+            final_indices.pop("restricted", None)
+
         filtered_indices = []
         for spin, idx in final_indices.items():
             filtered_indices.append((idx, spin))
         filtered_indices.sort()
 
         for start_idx, spin in filtered_indices:
-            # Skip title and separator, then find column header
-            curr = start_idx + 2
+            # Skip the section title, then find the column header. The header
+            # sits at start_idx+1 for spin blocks (no separator) and at
+            # start_idx+2 for the restricted block (after the "---" rule), so
+            # scan from start_idx+1 to cover both.
+            curr = start_idx + 1
             while curr < len(self.lines) and curr < start_idx + 10:
                 line = self.lines[curr].strip()
                 # Check for "NO", "OCC", and "Eh" or "eV"
@@ -1999,7 +2004,13 @@ class OrcaParser:
 
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
-                if not line or "---" in line or "****" in line or "MULLIKEN" in line:
+                if (
+                    not line
+                    or "---" in line
+                    or "****" in line
+                    or "MULLIKEN" in line
+                    or "ORBITALS" in line.upper()
+                ):
                     break
                 if line.startswith("*"):
                     curr += 1

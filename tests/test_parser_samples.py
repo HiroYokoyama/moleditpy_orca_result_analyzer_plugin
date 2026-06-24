@@ -1217,5 +1217,92 @@ class TestRelaxedSurfaceScan(unittest.TestCase):
             self.assertAlmostEqual(opt_f["energy"], expected, places=8)
 
 
+# ---------------------------------------------------------------------------
+# Open-shell / UHF orbital energies  —  ORCA 6 (o2-opt.out, triplet O2)
+# ---------------------------------------------------------------------------
+
+
+class TestO2OpenShellOrbitals(unittest.TestCase):
+    """o2-opt_orb.out (ORCA 6, O2 triplet, UHF) — alpha/beta orbital separation.
+
+    Regression for the open-shell orbital bug: real ORCA prints the
+    "NO OCC E(Eh) E(eV)" column header directly under "SPIN UP/DOWN ORBITALS"
+    (no "---" separator). The parser used to read only a single "restricted"
+    block, mislabeling the alpha orbitals and dropping the entire beta manifold.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("o2-opt_orb.out")
+
+    def test_is_open_shell(self):
+        self.assertEqual(self.p.data["mult"], 3)
+
+    def test_both_spins_present(self):
+        spins = {o["spin"] for o in self.p.data["orbital_energies"]}
+        self.assertIn("alpha", spins)
+        self.assertIn("beta", spins)
+
+    def test_no_restricted_label_for_uhf(self):
+        spins = {o["spin"] for o in self.p.data["orbital_energies"]}
+        self.assertNotIn("restricted", spins)
+
+    def test_alpha_and_beta_counts(self):
+        alpha = [o for o in self.p.data["orbital_energies"] if o["spin"] == "alpha"]
+        beta = [o for o in self.p.data["orbital_energies"] if o["spin"] == "beta"]
+        self.assertEqual(len(alpha), 20)
+        self.assertEqual(len(beta), 18)
+
+    def test_beta_manifold_not_dropped(self):
+        beta = [o for o in self.p.data["orbital_energies"] if o["spin"] == "beta"]
+        self.assertGreater(len(beta), 0, "beta orbitals must not be dropped")
+
+    def test_triplet_occupation_difference(self):
+        """Triplet O2 has 2 more alpha electrons than beta (9 vs 7 occupied)."""
+        alpha_occ = sum(
+            1
+            for o in self.p.data["orbital_energies"]
+            if o["spin"] == "alpha" and o["type"] == "occupied"
+        )
+        beta_occ = sum(
+            1
+            for o in self.p.data["orbital_energies"]
+            if o["spin"] == "beta" and o["type"] == "occupied"
+        )
+        self.assertEqual(alpha_occ, 9)
+        self.assertEqual(beta_occ, 7)
+        self.assertEqual(alpha_occ - beta_occ, 2)
+
+    def test_alpha_homo_negative(self):
+        alpha_occ = [
+            o
+            for o in self.p.data["orbital_energies"]
+            if o["spin"] == "alpha" and o["type"] == "occupied"
+        ]
+        homo = max(alpha_occ, key=lambda o: o["energy_eh"])
+        self.assertLess(homo["energy_eh"], 0.0)
+
+    # --- MO coefficients (o2-opt_orb.out prints the molecular orbital block) ---
+
+    def test_mo_coeffs_present(self):
+        self.assertGreater(len(self.p.data["mo_coeffs"]), 0)
+
+    def test_mo_coeffs_both_spins(self):
+        spins = {v["spin"] for v in self.p.data["mo_coeffs"].values()}
+        self.assertIn("alpha", spins)
+        self.assertIn("beta", spins)
+
+    def test_mo_coeffs_spin_keys(self):
+        """Keys are namespaced by spin so alpha/beta MOs never collide."""
+        keys = list(self.p.data["mo_coeffs"].keys())
+        self.assertTrue(any(k.endswith("_alpha") for k in keys))
+        self.assertTrue(any(k.endswith("_beta") for k in keys))
+
+    def test_mo_coeffs_have_coefficients(self):
+        for mo in self.p.data["mo_coeffs"].values():
+            self.assertIn("coeffs", mo)
+            self.assertGreater(len(mo["coeffs"]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

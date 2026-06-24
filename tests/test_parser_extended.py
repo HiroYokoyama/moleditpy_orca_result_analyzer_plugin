@@ -141,6 +141,26 @@ SPIN DOWN ORBITALS
 """
 
 
+# UHF as real ORCA actually prints it: an "ORBITAL ENERGIES" header followed
+# by "SPIN UP/DOWN ORBITALS" sub-blocks whose column header sits on the very
+# next line (NO "---" separator), with a blank line between the two spins.
+_ORBITAL_UHF_REAL = """\
+ORBITAL ENERGIES
+----------------
+                 SPIN UP ORBITALS
+  NO   OCC          E(Eh)            E(eV)
+    0   1.0000     -19.36210      -526.86960
+    1   1.0000      -1.34548       -36.61250
+    2   0.0000       0.25639         6.97690
+
+                 SPIN DOWN ORBITALS
+  NO   OCC          E(Eh)            E(eV)
+    0   1.0000     -19.33005      -525.99760
+    1   0.0000       0.30000         8.16340
+---
+"""
+
+
 class TestParseOrbitalEnergies(unittest.TestCase):
     def test_restricted_count(self):
         p = _parse_method(_ORBITAL_RESTRICTED, "parse_orbital_energies")
@@ -187,6 +207,29 @@ class TestParseOrbitalEnergies(unittest.TestCase):
     def test_empty_content(self):
         p = _parse_method("", "parse_orbital_energies")
         self.assertEqual(p.data["orbital_energies"], [])
+
+    def test_uhf_real_format_both_spins(self):
+        """Real ORCA UHF layout (header on next line, no '---') must split spins."""
+        p = _parse_method(_ORBITAL_UHF_REAL, "parse_orbital_energies")
+        spins = {mo["spin"] for mo in p.data["orbital_energies"]}
+        self.assertIn("alpha", spins)
+        self.assertIn("beta", spins)
+        self.assertNotIn("restricted", spins)
+
+    def test_uhf_real_format_counts(self):
+        """Alpha block (3 orbitals) and beta block (2 orbitals) must both be read."""
+        p = _parse_method(_ORBITAL_UHF_REAL, "parse_orbital_energies")
+        alpha = [o for o in p.data["orbital_energies"] if o["spin"] == "alpha"]
+        beta = [o for o in p.data["orbital_energies"] if o["spin"] == "beta"]
+        self.assertEqual(len(alpha), 3)
+        self.assertEqual(len(beta), 2)
+
+    def test_uhf_real_format_beta_energies(self):
+        """Beta manifold must carry its own energies, not be dropped."""
+        p = _parse_method(_ORBITAL_UHF_REAL, "parse_orbital_energies")
+        beta = [o for o in p.data["orbital_energies"] if o["spin"] == "beta"]
+        self.assertAlmostEqual(beta[0]["energy_eh"], -19.33005, places=4)
+        self.assertAlmostEqual(beta[1]["energy_eh"], 0.30000, places=4)
 
 
 # ---------------------------------------------------------------------------
