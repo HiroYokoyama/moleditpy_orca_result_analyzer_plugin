@@ -22,10 +22,22 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeySequence
+
+
+def _hyb_percent(hybrids):
+    """Compact percent-only hybridization summary for the table column."""
+    out = []
+    for h in hybrids:
+        seg = f"{h['atom_sym']} {h['s_pct']:.0f}s {h['p_pct']:.0f}p"
+        if h.get("d_pct", 0.0) >= 1.0:
+            seg += f" {h['d_pct']:.0f}d"
+        out.append(seg)
+    return "   ·   ".join(out)
 
 
 class _CopyableTable(QTableWidget):
@@ -146,9 +158,7 @@ class BondAnalysisDialog(QDialog):
                     " ".join(o["atoms"].split()),
                     f"{o['occupancy']:.5f}",
                     f"{o['energy']:.5f}",
-                    ",  ".join(
-                        f"{h['atom_sym']}: {h['label']}" for h in o.get("hybrids", [])
-                    ),
+                    _hyb_percent(o.get("hybrids", [])),
                 ]
                 for o in self._nbo
             ]
@@ -157,6 +167,7 @@ class BondAnalysisDialog(QDialog):
                 rows,
             )
             t.itemSelectionChanged.connect(lambda tbl=t: self._on_nbo_selected(tbl))
+            t.cellDoubleClicked.connect(lambda r, _c: self._show_nbo_detail(r))
             tabs.addTab(t, f"NBO Orbitals ({len(self._nbo)})")
 
         if pert:
@@ -181,7 +192,10 @@ class BondAnalysisDialog(QDialog):
         if tabs.count() == 0:
             layout.addWidget(QLabel("No bond-analysis data found."))
         else:
-            hint = QLabel("Select a row to highlight it in the 3D view.")
+            hint = QLabel(
+                "Select a row to highlight it in 3D · double-click an NBO row "
+                "for raw values · Ctrl+C to copy."
+            )
             hint.setStyleSheet("color:#777; font-size:9pt;")
             layout.addWidget(hint)
             layout.addWidget(tabs)
@@ -305,6 +319,28 @@ class BondAnalysisDialog(QDialog):
             return
         if 0 <= row < len(self._nbo):
             self._highlight_atoms(self._nbo[row].get("atom_indices", []))
+
+    def _show_nbo_detail(self, row):
+        """Popup with the raw per-atom hybridization values for one NBO."""
+        if not (0 <= row < len(self._nbo)):
+            return
+        o = self._nbo[row]
+        lines = [
+            f"NBO #{o['index']}:  {o['type']}  ({o['atoms']})",
+            f"Occupancy: {o['occupancy']:.5f}    Energy: {o['energy']:.5f} Eh",
+        ]
+        hybrids = o.get("hybrids", [])
+        if hybrids:
+            lines.append("")
+            lines.append("Hybridization (raw %):")
+            for h in hybrids:
+                weight = f"  weight {h['weight_pct']:.2f}%" if "weight_pct" in h else ""
+                lines.append(
+                    f"  {h['atom_sym']} {h['atom_idx']}:"
+                    f"  s {h['s_pct']:.2f}%,  p {h['p_pct']:.2f}%,"
+                    f"  d {h['d_pct']:.2f}%   [{h['label']}]{weight}"
+                )
+        QMessageBox.information(self, f"NBO #{o['index']} detail", "\n".join(lines))
 
     def closeEvent(self, event):
         self._clear_highlight()

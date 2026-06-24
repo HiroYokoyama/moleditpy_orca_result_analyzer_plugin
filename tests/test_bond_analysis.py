@@ -58,6 +58,7 @@ def _install_stubs():
         "QTableWidgetItem",
         "QHeaderView",
         "QLabel",
+        "QMessageBox",
         "QPushButton",
         "QWidget",
     ]:
