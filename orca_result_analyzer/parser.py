@@ -1195,6 +1195,7 @@ class OrcaParser:
                 "p_pct": p_pct,
                 "d_pct": d_pct,
                 "label": _label(s_pct, p_pct, d_pct),
+                "raw": text[sm.start() :].rstrip(),
             }
             if weight is not None:
                 comp["weight_pct"] = weight

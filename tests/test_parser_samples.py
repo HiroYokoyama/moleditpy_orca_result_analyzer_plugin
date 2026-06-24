@@ -1593,6 +1593,14 @@ class TestNboAnalysis(unittest.TestCase):
         self.assertTrue(o_comp["label"].startswith("sp"))
         self.assertEqual(h_comp["label"], "s")
 
+    def test_nbo_hybrid_raw_text_captured(self):
+        """Each hybrid component keeps the verbatim ORCA text for the detail view."""
+        bd = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "BD")
+        o_comp = next(h for h in bd["hybrids"] if h["atom_sym"] == "O")
+        self.assertTrue(o_comp["raw"].startswith("s("))
+        self.assertIn("22.56%", o_comp["raw"])
+        self.assertIn("77.29%", o_comp["raw"])
+
     def test_nbo_core_and_lone_pair_hybrids(self):
         cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
         self.assertEqual(cr["hybrids"][0]["label"], "s")  # 1s core

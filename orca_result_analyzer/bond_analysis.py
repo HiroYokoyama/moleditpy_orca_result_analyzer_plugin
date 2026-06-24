@@ -374,6 +374,8 @@ class BondAnalysisDialog(QDialog):
                     f"  s {h['s_pct']:.2f}%,  p {h['p_pct']:.2f}%,"
                     f"  d {h['d_pct']:.2f}%   [{h['label']}]{weight}"
                 )
+                if h.get("raw"):
+                    lines.append(f"      raw: {h['raw']}")
         QMessageBox.information(self, f"NBO #{o['index']} detail", "\n".join(lines))
 
     def closeEvent(self, event):
