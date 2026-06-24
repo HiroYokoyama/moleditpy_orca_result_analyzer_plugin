@@ -62,7 +62,9 @@ def _install_stubs():
         "QWidget",
     ]:
         setattr(qtw, cls, type(cls, (_Base,), {}))
+    qtw.QApplication = MagicMock()
     sys.modules["PyQt6.QtCore"].Qt = MagicMock()
+    sys.modules["PyQt6.QtGui"].QKeySequence = MagicMock()
     sys.modules["pyvista"] = _PV_STUB
 
 

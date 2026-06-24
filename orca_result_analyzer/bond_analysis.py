@@ -13,6 +13,7 @@ atom(s) it spans.
 import logging
 
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -24,6 +25,29 @@ from PyQt6.QtWidgets import (
     QPushButton,
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QKeySequence
+
+
+class _CopyableTable(QTableWidget):
+    """Read-only table whose selection copies (Ctrl+C) as multi-line TSV text."""
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self._copy_selection()
+            return
+        super().keyPressEvent(event)
+
+    def _copy_selection(self):
+        items = self.selectedItems()
+        if not items:
+            return
+        rows = {}
+        for it in items:
+            rows.setdefault(it.row(), {})[it.column()] = it.text()
+        lines = [
+            "\t".join(cols[c] for c in sorted(cols)) for _, cols in sorted(rows.items())
+        ]
+        QApplication.clipboard().setText("\n".join(lines))
 
 
 _TABLE_STYLE = """
@@ -41,12 +65,12 @@ _TABLE_STYLE = """
 
 
 def _make_table(headers, rows):
-    table = QTableWidget(len(rows), len(headers))
+    table = _CopyableTable(len(rows), len(headers))
     table.setHorizontalHeaderLabels(headers)
     table.verticalHeader().setVisible(False)
     table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-    table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+    table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
     table.setAlternatingRowColors(True)
     table.setShowGrid(False)
     table.setStyleSheet(_TABLE_STYLE)
@@ -255,14 +279,30 @@ class BondAnalysisDialog(QDialog):
         except Exception as _e:
             logging.warning("silenced: %s", _e)
 
+    @staticmethod
+    def _single_selected_row(table):
+        """Return the row index iff exactly one row is selected, else None.
+
+        Multi-row selections (used for copy) clear the 3D highlight rather than
+        showing an ambiguous single one.
+        """
+        rows = table.selectionModel().selectedRows()
+        return rows[0].row() if len(rows) == 1 else None
+
     def _on_mayer_selected(self, table):
-        row = table.currentRow()
+        row = self._single_selected_row(table)
+        if row is None:
+            self._clear_highlight()
+            return
         if 0 <= row < len(self._mbo):
             b = self._mbo[row]
             self._highlight_bond(b["atom_idx1"], b["atom_idx2"])
 
     def _on_nbo_selected(self, table):
-        row = table.currentRow()
+        row = self._single_selected_row(table)
+        if row is None:
+            self._clear_highlight()
+            return
         if 0 <= row < len(self._nbo):
             self._highlight_atoms(self._nbo[row].get("atom_indices", []))
 
