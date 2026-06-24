@@ -206,5 +206,28 @@ class TestHighlight(unittest.TestCase):
         self.assertEqual(len(dlg._actors), 0)
 
 
+# ---------------------------------------------------------------------------
+# Hybridization column text reflects the parsed (file) values
+# ---------------------------------------------------------------------------
+
+
+class TestHybridPercentColumn(unittest.TestCase):
+    def test_bond_two_atoms_from_file_values(self):
+        # O-H bond from nbo-test.out: O s22.56/p77.29/d0.15, H s99.76/p0.24
+        hybrids = [
+            {"atom_sym": "O", "s_pct": 22.56, "p_pct": 77.29, "d_pct": 0.15},
+            {"atom_sym": "H", "s_pct": 99.76, "p_pct": 0.24, "d_pct": 0.0},
+        ]
+        # d < 1% is omitted; percentages are rounded to whole numbers.
+        self.assertEqual(B._hyb_percent(hybrids), "O 23s 77p   ·   H 100s 0p")
+
+    def test_d_shown_only_when_significant(self):
+        hybrids = [{"atom_sym": "X", "s_pct": 20.0, "p_pct": 70.0, "d_pct": 10.0}]
+        self.assertEqual(B._hyb_percent(hybrids), "X 20s 70p 10d")
+
+    def test_empty_hybrids(self):
+        self.assertEqual(B._hyb_percent([]), "")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -41,7 +41,34 @@ def _hyb_percent(hybrids):
 
 
 class _CopyableTable(QTableWidget):
-    """Read-only table whose selection copies (Ctrl+C) as multi-line TSV text."""
+    """Read-only table whose selection copies (Ctrl+C) as multi-line TSV text.
+
+    Optionally distributes column widths by per-column weights (so e.g. the
+    Hybridization column can be wider than the rest).
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._col_weights = None
+
+    def set_column_weights(self, weights):
+        self._col_weights = list(weights)
+        self._apply_weights()
+
+    def _apply_weights(self):
+        if not self._col_weights:
+            return
+        total = sum(self._col_weights)
+        if total <= 0:
+            return
+        width = self.viewport().width()
+        for c, w in enumerate(self._col_weights):
+            if c < self.columnCount():
+                self.setColumnWidth(c, max(48, int(width * w / total)))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_weights()
 
     def keyPressEvent(self, event):
         if event.matches(QKeySequence.StandardKey.Copy):
@@ -76,7 +103,7 @@ _TABLE_STYLE = """
 """
 
 
-def _make_table(headers, rows):
+def _make_table(headers, rows, weights=None):
     table = _CopyableTable(len(rows), len(headers))
     table.setHorizontalHeaderLabels(headers)
     table.verticalHeader().setVisible(False)
@@ -94,8 +121,14 @@ def _make_table(headers, rows):
     table.verticalHeader().setDefaultSectionSize(32)
     header = table.horizontalHeader()
     header.setHighlightSections(False)
-    for c in range(len(headers)):
-        header.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+    if weights:
+        # Width distributed by weight (e.g. a wider Hybridization column).
+        for c in range(len(headers)):
+            header.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
+        table.set_column_weights(weights)
+    else:
+        for c in range(len(headers)):
+            header.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
     return table
 
 
@@ -165,6 +198,7 @@ class BondAnalysisDialog(QDialog):
             t = _make_table(
                 ["#", "Type", "Atoms", "Occupancy", "Energy (Eh)", "Hybridization"],
                 rows,
+                weights=[1, 1, 1.2, 1, 1, 2.5],
             )
             t.itemSelectionChanged.connect(lambda tbl=t: self._on_nbo_selected(tbl))
             t.cellDoubleClicked.connect(lambda r, _c: self._show_nbo_detail(r))
