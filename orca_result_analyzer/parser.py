@@ -949,7 +949,6 @@ class OrcaParser:
         mayer_start = -1
         nbo_start = -1
         chelpg_start = -1
-        mk_start = -1
         mbis_start = -1
         resp_start = -1
         fmo_start = -1
@@ -976,8 +975,6 @@ class OrcaParser:
                 # "CHELPG CHARGES GENERATION" / "CHELPG charges calculated"
                 # status lines that also contain the phrase.
                 chelpg_start = i
-            elif "MERZ-KOLLMAN ATOMIC CHARGES" in uu or "MK ATOMIC CHARGES" in uu:
-                mk_start = i
             elif "MBIS ANALYSIS" in uu:
                 mbis_start = i
             elif (
@@ -1058,7 +1055,6 @@ class OrcaParser:
             hirshfeld_start, hirshfeld=True
         )
         self.data["charges"]["CHELPG"] = parse_standard_block(chelpg_start)
-        self.data["charges"]["MK"] = parse_standard_block(mk_start)
         self.data["charges"]["MBIS"] = parse_standard_block(
             mbis_start, header_lines=3, mbis=True
         )
