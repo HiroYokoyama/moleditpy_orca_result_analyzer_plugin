@@ -160,6 +160,31 @@ class OrcaResultAnalyzerDialog(QDialog):
         close_action.triggered.connect(self.close)
         file_menu.addAction(close_action)
 
+        # Analysis Menu (text-only; mirrors the quick-access buttons below)
+        analysis_menu = menu_bar.addMenu("&Analysis")
+        analysis_items = [
+            ("SCF Trace", self.show_scf_trace),
+            ("MO Analysis", self.show_mo_analyzer),
+            ("Optimization / Scan", self.show_trajectory),
+            ("Forces", self.show_forces),
+            ("Atomic Charges", self.show_charges),
+            ("Dipole Moment", self.show_dipole),
+            ("Frequencies", self.show_freq),
+            ("Thermochemistry", self.show_thermal),
+            ("TD-DFT", self.show_tddft),
+            ("NMR", self.show_nmr),
+            (None, None),  # separator
+            ("Properties", self.show_properties),
+            ("Bond Analysis", self.show_bond_analysis),
+        ]
+        for label, slot in analysis_items:
+            if label is None:
+                analysis_menu.addSeparator()
+                continue
+            act = QAction(label, self)
+            act.triggered.connect(slot)
+            analysis_menu.addAction(act)
+
         # Current File Display with Open Button
         file_frame = QWidget()
         file_frame.setStyleSheet("""
@@ -1012,3 +1037,33 @@ class OrcaResultAnalyzerDialog(QDialog):
             self, data, dispersion=self.parser.data.get("dispersion")
         )
         self.scf_dlg.show()
+
+    def show_properties(self):
+        from .property_analysis import PropertiesDialog
+
+        if getattr(self, "props_dlg", None) is not None:
+            try:
+                self.props_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+        self.props_dlg = PropertiesDialog(self, self.parser.data)
+        self.props_dlg.show()
+
+    def show_bond_analysis(self):
+        from .bond_analysis import BondAnalysisDialog
+
+        data = self.parser.data
+        if not (
+            data.get("mayer_bond_orders")
+            or data.get("nbo_orbitals")
+            or data.get("nbo_perturbation")
+        ):
+            QMessageBox.warning(self, "No Info", "No bond-analysis data found.")
+            return
+        if getattr(self, "bond_dlg", None) is not None:
+            try:
+                self.bond_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+        self.bond_dlg = BondAnalysisDialog(self, data)
+        self.bond_dlg.show()
