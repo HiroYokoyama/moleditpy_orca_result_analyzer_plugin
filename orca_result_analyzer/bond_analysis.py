@@ -89,7 +89,7 @@ class BondAnalysisDialog(QDialog):
         super().__init__(parent)
         self.parent_dlg = parent  # OrcaResultAnalyzerDialog (has .mw, .parser)
         self.setWindowTitle("Bond Analysis")
-        self.resize(640, 500)
+        self.resize(900, 640)
 
         self._actors = []
         self._mbo = data.get("mayer_bond_orders", [])
