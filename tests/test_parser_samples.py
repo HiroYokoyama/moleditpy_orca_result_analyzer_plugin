@@ -1304,5 +1304,100 @@ class TestO2OpenShellOrbitals(unittest.TestCase):
             self.assertGreater(len(mo["coeffs"]), 0)
 
 
+# ---------------------------------------------------------------------------
+# CHELPG charges  —  ORCA 6 (chelpg-test.inp.out, water)
+# ---------------------------------------------------------------------------
+
+
+class TestChelpgCharges(unittest.TestCase):
+    """chelpg-test.inp.out — regression: real ORCA labels the block
+    "CHELPG Charges", not "CHELPG ATOMIC CHARGES". The marker used to miss it
+    entirely, silently dropping all CHELPG charges."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("chelpg-test.inp.out")
+
+    def test_chelpg_present(self):
+        self.assertIn("CHELPG", self.p.data["charges"])
+
+    def test_chelpg_count(self):
+        self.assertEqual(len(self.p.data["charges"]["CHELPG"]), 3)
+
+    def test_chelpg_values(self):
+        chg = self.p.data["charges"]["CHELPG"]
+        self.assertEqual(chg[0]["atom_sym"], "O")
+        self.assertAlmostEqual(chg[0]["charge"], -0.709308, places=4)
+        self.assertAlmostEqual(chg[1]["charge"], 0.354383, places=4)
+
+    def test_chelpg_sum_near_zero(self):
+        total = sum(c["charge"] for c in self.p.data["charges"]["CHELPG"])
+        self.assertAlmostEqual(total, 0.0, places=3)
+
+
+# ---------------------------------------------------------------------------
+# MBIS charges  —  ORCA 6 (mbis-test.out, water)
+# ---------------------------------------------------------------------------
+
+
+class TestMbisCharges(unittest.TestCase):
+    """mbis-test.out — MBIS ANALYSIS block (charge / population / spin)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("mbis-test.out")
+
+    def test_mbis_present(self):
+        self.assertIn("MBIS", self.p.data["charges"])
+
+    def test_mbis_count(self):
+        self.assertEqual(len(self.p.data["charges"]["MBIS"]), 3)
+
+    def test_mbis_charge_and_population(self):
+        o = self.p.data["charges"]["MBIS"][0]
+        self.assertEqual(o["atom_sym"], "O")
+        self.assertAlmostEqual(o["charge"], -0.788429, places=4)
+        self.assertAlmostEqual(o["population"], 8.788429, places=4)
+
+    def test_mbis_sum_near_zero(self):
+        total = sum(c["charge"] for c in self.p.data["charges"]["MBIS"])
+        self.assertAlmostEqual(total, 0.0, places=3)
+
+
+# ---------------------------------------------------------------------------
+# NMR spin-spin couplings  —  ORCA 6 (nmr-coupling-test.out, methane)
+# ---------------------------------------------------------------------------
+
+
+class TestNmrCouplings(unittest.TestCase):
+    """nmr-coupling-test.out — SUMMARY OF ISOTROPIC COUPLING CONSTANTS J (Hz).
+
+    Methane (C + 4H = 5 nuclei) -> C(5,2) = 10 unique pairwise couplings.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("nmr-coupling-test.out")
+
+    def test_shielding_count(self):
+        self.assertEqual(len(self.p.data["nmr_shielding"]), 5)
+
+    def test_coupling_count(self):
+        self.assertEqual(len(self.p.data["nmr_couplings"]), 10)
+
+    def test_couplings_unique_ordered_pairs(self):
+        for c in self.p.data["nmr_couplings"]:
+            self.assertLess(c["atom_idx1"], c["atom_idx2"])
+
+    def test_ch_coupling_magnitude(self):
+        """1J(C,H) couplings (carbon idx 0 to the four H) should all be ~165 Hz."""
+        ch = [
+            c["coupling"] for c in self.p.data["nmr_couplings"] if c["atom_idx1"] == 0
+        ]
+        self.assertEqual(len(ch), 4)
+        for j in ch:
+            self.assertAlmostEqual(j, 165.117, places=1)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -966,7 +966,15 @@ class OrcaParser:
                 mayer_start = i
             elif "NATURAL POPULATIONS" in uu:
                 nbo_start = i
-            elif "CHELPG ATOMIC CHARGES" in uu:
+            elif (
+                "CHELPG CHARGES" in uu
+                and "GENERATION" not in uu
+                and "CALCULATED" not in uu
+            ):
+                # Real ORCA prints the table header as "CHELPG Charges"
+                # (not "CHELPG ATOMIC CHARGES"); exclude the surrounding
+                # "CHELPG CHARGES GENERATION" / "CHELPG charges calculated"
+                # status lines that also contain the phrase.
                 chelpg_start = i
             elif "MERZ-KOLLMAN ATOMIC CHARGES" in uu or "MK ATOMIC CHARGES" in uu:
                 mk_start = i
