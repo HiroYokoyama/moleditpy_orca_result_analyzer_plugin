@@ -1445,5 +1445,36 @@ class TestNboCharges(unittest.TestCase):
         self.assertAlmostEqual(total, 0.0, places=3)
 
 
+# ---------------------------------------------------------------------------
+# RESP charges  —  ORCA 6 (resp-test.out, water)
+# ---------------------------------------------------------------------------
+
+
+class TestRespCharges(unittest.TestCase):
+    """resp-test.out — regression: ORCA 6 supports RESP and labels the block
+    "RESP Charges", not "RESP ATOMIC CHARGES". The marker used to miss it
+    entirely, silently dropping all RESP charges (same bug class as CHELPG)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("resp-test.out")
+
+    def test_resp_present(self):
+        self.assertIn("RESP", self.p.data["charges"])
+
+    def test_resp_count(self):
+        self.assertEqual(len(self.p.data["charges"]["RESP"]), 3)
+
+    def test_resp_values(self):
+        chg = self.p.data["charges"]["RESP"]
+        self.assertEqual(chg[0]["atom_sym"], "O")
+        self.assertAlmostEqual(chg[0]["charge"], -0.709028, places=4)
+        self.assertAlmostEqual(chg[1]["charge"], 0.354242, places=4)
+
+    def test_resp_sum_near_zero(self):
+        total = sum(c["charge"] for c in self.p.data["charges"]["RESP"])
+        self.assertAlmostEqual(total, 0.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -980,7 +980,14 @@ class OrcaParser:
                 mk_start = i
             elif "MBIS ANALYSIS" in uu:
                 mbis_start = i
-            elif "RESP ATOMIC CHARGES" in uu:
+            elif (
+                "RESP CHARGES" in uu
+                and "GENERATION" not in uu
+                and "CALCULATED" not in uu
+            ):
+                # Real ORCA 6 prints the table header as "RESP Charges"
+                # (not "RESP ATOMIC CHARGES"); exclude the surrounding
+                # "RESP CHARGES GENERATION" / "RESP charges calculated" lines.
                 resp_start = i
             elif "FRONTIER MOLECULAR ORBITAL POPULATION ANALYSIS" in uu:
                 fmo_start = i
