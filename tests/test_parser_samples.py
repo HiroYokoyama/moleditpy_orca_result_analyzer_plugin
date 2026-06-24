@@ -1544,5 +1544,52 @@ class TestMayerBondOrders(unittest.TestCase):
             self.assertLess(b["atom_idx1"], b["atom_idx2"])
 
 
+# ---------------------------------------------------------------------------
+# NBO orbital list + second-order perturbation  —  ORCA 6 + NBO (nbo-test.out)
+# ---------------------------------------------------------------------------
+
+
+class TestNboAnalysis(unittest.TestCase):
+    """nbo-test.out (water) — NATURAL BOND ORBITALS summary + E(2) analysis."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("nbo-test.out")
+
+    def test_nbo_orbital_count(self):
+        self.assertEqual(len(self.p.data["nbo_orbitals"]), 24)
+
+    def test_nbo_orbital_types(self):
+        types = {o["type"] for o in self.p.data["nbo_orbitals"]}
+        self.assertEqual(types, {"CR", "LP", "BD", "BD*", "RY"})
+
+    def test_nbo_bond_orbital_fields(self):
+        bd = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "BD")
+        self.assertEqual(bd["index"], 4)
+        self.assertEqual(bd["atoms"], "O  1- H  2")
+        self.assertAlmostEqual(bd["occupancy"], 1.99864, places=4)
+        self.assertAlmostEqual(bd["energy"], -0.60737, places=4)
+
+    def test_core_orbital_high_occupancy(self):
+        cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
+        self.assertAlmostEqual(cr["occupancy"], 2.0, delta=0.001)
+
+    def test_perturbation_count(self):
+        self.assertEqual(len(self.p.data["nbo_perturbation"]), 6)
+
+    def test_perturbation_fields(self):
+        first = self.p.data["nbo_perturbation"][0]
+        self.assertIn("LP", first["donor"])
+        self.assertIn("RY", first["acceptor"])
+        self.assertAlmostEqual(first["e2_kcal"], 1.95, places=2)
+        self.assertAlmostEqual(first["e_diff"], 1.87, places=2)
+        self.assertAlmostEqual(first["fock"], 0.054, places=3)
+
+    def test_non_nbo_file_empty(self):
+        p = _load("benzene-opt.out")
+        self.assertEqual(p.data["nbo_orbitals"], [])
+        self.assertEqual(p.data["nbo_perturbation"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

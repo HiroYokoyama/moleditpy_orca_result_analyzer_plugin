@@ -157,6 +157,8 @@ class OrcaParser:
         self.parse_orbital_energies()
         self.parse_charges()
         self.parse_mayer_bond_orders()
+        self.parse_nbo_orbitals()
+        self.parse_nbo_perturbation()
         self.parse_dipole()
         self.parse_spin_contamination()
         self.parse_dispersion()
@@ -1043,6 +1045,87 @@ class OrcaParser:
                 )
 
         self.data["mayer_bond_orders"] = bonds
+
+    def parse_nbo_orbitals(self):
+        """Parse the "NATURAL BOND ORBITALS (Summary)" table (NBO analysis).
+
+        One NBO per line, e.g.:
+            1. CR ( 1) O  1             1.99996   -18.75648
+            4. BD ( 1) O  1- H  2       1.99864    -0.60737  23(v)
+            6. BD*( 1) O  1- H  2       0.00013     0.38562
+        Stored as a list of {index, type, atoms, occupancy, energy}, or [].
+        Types: CR (core), LP (lone pair), BD (bond), BD* (antibond),
+        RY/RY* (Rydberg), LV (lone vacancy).
+        """
+        self.data["nbo_orbitals"] = []
+        start = -1
+        for i, line in enumerate(self.lines):
+            if "NATURAL BOND ORBITALS (Summary)" in line:
+                start = i
+        if start == -1:
+            return
+        pattern = re.compile(
+            r"^\s*(\d+)\.\s+(\S+?)\s*\(\s*\d+\)\s+(.+?)\s{2,}(\d+\.\d+)\s+(-?\d+\.\d+)"
+        )
+        orbitals = []
+        for j in range(start + 1, min(start + 2000, len(self.lines))):
+            line = self.lines[j]
+            if "NBO analysis completed" in line:
+                break
+            m = pattern.match(line)
+            if m:
+                orbitals.append(
+                    {
+                        "index": int(m.group(1)),
+                        "type": m.group(2),
+                        "atoms": m.group(3).strip(),
+                        "occupancy": float(m.group(4)),
+                        "energy": float(m.group(5)),
+                    }
+                )
+        self.data["nbo_orbitals"] = orbitals
+
+    def parse_nbo_perturbation(self):
+        """Parse NBO second-order perturbation theory donor->acceptor analysis.
+
+        Lines under "SECOND ORDER PERTURBATION THEORY ANALYSIS ...":
+            2. LP ( 1) O  1            18. RY ( 2) H  2            1.95    1.87   0.054
+        giving donor NBO, acceptor NBO, E(2) [kcal/mol], E(NL)-E(L) [a.u.],
+        and F(L,NL) [a.u.]. Stored as a list of
+        {donor, acceptor, e2_kcal, e_diff, fock}, or [].
+        """
+        self.data["nbo_perturbation"] = []
+        start = -1
+        for i, line in enumerate(self.lines):
+            if "SECOND ORDER PERTURBATION THEORY ANALYSIS" in line.upper():
+                start = i
+                break
+        if start == -1:
+            return
+        pattern = re.compile(
+            r"^\s*(\d+)\.\s+(\S.*?\S)\s+(\d+)\.\s+(\S.*?\S)\s+"
+            r"(\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s*$"
+        )
+        inter = []
+        for j in range(start + 1, len(self.lines)):
+            line = self.lines[j]
+            if (
+                "NATURAL BOND ORBITALS (Summary)" in line
+                or "NBO analysis completed" in line
+            ):
+                break
+            m = pattern.match(line)
+            if m:
+                inter.append(
+                    {
+                        "donor": f"{m.group(1)}. {m.group(2)}",
+                        "acceptor": f"{m.group(3)}. {m.group(4)}",
+                        "e2_kcal": float(m.group(5)),
+                        "e_diff": float(m.group(6)),
+                        "fock": float(m.group(7)),
+                    }
+                )
+        self.data["nbo_perturbation"] = inter
 
     def parse_charges(self):
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}
