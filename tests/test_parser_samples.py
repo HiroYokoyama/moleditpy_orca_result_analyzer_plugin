@@ -1399,5 +1399,51 @@ class TestNmrCouplings(unittest.TestCase):
             self.assertAlmostEqual(j, 165.117, places=1)
 
 
+# ---------------------------------------------------------------------------
+# NBO / Natural Population Analysis  —  ORCA 6 + NBO (nbo-test.out, water)
+# ---------------------------------------------------------------------------
+
+
+class TestNboCharges(unittest.TestCase):
+    """nbo-test.out — "Summary of Natural Population Analysis" table.
+
+    Parser reads the detailed table (Charge / Core / Valence / Rydberg /
+    Total) and stores 0-based atom indices.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("nbo-test.out")
+
+    def test_nbo_present(self):
+        self.assertIn("NBO", self.p.data["charges"])
+
+    def test_nbo_count(self):
+        self.assertEqual(len(self.p.data["charges"]["NBO"]), 3)
+
+    def test_nbo_indices_zero_based(self):
+        idxs = [c["atom_idx"] for c in self.p.data["charges"]["NBO"]]
+        self.assertEqual(idxs, [0, 1, 2])
+
+    def test_nbo_charge_values(self):
+        o = self.p.data["charges"]["NBO"][0]
+        self.assertEqual(o["atom_sym"], "O")
+        self.assertAlmostEqual(o["charge"], -0.88482, places=4)
+        self.assertAlmostEqual(
+            self.p.data["charges"]["NBO"][1]["charge"], 0.44241, places=4
+        )
+
+    def test_nbo_decomposition_fields(self):
+        o = self.p.data["charges"]["NBO"][0]
+        self.assertAlmostEqual(o["core"], 1.99996, places=4)
+        self.assertAlmostEqual(o["valence"], 6.86890, places=4)
+        self.assertAlmostEqual(o["rydberg"], 0.01596, places=4)
+        self.assertAlmostEqual(o["total"], 8.88482, places=4)
+
+    def test_nbo_sum_near_zero(self):
+        total = sum(c["charge"] for c in self.p.data["charges"]["NBO"])
+        self.assertAlmostEqual(total, 0.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()
