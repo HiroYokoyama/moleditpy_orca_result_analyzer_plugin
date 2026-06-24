@@ -1636,5 +1636,83 @@ class TestNboAnalysis(unittest.TestCase):
         self.assertEqual(p.data["nbo_perturbation"], [])
 
 
+# ---------------------------------------------------------------------------
+# Post-HF energy components  —  ORCA 6 (mp2-test.out, ccsd-test.out)
+# ---------------------------------------------------------------------------
+
+
+class TestEnergyComponentsMp2(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("mp2-test.out")
+
+    def _value(self, label):
+        for c in self.p.data["energy_components"]:
+            if c["label"] == label:
+                return c["value"]
+        return None
+
+    def test_mp2_correlation(self):
+        self.assertAlmostEqual(
+            self._value("MP2 correlation energy"), -0.201139520, places=6
+        )
+
+    def test_mp2_total(self):
+        self.assertAlmostEqual(self._value("MP2 total energy"), -76.162123498, places=6)
+
+    def test_no_ccsd_fields(self):
+        labels = {c["label"] for c in self.p.data["energy_components"]}
+        self.assertNotIn("E(CCSD(T))", labels)
+
+
+class TestEnergyComponentsCcsd(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("ccsd-test.out")
+
+    def _value(self, label):
+        for c in self.p.data["energy_components"]:
+            if c["label"] == label:
+                return c["value"]
+        return None
+
+    def test_reference_energy(self):
+        self.assertAlmostEqual(
+            self._value("Reference energy E(0)"), -75.960983979, places=6
+        )
+
+    def test_ccsd_correlation(self):
+        self.assertAlmostEqual(
+            self._value("CCSD correlation energy"), -0.210803526, places=6
+        )
+
+    def test_triples_correction(self):
+        self.assertAlmostEqual(
+            self._value("(T) triples correction"), -0.002885334, places=6
+        )
+
+    def test_ccsd_t_total(self):
+        self.assertAlmostEqual(self._value("E(CCSD(T))"), -76.174672838, places=6)
+
+    def test_t1_diagnostic_is_dimensionless(self):
+        comp = next(
+            c for c in self.p.data["energy_components"] if c["label"] == "T1 diagnostic"
+        )
+        self.assertTrue(comp["dimensionless"])
+        self.assertAlmostEqual(comp["value"], 0.005944123, places=6)
+
+    def test_ccsd_t_is_final_single_point(self):
+        """E(CCSD(T)) should equal the final single point energy."""
+        self.assertAlmostEqual(
+            self._value("E(CCSD(T))"), self.p.data["scf_energy"], places=6
+        )
+
+
+class TestEnergyComponentsAbsentForDft(unittest.TestCase):
+    def test_dft_has_no_components(self):
+        p = _load("benzene-opt.out")
+        self.assertEqual(p.data["energy_components"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

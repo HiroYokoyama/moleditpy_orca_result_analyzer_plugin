@@ -163,6 +163,7 @@ class OrcaParser:
         self.parse_dipole()
         self.parse_spin_contamination()
         self.parse_dispersion()
+        self.parse_energy_components()
         self.parse_tddft()
         self.parse_nmr()
         self.parse_basis_set()
@@ -994,6 +995,53 @@ class OrcaParser:
                     self.data["dispersion"] = float(m.group(1))
                 except Exception as _e:
                     logging.warning("silenced: %s", _e)
+
+    def parse_energy_components(self):
+        """Parse post-HF correlation energy components (MP2 / CCSD(T) / ...).
+
+        Captures whichever labels are present, e.g.:
+            MP2 CORRELATION ENERGY   :   -0.201139520 Eh
+            MP2 TOTAL ENERGY:            -76.162123498 Eh
+            E(0)                  ...    -75.960983979
+            E(CORR)(corrected)    ...     -0.210803526
+            Triples Correction (T)...     -0.002885334
+            Final correlation energy ...  -0.213688859
+            E(CCSD)               ...    -76.171787504
+            E(CCSD(T))            ...    -76.174672838
+            T1 diagnostic         ...      0.005944123
+        Stored (in this order) as a list of {label, value, dimensionless}.
+        Matching is case-sensitive so DLPNO's "SL-MP2 correlation energy"
+        intermediate lines do not collide with canonical "MP2 CORRELATION
+        ENERGY". The last occurrence of each label wins.
+        """
+        self.data["energy_components"] = []
+        specs = [
+            ("E(0)", "Reference energy E(0)", False),
+            ("MP2 CORRELATION ENERGY", "MP2 correlation energy", False),
+            ("MP2 TOTAL ENERGY", "MP2 total energy", False),
+            ("E(CORR)(corrected)", "CCSD correlation energy", False),
+            ("Triples Correction (T)", "(T) triples correction", False),
+            ("Final correlation energy", "Total correlation energy", False),
+            ("E(CCSD)", "E(CCSD)", False),
+            ("E(CCSD(T))", "E(CCSD(T))", False),
+            ("T1 diagnostic", "T1 diagnostic", True),
+        ]
+        float_re = re.compile(r"[-+]?\d+\.\d+")
+        found = {}
+        for line in self.lines:
+            for sub, label, dimensionless in specs:
+                if sub in line:
+                    nums = float_re.findall(line)
+                    if nums:
+                        try:
+                            found[label] = (float(nums[-1]), dimensionless)
+                        except ValueError:
+                            pass
+        self.data["energy_components"] = [
+            {"label": label, "value": found[label][0], "dimensionless": found[label][1]}
+            for _sub, label, _dim in specs
+            if label in found
+        ]
 
     def parse_mayer_bond_orders(self):
         """Parse the Mayer bond-order matrix.

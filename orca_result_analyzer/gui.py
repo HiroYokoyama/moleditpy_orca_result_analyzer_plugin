@@ -176,6 +176,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             (None, None),  # separator
             ("Properties", self.show_properties),
             ("Bond Analysis", self.show_bond_analysis),
+            ("Energy Components", self.show_energy_components),
         ]
         for label, slot in analysis_items:
             if label is None:
@@ -1067,3 +1068,21 @@ class OrcaResultAnalyzerDialog(QDialog):
                 logging.warning("silenced: %s", _e)
         self.bond_dlg = BondAnalysisDialog(self, data)
         self.bond_dlg.show()
+
+    def show_energy_components(self):
+        from .energy_analysis import EnergyComponentsDialog
+
+        if not self.parser.data.get("energy_components"):
+            QMessageBox.information(
+                self,
+                "Energy Components",
+                "No post-HF energy components found (HF/DFT result).",
+            )
+            return
+        if getattr(self, "energy_dlg", None) is not None:
+            try:
+                self.energy_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+        self.energy_dlg = EnergyComponentsDialog(self, self.parser.data)
+        self.energy_dlg.show()
