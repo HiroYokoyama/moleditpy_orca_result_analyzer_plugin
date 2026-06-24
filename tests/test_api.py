@@ -223,9 +223,7 @@ class TestLoadSiteAllowlist(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self._write(Path(d), {"manager": {"state_manager": ["data"]}})
             result = _load_site_allowlist(Path(d))
-        self.assertIn(
-            "data", result.get("manager", {}).get("state_manager", set())
-        )
+        self.assertIn("data", result.get("manager", {}).get("state_manager", set()))
 
     def test_context_list_form(self):
         with tempfile.TemporaryDirectory() as d:
@@ -315,9 +313,7 @@ class TestPluginFileChecker(unittest.TestCase):
                     pass
         """)
         issues = self._issues(source)
-        self.assertTrue(
-            any(i.code == "UNKNOWN_MW_ATTR" and i.in_try for i in issues)
-        )
+        self.assertTrue(any(i.code == "UNKNOWN_MW_ATTR" and i.in_try for i in issues))
 
     # --- alias tracking ---
 
