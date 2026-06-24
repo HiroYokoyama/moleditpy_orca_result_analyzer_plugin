@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QHeaderView,
     QLabel,
     QPushButton,
 )
@@ -52,18 +53,35 @@ def _make_table(headers, rows):
     for r, row in enumerate(rows):
         for c, value in enumerate(row):
             item = QTableWidgetItem(str(value))
-            if c > 0:
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-                )
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(r, c, item)
     table.verticalHeader().setDefaultSectionSize(26)
-    table.resizeColumnsToContents()
     header = table.horizontalHeader()
     header.setHighlightSections(False)
-    header.setStretchLastSection(True)
-    header.setMinimumSectionSize(60)
+    for c in range(len(headers)):
+        header.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
     return table
+
+
+try:
+    from rdkit.Chem import GetPeriodicTable
+
+    _PERIODIC_TABLE = GetPeriodicTable()
+except Exception:
+    _PERIODIC_TABLE = None
+
+# Highlight halo radius as a fraction of the van der Waals radius.
+_VDW_FRACTION = 0.40
+
+
+def _vdw(sym):
+    """van der Waals radius (Angstrom) for an element symbol, via RDKit."""
+    if _PERIODIC_TABLE is not None:
+        try:
+            return _PERIODIC_TABLE.GetRvdw(sym)
+        except Exception:
+            pass
+    return 1.70
 
 
 class BondAnalysisDialog(QDialog):
@@ -80,6 +98,8 @@ class BondAnalysisDialog(QDialog):
 
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
+        # Switching tabs clears any active 3D highlight.
+        tabs.currentChanged.connect(lambda _i: self._clear_highlight())
 
         if self._mbo:
             rows = [
@@ -151,6 +171,16 @@ class BondAnalysisDialog(QDialog):
             return []
         return parser.data.get("coords", [])
 
+    def _atoms(self):
+        parser = getattr(self.parent_dlg, "parser", None)
+        if parser is None:
+            return []
+        return parser.data.get("atoms", [])
+
+    def _halo_radius(self, idx, atoms):
+        sym = atoms[idx] if 0 <= idx < len(atoms) else "C"
+        return _VDW_FRACTION * _vdw(sym)
+
     def _plotter(self):
         mw = getattr(self.parent_dlg, "mw", None)
         if mw is None or not hasattr(mw, "plotter"):
@@ -177,6 +207,7 @@ class BondAnalysisDialog(QDialog):
         self._clear_highlight()
         plotter = self._plotter()
         coords = self._coords()
+        atoms = self._atoms()
         if plotter is None or not coords:
             return
         try:
@@ -184,9 +215,11 @@ class BondAnalysisDialog(QDialog):
 
             for idx in indices:
                 if 0 <= idx < len(coords):
-                    sphere = pv.Sphere(radius=0.45, center=coords[idx])
+                    sphere = pv.Sphere(
+                        radius=self._halo_radius(idx, atoms), center=coords[idx]
+                    )
                     self._actors.append(
-                        plotter.add_mesh(sphere, color="yellow", opacity=0.45)
+                        plotter.add_mesh(sphere, color="yellow", opacity=0.4)
                     )
             plotter.render()
         except Exception as _e:
@@ -196,6 +229,7 @@ class BondAnalysisDialog(QDialog):
         self._clear_highlight()
         plotter = self._plotter()
         coords = self._coords()
+        atoms = self._atoms()
         if plotter is None or not coords:
             return
         if not (0 <= i < len(coords) and 0 <= j < len(coords)):
@@ -206,11 +240,10 @@ class BondAnalysisDialog(QDialog):
             p1, p2 = coords[i], coords[j]
             tube = pv.Line(p1, p2).tube(radius=0.12)
             self._actors.append(plotter.add_mesh(tube, color="yellow", opacity=0.7))
-            for p in (p1, p2):
+            for idx, p in ((i, p1), (j, p2)):
+                sphere = pv.Sphere(radius=self._halo_radius(idx, atoms), center=p)
                 self._actors.append(
-                    plotter.add_mesh(
-                        pv.Sphere(radius=0.3, center=p), color="orange", opacity=0.6
-                    )
+                    plotter.add_mesh(sphere, color="orange", opacity=0.4)
                 )
             plotter.render()
         except Exception as _e:

@@ -1574,6 +1574,13 @@ class TestNboAnalysis(unittest.TestCase):
         cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
         self.assertAlmostEqual(cr["occupancy"], 2.0, delta=0.001)
 
+    def test_nbo_orbital_atom_indices(self):
+        """atom_indices (0-based) are extracted for 3D highlighting."""
+        bd = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "BD")
+        self.assertEqual(bd["atom_indices"], [0, 1])  # O 1 - H 2 -> [0, 1]
+        cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
+        self.assertEqual(cr["atom_indices"], [0])  # O 1 -> [0]
+
     def test_perturbation_count(self):
         self.assertEqual(len(self.p.data["nbo_perturbation"]), 6)
 

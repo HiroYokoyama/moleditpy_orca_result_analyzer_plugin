@@ -69,17 +69,17 @@ class PropertiesDialog(QDialog):
         table.setShowGrid(False)
         table.setStyleSheet(_TABLE_STYLE)
         for r, (name, value) in enumerate(rows):
-            table.setItem(r, 0, QTableWidgetItem(name))
+            name_item = QTableWidgetItem(name)
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            table.setItem(r, 0, name_item)
             val_item = QTableWidgetItem(value)
-            val_item.setTextAlignment(
-                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-            )
+            val_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(r, 1, val_item)
         table.verticalHeader().setDefaultSectionSize(26)
         header = table.horizontalHeader()
         header.setHighlightSections(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(table)
 
         btn_row = QHBoxLayout()
