@@ -1476,5 +1476,35 @@ class TestRespCharges(unittest.TestCase):
         self.assertAlmostEqual(total, 0.0, places=3)
 
 
+# ---------------------------------------------------------------------------
+# Spin contamination <S**2>  &  dispersion correction
+# ---------------------------------------------------------------------------
+
+
+class TestSpinContaminationAndDispersion(unittest.TestCase):
+    def test_open_shell_s2_present(self):
+        """o2-opt_orb.out (triplet) reports <S**2>."""
+        p = _load("o2-opt_orb.out")
+        s2 = p.data["spin_s2"]
+        self.assertIsNotNone(s2)
+        self.assertAlmostEqual(s2["actual"], 2.007028, places=4)
+        self.assertAlmostEqual(s2["ideal"], 2.0, places=4)
+        self.assertAlmostEqual(s2["contamination"], 0.007028, places=4)
+
+    def test_closed_shell_s2_none(self):
+        """Restricted benzene has no <S**2> block."""
+        p = _load("benzene-opt.out")
+        self.assertIsNone(p.data["spin_s2"])
+
+    def test_dispersion_present(self):
+        """ethane-scan.out uses a dispersion-corrected functional."""
+        p = _load("ethane-scan.out")
+        self.assertAlmostEqual(p.data["dispersion"], -0.000882087, places=6)
+
+    def test_dispersion_absent_is_none(self):
+        p = _load("benzene-opt.out")
+        self.assertIsNone(p.data["dispersion"])
+
+
 if __name__ == "__main__":
     unittest.main()

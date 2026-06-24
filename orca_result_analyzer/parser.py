@@ -157,6 +157,8 @@ class OrcaParser:
         self.parse_orbital_energies()
         self.parse_charges()
         self.parse_dipole()
+        self.parse_spin_contamination()
+        self.parse_dispersion()
         self.parse_tddft()
         self.parse_nmr()
         self.parse_basis_set()
@@ -938,6 +940,56 @@ class OrcaParser:
                     self.data["dipole"] = self.data["dipoles"]
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
+
+    def parse_spin_contamination(self):
+        """Extract the UHF/UKS spin expectation value <S**2>.
+
+        ORCA prints, for open-shell calculations:
+            Expectation value of <S**2>     :     2.007028
+            Ideal value S*(S+1) for S=1.0   :     2.000000
+
+        Stores {actual, ideal, contamination} (contamination = actual - ideal),
+        or None for restricted/closed-shell jobs that print no such block. The
+        last occurrence wins (final geometry in an optimization).
+        """
+        self.data["spin_s2"] = None
+        actual = None
+        ideal = None
+        for line in self.lines:
+            if "Expectation value of <S**2>" in line and ":" in line:
+                try:
+                    actual = float(line.split(":")[1].strip().split()[0])
+                except Exception as _e:
+                    logging.warning("silenced: %s", _e)
+            elif "Ideal value" in line and "S*(S+1)" in line and ":" in line:
+                try:
+                    ideal = float(line.split(":")[1].strip().split()[0])
+                except Exception as _e:
+                    logging.warning("silenced: %s", _e)
+        if actual is not None:
+            self.data["spin_s2"] = {
+                "actual": actual,
+                "ideal": ideal,
+                "contamination": (actual - ideal) if ideal is not None else None,
+            }
+
+    def parse_dispersion(self):
+        """Extract the London dispersion correction energy (DFT-D3/D4), if present.
+
+        ORCA prints e.g.:  "Dispersion correction           -0.000882087"
+        Stored as a float (Eh) or None. The case-sensitive match avoids the
+        prose line "... London dispersion correction". Last occurrence wins.
+        """
+        self.data["dispersion"] = None
+        for line in self.lines:
+            m = re.search(
+                r"Dispersion correction\s+(-?\d+\.\d+(?:[eE][-+]?\d+)?)", line
+            )
+            if m:
+                try:
+                    self.data["dispersion"] = float(m.group(1))
+                except Exception as _e:
+                    logging.warning("silenced: %s", _e)
 
     def parse_charges(self):
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}

@@ -64,12 +64,13 @@ class GradientBar(QWidget):
 
 
 class ChargeDialog(QDialog):
-    def __init__(self, parent, all_charges):
+    def __init__(self, parent, all_charges, spin_s2=None):
         super().__init__(parent)
         self.parent_dlg = parent  # OrcaResultAnalyzerDialog
         self.setWindowTitle("Atomic Charges")
         self.resize(550, 750)
         self.all_charges = all_charges
+        self.spin_s2 = spin_s2
         self.current_type = next(iter(self.all_charges)) if self.all_charges else ""
 
         # Color Schemes - default schemes
@@ -107,6 +108,23 @@ class ChargeDialog(QDialog):
                 logging.warning("Error loading settings: %s", e)
 
         main_layout = QVBoxLayout(self)
+
+        # Spin contamination summary (open-shell / UHF only)
+        if self.spin_s2 and self.spin_s2.get("actual") is not None:
+            actual = self.spin_s2["actual"]
+            ideal = self.spin_s2.get("ideal")
+            cont = self.spin_s2.get("contamination")
+            parts = [f"⟨S²⟩ = {actual:.4f}"]
+            if ideal is not None:
+                parts.append(f"ideal {ideal:.4f}")
+            if cont is not None:
+                parts.append(f"contamination {cont:+.4f}")
+            lbl_s2 = QLabel("   •   ".join(parts))
+            lbl_s2.setStyleSheet("color:#444; font-size:9pt; padding:2px;")
+            lbl_s2.setToolTip(
+                "UHF/UKS spin expectation value <S**2> vs the ideal S(S+1)."
+            )
+            main_layout.addWidget(lbl_s2)
 
         # 1. Type Selection Section
         type_group = QGroupBox("Charge Method")

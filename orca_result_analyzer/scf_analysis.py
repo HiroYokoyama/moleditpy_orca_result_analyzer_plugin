@@ -20,11 +20,12 @@ import logging
 
 
 class SCFTraceDialog(QDialog):
-    def __init__(self, parent, scf_traces):
+    def __init__(self, parent, scf_traces, dispersion=None):
         super().__init__(parent)
         self.setWindowTitle("SCF Energy Trace")
         self.resize(700, 500)
         self.scf_traces = scf_traces
+        self.dispersion = dispersion
 
         layout = QVBoxLayout(self)
 
@@ -60,6 +61,15 @@ class SCFTraceDialog(QDialog):
         ctrl_layout.addWidget(btn_export)
 
         layout.addWidget(ctrl_group)
+
+        # Dispersion correction (DFT-D3/D4), if present
+        if self.dispersion is not None:
+            lbl_disp = QLabel(f"Dispersion correction: {self.dispersion:.6f} Eh")
+            lbl_disp.setStyleSheet("color:#444; font-size:9pt; padding:2px;")
+            lbl_disp.setToolTip(
+                "London dispersion correction (DFT-D3/D4), included in the final energy."
+            )
+            layout.addWidget(lbl_disp)
 
         # Plotting Area
         self.figure = Figure(figsize=(5, 4), dpi=100)

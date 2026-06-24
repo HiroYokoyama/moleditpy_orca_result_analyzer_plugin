@@ -746,5 +746,66 @@ class TestParseXyzContent(unittest.TestCase):
         self.assertEqual(steps, [])
 
 
+# ---------------------------------------------------------------------------
+# TestParseSpinContamination
+# ---------------------------------------------------------------------------
+
+
+class TestParseSpinContamination(unittest.TestCase):
+    def test_open_shell_s2(self):
+        content = (
+            "Expectation value of <S**2>     :     2.007028\n"
+            "Ideal value S*(S+1) for S=1.0   :     2.000000\n"
+        )
+        p = _parse_method(content, "parse_spin_contamination")
+        self.assertIsNotNone(p.data["spin_s2"])
+        self.assertAlmostEqual(p.data["spin_s2"]["actual"], 2.007028, places=5)
+        self.assertAlmostEqual(p.data["spin_s2"]["ideal"], 2.0, places=5)
+        self.assertAlmostEqual(p.data["spin_s2"]["contamination"], 0.007028, places=5)
+
+    def test_closed_shell_none(self):
+        p = _parse_method(
+            "FINAL SINGLE POINT ENERGY -76.0\n", "parse_spin_contamination"
+        )
+        self.assertIsNone(p.data["spin_s2"])
+
+    def test_last_occurrence_wins(self):
+        content = (
+            "Expectation value of <S**2>     :     0.760000\n"
+            "Ideal value S*(S+1) for S=0.5   :     0.750000\n"
+            "Expectation value of <S**2>     :     2.007028\n"
+            "Ideal value S*(S+1) for S=1.0   :     2.000000\n"
+        )
+        p = _parse_method(content, "parse_spin_contamination")
+        self.assertAlmostEqual(p.data["spin_s2"]["actual"], 2.007028, places=5)
+
+
+# ---------------------------------------------------------------------------
+# TestParseDispersion
+# ---------------------------------------------------------------------------
+
+
+class TestParseDispersion(unittest.TestCase):
+    def test_dispersion_value(self):
+        p = _parse_method(
+            "Dispersion correction           -0.000882087\n", "parse_dispersion"
+        )
+        self.assertAlmostEqual(p.data["dispersion"], -0.000882087, places=7)
+
+    def test_no_dispersion_none(self):
+        p = _parse_method("FINAL SINGLE POINT ENERGY -76.0\n", "parse_dispersion")
+        self.assertIsNone(p.data["dispersion"])
+
+    def test_prose_line_not_matched(self):
+        # The descriptive "... London dispersion correction" line carries no
+        # number and must not be parsed as a value.
+        p = _parse_method(
+            "   A generally applicable atomic-charge dependent "
+            "London dispersion correction\n",
+            "parse_dispersion",
+        )
+        self.assertIsNone(p.data["dispersion"])
+
+
 if __name__ == "__main__":
     unittest.main()
