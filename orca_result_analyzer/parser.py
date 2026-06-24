@@ -156,6 +156,7 @@ class OrcaParser:
         self.parse_mo_coeffs()
         self.parse_orbital_energies()
         self.parse_charges()
+        self.parse_mayer_bond_orders()
         self.parse_dipole()
         self.parse_spin_contamination()
         self.parse_dispersion()
@@ -990,6 +991,58 @@ class OrcaParser:
                     self.data["dispersion"] = float(m.group(1))
                 except Exception as _e:
                     logging.warning("silenced: %s", _e)
+
+    def parse_mayer_bond_orders(self):
+        """Parse the Mayer bond-order matrix.
+
+        ORCA prints, after the Mayer population analysis:
+            Mayer bond orders larger than 0.100000
+            B(  0-C ,  1-C ) :   1.3925 B(  0-C ,  5-C ) :   1.3924 ...
+            B(  1-C ,  2-C ) :   1.3927 ...
+
+        Stored as a list of {atom_idx1, atom_sym1, atom_idx2, atom_sym2, order}
+        with atom_idx1 < atom_idx2 (0-based), or [] if absent. The last block
+        wins (final geometry in an optimization).
+        """
+        self.data["mayer_bond_orders"] = []
+
+        start = -1
+        for i, line in enumerate(self.lines):
+            if "Mayer bond orders" in line:
+                start = i
+
+        if start == -1:
+            return
+
+        pattern = re.compile(
+            r"B\(\s*(\d+)-(\w+)\s*,\s*(\d+)-(\w+)\s*\)\s*:\s*(-?\d+\.\d+)"
+        )
+
+        bonds = []
+        for j in range(start + 1, len(self.lines)):
+            line = self.lines[j]
+            if not line.strip():
+                break
+            matches = pattern.findall(line)
+            if not matches:
+                if bonds:
+                    break
+                continue
+            for idx1, sym1, idx2, sym2, order in matches:
+                a1, s1, a2, s2 = int(idx1), sym1, int(idx2), sym2
+                if a1 > a2:
+                    a1, s1, a2, s2 = a2, s2, a1, s1
+                bonds.append(
+                    {
+                        "atom_idx1": a1,
+                        "atom_sym1": s1,
+                        "atom_idx2": a2,
+                        "atom_sym2": s2,
+                        "order": float(order),
+                    }
+                )
+
+        self.data["mayer_bond_orders"] = bonds
 
     def parse_charges(self):
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}

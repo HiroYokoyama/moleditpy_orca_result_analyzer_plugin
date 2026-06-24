@@ -1506,5 +1506,43 @@ class TestSpinContaminationAndDispersion(unittest.TestCase):
         self.assertIsNone(p.data["dispersion"])
 
 
+# ---------------------------------------------------------------------------
+# Mayer bond orders  —  ORCA 6
+# ---------------------------------------------------------------------------
+
+
+class TestMayerBondOrders(unittest.TestCase):
+    def test_o2_single_bond(self):
+        """O2 has one O-O bond with double-bond character (~1.8)."""
+        p = _load("o2-opt_orb.out")
+        bonds = p.data["mayer_bond_orders"]
+        self.assertEqual(len(bonds), 1)
+        self.assertEqual(bonds[0]["atom_idx1"], 0)
+        self.assertEqual(bonds[0]["atom_idx2"], 1)
+        self.assertGreater(bonds[0]["order"], 1.5)
+
+    def test_benzene_bond_count(self):
+        """Benzene: 6 aromatic C-C + 6 C-H = 12 bonds above threshold."""
+        p = _load("benzene-opt.out")
+        self.assertEqual(len(p.data["mayer_bond_orders"]), 12)
+
+    def test_benzene_aromatic_cc_order(self):
+        """Aromatic C-C bond orders should be ~1.4."""
+        p = _load("benzene-opt.out")
+        cc = [
+            b
+            for b in p.data["mayer_bond_orders"]
+            if b["atom_sym1"] == "C" and b["atom_sym2"] == "C"
+        ]
+        self.assertEqual(len(cc), 6)
+        for b in cc:
+            self.assertAlmostEqual(b["order"], 1.39, delta=0.05)
+
+    def test_indices_ordered(self):
+        p = _load("benzene-opt.out")
+        for b in p.data["mayer_bond_orders"]:
+            self.assertLess(b["atom_idx1"], b["atom_idx2"])
+
+
 if __name__ == "__main__":
     unittest.main()

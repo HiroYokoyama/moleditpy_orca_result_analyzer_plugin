@@ -807,5 +807,46 @@ class TestParseDispersion(unittest.TestCase):
         self.assertIsNone(p.data["dispersion"])
 
 
+# ---------------------------------------------------------------------------
+# TestParseMayerBondOrders
+# ---------------------------------------------------------------------------
+
+_MAYER_BONDS = """\
+  Mayer bond orders larger than 0.100000
+B(  0-C ,  1-C ) :   1.3925 B(  0-C ,  5-C ) :   1.3924 B(  0-C ,  6-H ) :   0.9840
+B(  1-C ,  2-C ) :   1.3927 B(  1-C ,  7-H ) :   0.9838
+
+"""
+
+
+class TestParseMayerBondOrders(unittest.TestCase):
+    def test_count_multi_per_line(self):
+        p = _parse_method(_MAYER_BONDS, "parse_mayer_bond_orders")
+        self.assertEqual(len(p.data["mayer_bond_orders"]), 5)
+
+    def test_values_and_symbols(self):
+        p = _parse_method(_MAYER_BONDS, "parse_mayer_bond_orders")
+        b0 = p.data["mayer_bond_orders"][0]
+        self.assertEqual(b0["atom_idx1"], 0)
+        self.assertEqual(b0["atom_idx2"], 1)
+        self.assertEqual(b0["atom_sym1"], "C")
+        self.assertAlmostEqual(b0["order"], 1.3925, places=4)
+
+    def test_indices_ordered(self):
+        p = _parse_method(_MAYER_BONDS, "parse_mayer_bond_orders")
+        for b in p.data["mayer_bond_orders"]:
+            self.assertLess(b["atom_idx1"], b["atom_idx2"])
+
+    def test_blank_line_terminates(self):
+        content = _MAYER_BONDS + "B(  9-C , 10-C ) :   1.0000\n"
+        p = _parse_method(content, "parse_mayer_bond_orders")
+        # the trailing bond is past the blank line and must NOT be included
+        self.assertEqual(len(p.data["mayer_bond_orders"]), 5)
+
+    def test_empty_content(self):
+        p = _parse_method("", "parse_mayer_bond_orders")
+        self.assertEqual(p.data["mayer_bond_orders"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
