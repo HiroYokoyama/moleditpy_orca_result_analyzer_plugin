@@ -366,7 +366,7 @@ class BondAnalysisDialog(QDialog):
         hybrids = o.get("hybrids", [])
         if hybrids:
             lines.append("")
-            lines.append("Hybridization (raw %):")
+            lines.append("Hybridization (%):")
             for h in hybrids:
                 weight = f"  weight {h['weight_pct']:.2f}%" if "weight_pct" in h else ""
                 lines.append(
@@ -374,8 +374,12 @@ class BondAnalysisDialog(QDialog):
                     f"  s {h['s_pct']:.2f}%,  p {h['p_pct']:.2f}%,"
                     f"  d {h['d_pct']:.2f}%   [{h['label']}]{weight}"
                 )
-                if h.get("raw"):
-                    lines.append(f"      raw: {h['raw']}")
+            if any(h.get("raw") for h in hybrids):
+                lines.append("")
+                lines.append("Raw (from ORCA output):")
+                for h in hybrids:
+                    if h.get("raw"):
+                        lines.append(f"  {h['atom_sym']} {h['atom_idx']}:  {h['raw']}")
         QMessageBox.information(self, f"NBO #{o['index']} detail", "\n".join(lines))
 
     def closeEvent(self, event):
