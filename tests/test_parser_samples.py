@@ -1600,6 +1600,17 @@ class TestNboAnalysis(unittest.TestCase):
         labels = {o["hybrids"][0]["label"] for o in lps if o["hybrids"]}
         self.assertIn("p", labels)  # the pure-p lone pair
 
+    def test_nbo_hybrid_labels_not_explosive(self):
+        """Diffuse Rydberg orbitals (tiny %s) must not yield sp^huge labels."""
+        import re
+
+        for o in self.p.data["nbo_orbitals"]:
+            for h in o.get("hybrids", []):
+                for num in re.findall(r"[\d.]+", h["label"]):
+                    self.assertLess(
+                        float(num), 20.0, f"explosive hybrid label: {h['label']!r}"
+                    )
+
     def test_perturbation_count(self):
         self.assertEqual(len(self.p.data["nbo_perturbation"]), 6)
 

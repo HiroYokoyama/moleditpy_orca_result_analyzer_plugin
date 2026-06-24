@@ -1167,14 +1167,15 @@ class OrcaParser:
         )
 
         def _label(s_pct, p_pct, d_pct):
-            if s_pct <= 0.01:
-                base = "p" if p_pct > 0.01 else ("d" if d_pct > 0.01 else "s")
-            elif p_pct <= 1.0:
-                base = "s"
-            else:
-                base = f"sp{p_pct / s_pct:.2f}"
+            # Below ~5% s the sp^n ratio explodes and is meaningless (typical of
+            # diffuse Rydberg orbitals); fall back to the dominant character.
+            if s_pct < 5.0:
+                return "d" if d_pct > p_pct else "p"
+            if p_pct <= 1.0 and d_pct <= 1.0:
+                return "s"
+            base = f"sp{p_pct / s_pct:.2f}" if p_pct > 1.0 else "s"
             # Annotate d only when chemically meaningful (> ~1%).
-            if d_pct > 1.0 and s_pct > 0.01:
+            if d_pct > 1.0:
                 base += f"d{d_pct / s_pct:.2f}"
             return base
 

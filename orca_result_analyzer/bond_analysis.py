@@ -28,11 +28,11 @@ from PyQt6.QtCore import Qt
 
 _TABLE_STYLE = """
     QTableWidget { gridline-color: #e6e6e6; background: #ffffff; }
-    QTableWidget::item { padding: 4px 8px; }
+    QTableWidget::item { padding: 7px 16px; }
     QTableWidget::item:selected { background: #cfe5ff; color: #000; }
     QHeaderView::section {
         background-color: #f3f3f3;
-        padding: 5px 8px;
+        padding: 7px 16px;
         border: none;
         border-bottom: 1px solid #cccccc;
         font-weight: bold;
@@ -55,7 +55,7 @@ def _make_table(headers, rows):
             item = QTableWidgetItem(str(value))
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(r, c, item)
-    table.verticalHeader().setDefaultSectionSize(26)
+    table.verticalHeader().setDefaultSectionSize(32)
     header = table.horizontalHeader()
     header.setHighlightSections(False)
     for c in range(len(headers)):
@@ -119,11 +119,11 @@ class BondAnalysisDialog(QDialog):
                 [
                     str(o["index"]),
                     o["type"],
-                    o["atoms"],
+                    " ".join(o["atoms"].split()),
                     f"{o['occupancy']:.5f}",
                     f"{o['energy']:.5f}",
-                    ", ".join(
-                        f"{h['atom_sym']}:{h['label']}" for h in o.get("hybrids", [])
+                    ",  ".join(
+                        f"{h['atom_sym']}: {h['label']}" for h in o.get("hybrids", [])
                     ),
                 ]
                 for o in self._nbo

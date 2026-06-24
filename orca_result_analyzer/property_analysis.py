@@ -18,11 +18,11 @@ from PyQt6.QtCore import Qt
 
 _TABLE_STYLE = """
     QTableWidget { gridline-color: #e6e6e6; background: #ffffff; }
-    QTableWidget::item { padding: 4px 8px; }
+    QTableWidget::item { padding: 7px 16px; }
     QTableWidget::item:selected { background: #cfe5ff; color: #000; }
     QHeaderView::section {
         background-color: #f3f3f3;
-        padding: 5px 8px;
+        padding: 7px 16px;
         border: none;
         border-bottom: 1px solid #cccccc;
         font-weight: bold;
@@ -75,7 +75,7 @@ class PropertiesDialog(QDialog):
             val_item = QTableWidgetItem(value)
             val_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(r, 1, val_item)
-        table.verticalHeader().setDefaultSectionSize(26)
+        table.verticalHeader().setDefaultSectionSize(32)
         header = table.horizontalHeader()
         header.setHighlightSections(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
