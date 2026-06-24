@@ -122,10 +122,16 @@ class BondAnalysisDialog(QDialog):
                     o["atoms"],
                     f"{o['occupancy']:.5f}",
                     f"{o['energy']:.5f}",
+                    ", ".join(
+                        f"{h['atom_sym']}:{h['label']}" for h in o.get("hybrids", [])
+                    ),
                 ]
                 for o in self._nbo
             ]
-            t = _make_table(["#", "Type", "Atoms", "Occupancy", "Energy (Eh)"], rows)
+            t = _make_table(
+                ["#", "Type", "Atoms", "Occupancy", "Energy (Eh)", "Hybridization"],
+                rows,
+            )
             t.itemSelectionChanged.connect(lambda tbl=t: self._on_nbo_selected(tbl))
             tabs.addTab(t, f"NBO Orbitals ({len(self._nbo)})")
 

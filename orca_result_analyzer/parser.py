@@ -158,6 +158,7 @@ class OrcaParser:
         self.parse_charges()
         self.parse_mayer_bond_orders()
         self.parse_nbo_orbitals()
+        self.parse_nbo_hybrids()
         self.parse_nbo_perturbation()
         self.parse_dipole()
         self.parse_spin_contamination()
@@ -1129,6 +1130,110 @@ class OrcaParser:
                     }
                 )
         self.data["nbo_perturbation"] = inter
+
+    def parse_nbo_hybrids(self):
+        """Augment nbo_orbitals with per-atom hybridization (%s / %p / %d).
+
+        From the detailed "(Occupancy) Bond orbital / Coefficients / Hybrids"
+        block, e.g.:
+            1. (1.99996) CR ( 1) O  1            s(100.00%)
+            2. (1.99698) LP ( 1) O  1            s(  0.00%)p 1.00( 99.92%) ...
+            4. (1.99864) BD ( 1) O  1- H  2
+                       ( 72.35%)   0.8506* O  1 s( 22.56%)p 3.43( 77.29%) ...
+                       ( 27.65%)   0.5258* H  2 s( 99.76%)p 0.00(  0.24%)
+        Adds a "hybrids" list to each matching NBO: one component per atom with
+        {atom_sym, atom_idx, s_pct, p_pct, d_pct, weight_pct?, label}.
+        """
+        orbitals = self.data.get("nbo_orbitals", [])
+        if not orbitals:
+            return
+
+        start = -1
+        for i, line in enumerate(self.lines):
+            if "Bond orbital / Coefficients / Hybrids" in line:
+                start = i
+                break
+        if start == -1:
+            return
+
+        s_re = re.compile(r"s\(\s*([\d.]+)%\)")
+        p_re = re.compile(r"p\s*[\d.]*\(\s*([\d.]+)%\)")
+        d_re = re.compile(r"d\s*[\d.]*\(\s*([\d.]+)%\)")
+        header_re = re.compile(
+            r"^\s*(\d+)\.\s*\(\s*[\d.]+\)\s*\S+?\s*\(\s*\d+\)\s*(.*)$"
+        )
+        pol_re = re.compile(
+            r"^\s*\(\s*([\d.]+)%\)\s+[-\d.]+\*?\s*([A-Za-z]+)\s+(\d+)\s+(.*)$"
+        )
+
+        def _label(s_pct, p_pct, d_pct):
+            if s_pct <= 0.01:
+                base = "p" if p_pct > 0.01 else ("d" if d_pct > 0.01 else "s")
+            elif p_pct <= 1.0:
+                base = "s"
+            else:
+                base = f"sp{p_pct / s_pct:.2f}"
+            # Annotate d only when chemically meaningful (> ~1%).
+            if d_pct > 1.0 and s_pct > 0.01:
+                base += f"d{d_pct / s_pct:.2f}"
+            return base
+
+        def _extract(text, atom_sym=None, atom_num=None, weight=None):
+            sm = s_re.search(text)
+            if not sm:
+                return None
+            pm = p_re.search(text)
+            dm = d_re.search(text)
+            s_pct = float(sm.group(1))
+            p_pct = float(pm.group(1)) if pm else 0.0
+            d_pct = float(dm.group(1)) if dm else 0.0
+            comp = {
+                "atom_sym": atom_sym,
+                "atom_idx": (atom_num - 1) if atom_num is not None else None,
+                "s_pct": s_pct,
+                "p_pct": p_pct,
+                "d_pct": d_pct,
+                "label": _label(s_pct, p_pct, d_pct),
+            }
+            if weight is not None:
+                comp["weight_pct"] = weight
+            return comp
+
+        hybrids = {}  # nbo index -> list of components
+        current_idx = None
+        end_markers = (
+            "SECOND ORDER PERTURBATION",
+            "NATURAL BOND ORBITALS (Summary)",
+            "NBO analysis completed",
+        )
+        for j in range(start + 1, len(self.lines)):
+            line = self.lines[j]
+            if any(mk in line for mk in end_markers):
+                break
+
+            hm = header_re.match(line)
+            if hm:
+                current_idx = int(hm.group(1))
+                rest = hm.group(2)
+                comp = _extract(rest)
+                if comp is not None:
+                    am = re.match(r"\s*([A-Za-z]+)\s+(\d+)", rest)
+                    if am:
+                        comp["atom_sym"] = am.group(1)
+                        comp["atom_idx"] = int(am.group(2)) - 1
+                    hybrids.setdefault(current_idx, []).append(comp)
+                continue
+
+            pm = pol_re.match(line)
+            if pm and current_idx is not None:
+                comp = _extract(
+                    pm.group(4), pm.group(2), int(pm.group(3)), float(pm.group(1))
+                )
+                if comp is not None:
+                    hybrids.setdefault(current_idx, []).append(comp)
+
+        for orb in orbitals:
+            orb["hybrids"] = hybrids.get(orb["index"], [])
 
     def parse_charges(self):
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}

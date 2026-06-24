@@ -1581,6 +1581,25 @@ class TestNboAnalysis(unittest.TestCase):
         cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
         self.assertEqual(cr["atom_indices"], [0])  # O 1 -> [0]
 
+    def test_nbo_bond_hybridization(self):
+        """BD O-H: O is ~sp3 hybridized, H is pure s (water)."""
+        bd = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "BD")
+        hybrids = bd["hybrids"]
+        self.assertEqual(len(hybrids), 2)
+        o_comp = next(h for h in hybrids if h["atom_sym"] == "O")
+        h_comp = next(h for h in hybrids if h["atom_sym"] == "H")
+        self.assertAlmostEqual(o_comp["s_pct"], 22.56, places=1)
+        self.assertAlmostEqual(o_comp["p_pct"], 77.29, places=1)
+        self.assertTrue(o_comp["label"].startswith("sp"))
+        self.assertEqual(h_comp["label"], "s")
+
+    def test_nbo_core_and_lone_pair_hybrids(self):
+        cr = next(o for o in self.p.data["nbo_orbitals"] if o["type"] == "CR")
+        self.assertEqual(cr["hybrids"][0]["label"], "s")  # 1s core
+        lps = [o for o in self.p.data["nbo_orbitals"] if o["type"] == "LP"]
+        labels = {o["hybrids"][0]["label"] for o in lps if o["hybrids"]}
+        self.assertIn("p", labels)  # the pure-p lone pair
+
     def test_perturbation_count(self):
         self.assertEqual(len(self.p.data["nbo_perturbation"]), 6)
 
