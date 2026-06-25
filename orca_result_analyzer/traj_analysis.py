@@ -880,6 +880,11 @@ class TrajectoryResultDialog(QDialog):
         if self.steps and not self.steps[0].get("atoms", None):
             return
 
+        # Only allow left-click
+        mouseevent = getattr(event, "mouseevent", None)
+        if mouseevent is None or mouseevent.button != 1:
+            return
+
         if event.artist and hasattr(event, "ind"):
             idx = event.ind[0]  # Index of point
             self.slider.setValue(idx)

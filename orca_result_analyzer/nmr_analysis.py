@@ -1979,6 +1979,10 @@ class NMRDialog(QDialog):
 
     def on_peak_click(self, event):
         """Handle clicking on a peak in the spectrum"""
+        # Only allow left-click
+        if getattr(event, "button", None) != 1:
+            return
+
         click_x = event.xdata
         if click_x is None:
             return

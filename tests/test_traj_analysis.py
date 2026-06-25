@@ -397,5 +397,81 @@ class TestRecalcEnergies(unittest.TestCase):
         self.assertAlmostEqual(fake.display_energies[0], 0.0, places=10)
 
 
+class TestOnPick(unittest.TestCase):
+    def test_on_pick_left_click(self):
+        steps = [{"energy": -100.0, "atoms": [1, 2]}]
+        fake = _FakeDialog(steps)
+        fake.slider = MagicMock()
+
+        # Mock event with left click mouseevent
+        event = MagicMock()
+        event.artist = MagicMock()
+        event.ind = [0]
+        event.mouseevent = MagicMock()
+        event.mouseevent.button = 1
+
+        TrajectoryResultDialog.on_pick(fake, event)
+        fake.slider.setValue.assert_called_once_with(0)
+
+    def test_on_pick_right_click_ignored(self):
+        steps = [{"energy": -100.0, "atoms": [1, 2]}]
+        fake = _FakeDialog(steps)
+        fake.slider = MagicMock()
+
+        # Mock event with right click mouseevent (button == 3)
+        event = MagicMock()
+        event.artist = MagicMock()
+        event.ind = [0]
+        event.mouseevent = MagicMock()
+        event.mouseevent.button = 3
+
+        TrajectoryResultDialog.on_pick(fake, event)
+        fake.slider.setValue.assert_not_called()
+
+    def test_on_pick_scroll_ignored(self):
+        steps = [{"energy": -100.0, "atoms": [1, 2]}]
+        fake = _FakeDialog(steps)
+        fake.slider = MagicMock()
+
+        # Mock event with scroll event (button == 'up')
+        event = MagicMock()
+        event.artist = MagicMock()
+        event.ind = [0]
+        event.mouseevent = MagicMock()
+        event.mouseevent.button = "up"
+
+        TrajectoryResultDialog.on_pick(fake, event)
+        fake.slider.setValue.assert_not_called()
+
+    def test_on_pick_missing_mouseevent_ignored(self):
+        steps = [{"energy": -100.0, "atoms": [1, 2]}]
+        fake = _FakeDialog(steps)
+        fake.slider = MagicMock()
+
+        # Mock event without mouseevent
+        event = MagicMock()
+        event.artist = MagicMock()
+        event.ind = [0]
+        if hasattr(event, "mouseevent"):
+            del event.mouseevent
+
+        TrajectoryResultDialog.on_pick(fake, event)
+        fake.slider.setValue.assert_not_called()
+
+    def test_on_pick_neb_summary_no_atoms_ignored(self):
+        steps = [{"energy": -100.0}]  # no "atoms" key
+        fake = _FakeDialog(steps)
+        fake.slider = MagicMock()
+
+        event = MagicMock()
+        event.artist = MagicMock()
+        event.ind = [0]
+        event.mouseevent = MagicMock()
+        event.mouseevent.button = 1
+
+        TrajectoryResultDialog.on_pick(fake, event)
+        fake.slider.setValue.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

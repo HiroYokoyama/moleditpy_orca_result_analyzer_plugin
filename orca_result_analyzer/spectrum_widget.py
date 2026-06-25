@@ -657,6 +657,10 @@ class SpectrumWidget(QWidget):
         if event.inaxes not in valid_axes:
             return
 
+        # Only allow left-click
+        if getattr(event, "button", None) != 1:
+            return
+
         # Double-click to reset zoom and selection
         if event.dblclick:
             self.selected_item = None
