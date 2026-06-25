@@ -79,9 +79,22 @@ Advanced NMR chemical shielding validation and visualization.
 
 ![NMR](img/nmr.png)
 
+### 11. Bond Analysis
+Comprehensive bonding and orbital analysis:
+- **Mayer Bond Orders**: View and inspect parsed Mayer bond-order matrix values in a clean tabular view.
+- **NBO Orbitals & Hybridization**: Full breakdown of Natural Bond Orbitals (NBO) list with hybridization composition (%s / %p / %d / %f per atom). Double-clicking an entry displays the raw NBO details.
+- **E(2) Perturbation**: Tabulate donor-acceptor second-order perturbation energy \(E^{(2)}\) interaction values.
+- **3D Viewer Integration**: Selecting rows in any bond analysis table automatically highlights the involved atom(s) in the 3D viewport.
+
+### 12. Post-HF Energies & Properties
+- **Post-HF Energy Components**: Separate panel displaying Reference Energy, Correlation Energy (MP2, CCSD), and Triples Correction (CCSD(T)) components.
+- **Properties**: Parse and display physical parameters such as spin contamination expectation values (\(\langle S^2 \rangle\)) and dispersion corrections.
+
 ## Interface & Usability
 - **Logical Workflow**: Buttons grouped by task: Electronic -> Geometry -> Properties -> Spectroscopy.
 - **Modeless Design**: All analysis windows are modeless, allowing side-by-side comparison and 3D viewer interaction.
+- **Copyable Tables**: Support selecting and copying data (via `Ctrl+C`) from analysis tables to external spreadsheet editors.
+- **Interactive Highlighting**: Highlight atoms in the 3D viewer (with VDW scaling) when selecting rows in the Properties or Bond Analysis tables.
 - **Keyboard Shortcuts**: `Ctrl+O` (Open), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
 - **Persistence**: Remembers your presets, NMR references, and merged peaks across sessions.
 
