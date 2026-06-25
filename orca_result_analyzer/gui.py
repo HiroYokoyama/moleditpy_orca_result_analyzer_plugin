@@ -14,8 +14,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtCore import QSize, Qt, QObject, QEvent
+from PyQt6.QtGui import QAction, QIcon, QDesktopServices
+from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .parser import OrcaParser
 
 
@@ -152,6 +152,12 @@ class OrcaResultAnalyzerDialog(QDialog):
         reload_action.triggered.connect(self.reload_file)
         file_menu.addAction(reload_action)
 
+        view_output_action = QAction("Open &Output File", self)
+        view_output_action.setShortcut("Ctrl+Shift+O")
+        view_output_action.setIcon(self.get_icon("menu_output.svg"))
+        view_output_action.triggered.connect(self.open_output_file)
+        file_menu.addAction(view_output_action)
+
         file_menu.addSeparator()
 
         close_action = QAction("&Close", self)
@@ -225,6 +231,28 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         file_info_layout.addWidget(self.lbl_file_dir)
 
+        # ORCA Run Status Label
+        status_str = (
+            self.parser.data.get("termination_status", "Running") if self.parser else "Unknown"
+        )
+        self.lbl_status = QLabel(f"Status: {status_str}")
+        self.lbl_status.setStyleSheet(
+            "font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+        )
+        if "Terminated normally" in status_str:
+            self.lbl_status.setStyleSheet(
+                "color: #28a745; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+            )
+        elif "Running" in status_str:
+            self.lbl_status.setStyleSheet(
+                "color: #fd7e14; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+            )
+        else:
+            self.lbl_status.setStyleSheet(
+                "color: #dc3545; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+            )
+        file_info_layout.addWidget(self.lbl_status)
+
         # Updated Time Label
         self.lbl_updated = QLabel("Updated: ---")
         self.lbl_updated.setStyleSheet(
@@ -297,6 +325,30 @@ class OrcaResultAnalyzerDialog(QDialog):
         """)
         btn_reload.clicked.connect(self.reload_file)
         btns_top_layout.addWidget(btn_reload)
+
+        # Open Output Button
+        self.btn_view_output = QPushButton("Open Output")
+        self.btn_view_output.setIcon(self.get_icon("menu_output.svg"))
+        self.btn_view_output.setStyleSheet("""
+            QPushButton {
+                background-color: #ffaa00;
+                color: white;
+                font-size: 10pt;
+                font-weight: bold;
+                padding: 8px 15px;
+                border-radius: 5px;
+                border: none;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #ff9900;
+            }
+            QPushButton:pressed {
+                background-color: #e68a00;
+            }
+        """)
+        self.btn_view_output.clicked.connect(self.open_output_file)
+        btns_top_layout.addWidget(self.btn_view_output)
 
         file_frame_layout.addLayout(btns_top_layout)
 
@@ -699,12 +751,37 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "lbl_version", None) is not None:
             self.lbl_version.setText(f"ORCA Version: {v}")
 
+        # ORCA Run Status
+        status = self.parser.data.get("termination_status", "Running") if self.parser else "Unknown"
+        if getattr(self, "lbl_status", None) is not None:
+            self.lbl_status.setText(f"Status: {status}")
+            if "Terminated normally" in status:
+                self.lbl_status.setStyleSheet(
+                    "color: #28a745; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+                )
+            elif "Running" in status:
+                self.lbl_status.setStyleSheet(
+                    "color: #fd7e14; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+                )
+            else:
+                self.lbl_status.setStyleSheet(
+                    "color: #dc3545; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+                )
+
     def reload_file(self):
         if self.file_path and os.path.exists(self.file_path):
             self.load_file(self.file_path)
         else:
             QMessageBox.warning(
                 self, "Error", "No file currently loaded or file not found."
+            )
+
+    def open_output_file(self):
+        if self.file_path and os.path.exists(self.file_path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self.file_path))
+        else:
+            QMessageBox.warning(
+                self, "Error", "No output file path available or file does not exist."
             )
 
     def update_button_states(self):

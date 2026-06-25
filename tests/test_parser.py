@@ -848,5 +848,65 @@ class TestParseMayerBondOrders(unittest.TestCase):
         self.assertEqual(p.data["mayer_bond_orders"], [])
 
 
+# ---------------------------------------------------------------------------
+# TestParseTerminationStatus
+# ---------------------------------------------------------------------------
+
+
+class TestParseTerminationStatus(unittest.TestCase):
+    def test_running_by_default(self):
+        p = _parse_method("Some running calculation lines\n", "parse_basic")
+        self.assertEqual(p.data["termination_status"], "Running")
+
+    def test_terminated_normally(self):
+        content = (
+            "Some lines...\n"
+            "****ORCA TERMINATED NORMALLY****\n"
+            "Some trailing blank lines\n"
+        )
+        p = _parse_method(content, "parse_basic")
+        self.assertEqual(p.data["termination_status"], "Terminated normally")
+
+    def test_module_error_termination(self):
+        content = (
+            "Some lines...\n"
+            "ORCA finished by error termination in ORCA_GSTEP\n"
+        )
+        p = _parse_method(content, "parse_basic")
+        self.assertEqual(p.data["termination_status"], "ERROR")
+
+    def test_input_error_with_file_line(self):
+        content = (
+            "            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+            "                                 INPUT ERROR\n"
+            "            UNRECOGNIZED OR DUPLICATED KEYWORD(S) IN SIMPLE INPUT LINE\n"
+            "                       MK  \n"
+            "            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
+            "[file orca_main/main_input_keywordline.cpp, line 13872]: \n"
+        )
+        p = _parse_method(content, "parse_basic")
+        self.assertEqual(p.data["termination_status"], "ERROR")
+
+    def test_error_bang_with_file_line(self):
+        content = (
+            "    ----------------------------------------------------------------------------\n"
+            "                                   ERROR !!!\n"
+            "       The optimization did not converge but reached the maximum \n"
+            "    ----------------------------------------------------------------------------\n"
+            "\n"
+            "[file orca_main/run.cpp, line 12331]: ORCA finished with error return - aborting the run\n"
+        )
+        p = _parse_method(content, "parse_basic")
+        self.assertEqual(p.data["termination_status"], "ERROR")
+
+    def test_error_return_with_file_line_no_highlevel(self):
+        content = (
+            "Random lines...\n"
+            "[file orca_main/run.cpp, line 12331]: ORCA finished with error return - aborting the run\n"
+        )
+        p = _parse_method(content, "parse_basic")
+        self.assertEqual(p.data["termination_status"], "ERROR")
+
+
 if __name__ == "__main__":
     unittest.main()

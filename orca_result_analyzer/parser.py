@@ -1,4 +1,5 @@
 import math
+import os
 import re
 import logging
 
@@ -29,6 +30,7 @@ class OrcaParser:
             "version": None,
             "scan_steps": [],
             "all_steps": [],
+            "termination_status": "Running",
         }
 
     def parse_xyz_content(self, content):
@@ -246,6 +248,32 @@ class OrcaParser:
                             [float(parts[1]), float(parts[2]), float(parts[3])]
                         )
                     curr += 1
+        self.parse_termination_status()
+
+    def parse_termination_status(self):
+        """Parse the termination status from the bottom of the file."""
+        self.data["termination_status"] = "Running"
+        if not self.lines:
+            return
+
+        # Check last 100 lines
+        last_lines = self.lines[-100:]
+        content_block = "\n".join(last_lines)
+        uu_block = content_block.upper()
+
+        if "ORCA TERMINATED NORMALLY" in uu_block:
+            self.data["termination_status"] = "Terminated normally"
+            return
+
+        # Check if there is any error signature
+        if (
+            "ORCA FINISHED BY ERROR TERMINATION" in uu_block
+            or "INPUT ERROR" in uu_block
+            or "ERROR !!!" in uu_block
+            or "ORCA FINISHED WITH ERROR RETURN" in uu_block
+            or re.search(r"\[file\s+[^,\]]+,\s*line\s*\d+\]", content_block, re.IGNORECASE)
+        ):
+            self.data["termination_status"] = "ERROR"
 
     def parse_trajectory(self):
         """Parse Optimization, Scan, and NEB Trajectories."""
