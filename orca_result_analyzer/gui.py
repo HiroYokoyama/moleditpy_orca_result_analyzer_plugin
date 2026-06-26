@@ -861,11 +861,14 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.lbl_version.setText(f"ORCA Version: {v}")
 
         # ORCA Run Status
-        status = (
-            self.parser.data.get("termination_status", "Running")
-            if self.parser
-            else "Unknown"
-        )
+        if not self.file_path:
+            status = "No file loaded"
+        else:
+            status = (
+                self.parser.data.get("termination_status", "Running")
+                if self.parser
+                else "Unknown"
+            )
         if getattr(self, "lbl_status", None) is not None:
             self.lbl_status.setText(f"Status: {status}")
             if "Terminated normally" in status:
@@ -875,6 +878,10 @@ class OrcaResultAnalyzerDialog(QDialog):
             elif "Running" in status:
                 self.lbl_status.setStyleSheet(
                     "color: #fd7e14; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+                )
+            elif "No file loaded" in status:
+                self.lbl_status.setStyleSheet(
+                    "color: #6c757d; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
                 )
             else:
                 self.lbl_status.setStyleSheet(
