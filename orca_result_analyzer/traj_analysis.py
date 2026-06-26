@@ -522,6 +522,22 @@ class TrajectoryResultDialog(QDialog):
         self._highlight_marker = None
         self._highlight_line = None
 
+        if not self.steps or not self.display_energies:
+            self.scatter = None
+            self.canvas.axes.text(
+                0.5,
+                0.5,
+                "No optimization/scan data found",
+                ha="center",
+                va="center",
+                transform=self.canvas.axes.transAxes,
+            )
+            self.canvas.axes.set_xlabel("Step")
+            self.canvas.axes.set_ylabel("Energy")
+            self.canvas.axes.set_title("Energy Profile")
+            self.canvas.draw_idle()
+            return
+
         if self.show_coord_x:
             # Try to get scan values or NEB distances.
             # Use explicit None checks so that 0.0 (first NEB image) is not skipped.
@@ -607,6 +623,11 @@ class TrajectoryResultDialog(QDialog):
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
 
+        if not self.display_energies or idx < 0 or idx >= len(self.display_energies):
+            return
+        if not self.steps or idx >= len(self.steps):
+            return
+
         y = self.display_energies[idx]
 
         if self.show_coord_x:
@@ -638,7 +659,7 @@ class TrajectoryResultDialog(QDialog):
 
     def on_step_changed(self, idx):
         # Bounds check to prevent IndexError during mode transitions
-        if idx < 0 or idx >= len(self.steps):
+        if idx < 0 or idx >= len(self.steps) or idx >= len(self.display_energies):
             return
 
         self.highlight_point(idx)
@@ -890,11 +911,19 @@ class TrajectoryResultDialog(QDialog):
             self.slider.setValue(idx)
 
     def on_hover(self, event):
+        if not self.scatter:
+            return
         vis = self.annot.get_visible()
         if event.inaxes == self.canvas.axes:
             cont, ind = self.scatter.contains(event)
             if cont:
                 idx = ind["ind"][0]
+                if (
+                    idx < 0
+                    or idx >= len(self.display_energies)
+                    or idx >= len(self.steps)
+                ):
+                    return
                 pos = self.scatter.get_offsets()[idx]
                 self.annot.xy = pos
                 val = self.display_energies[idx]
@@ -1038,6 +1067,8 @@ class TrajectoryResultDialog(QDialog):
                     writer.writerow(header)
                     mode = "Relative" if self.show_relative else "Absolute"
                     for i, step in enumerate(self.steps):
+                        if i >= len(self.display_energies):
+                            break
                         row = [i + 1, self.display_energies[i], mode]
                         if has_coord:
                             cv = step.get("scan_coord")

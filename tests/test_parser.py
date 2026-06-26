@@ -868,10 +868,7 @@ class TestParseTerminationStatus(unittest.TestCase):
         self.assertEqual(p.data["termination_status"], "Terminated normally")
 
     def test_module_error_termination(self):
-        content = (
-            "Some lines...\n"
-            "ORCA finished by error termination in ORCA_GSTEP\n"
-        )
+        content = "Some lines...\nORCA finished by error termination in ORCA_GSTEP\n"
         p = _parse_method(content, "parse_basic")
         self.assertEqual(p.data["termination_status"], "ERROR")
 

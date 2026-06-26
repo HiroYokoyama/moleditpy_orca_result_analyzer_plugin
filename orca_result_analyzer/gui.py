@@ -233,7 +233,9 @@ class OrcaResultAnalyzerDialog(QDialog):
 
         # ORCA Run Status Label
         status_str = (
-            self.parser.data.get("termination_status", "Running") if self.parser else "Unknown"
+            self.parser.data.get("termination_status", "Running")
+            if self.parser
+            else "Unknown"
         )
         self.lbl_status = QLabel(f"Status: {status_str}")
         self.lbl_status.setStyleSheet(
@@ -752,7 +754,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.lbl_version.setText(f"ORCA Version: {v}")
 
         # ORCA Run Status
-        status = self.parser.data.get("termination_status", "Running") if self.parser else "Unknown"
+        status = (
+            self.parser.data.get("termination_status", "Running")
+            if self.parser
+            else "Unknown"
+        )
         if getattr(self, "lbl_status", None) is not None:
             self.lbl_status.setText(f"Status: {status}")
             if "Terminated normally" in status:

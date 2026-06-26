@@ -473,5 +473,39 @@ class TestOnPick(unittest.TestCase):
         fake.slider.setValue.assert_not_called()
 
 
+class TestEmptyStepsGuards(unittest.TestCase):
+    def test_highlight_point_empty_guards(self):
+        fake = _FakeDialog([])
+        fake.canvas = MagicMock()
+
+        # Should return early
+        TrajectoryResultDialog.highlight_point(fake, 0)
+        fake.canvas.axes.plot.assert_not_called()
+
+        # Should return early for out of bounds index
+        fake.display_energies = [1.2]
+        fake.steps = [{"energy": 1.2}]
+        TrajectoryResultDialog.highlight_point(fake, 1)
+        fake.canvas.axes.plot.assert_not_called()
+
+    def test_on_step_changed_empty_guards(self):
+        fake = _FakeDialog([])
+        fake.highlight_point = MagicMock()
+
+        # Should return early
+        TrajectoryResultDialog.on_step_changed(fake, 0)
+        fake.highlight_point.assert_not_called()
+
+    def test_on_hover_empty_guards(self):
+        fake = _FakeDialog([])
+        fake.scatter = None
+        event = MagicMock()
+
+        # Should return early when scatter is None
+        TrajectoryResultDialog.on_hover(fake, event)
+        event.inaxes = MagicMock()
+        TrajectoryResultDialog.on_hover(fake, event)
+
+
 if __name__ == "__main__":
     unittest.main()

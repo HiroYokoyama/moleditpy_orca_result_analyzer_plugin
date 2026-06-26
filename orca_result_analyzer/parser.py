@@ -271,7 +271,9 @@ class OrcaParser:
             or "INPUT ERROR" in uu_block
             or "ERROR !!!" in uu_block
             or "ORCA FINISHED WITH ERROR RETURN" in uu_block
-            or re.search(r"\[file\s+[^,\]]+,\s*line\s*\d+\]", content_block, re.IGNORECASE)
+            or re.search(
+                r"\[file\s+[^,\]]+,\s*line\s*\d+\]", content_block, re.IGNORECASE
+            )
         ):
             self.data["termination_status"] = "ERROR"
 
