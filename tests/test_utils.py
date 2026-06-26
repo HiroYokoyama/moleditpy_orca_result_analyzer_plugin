@@ -23,6 +23,21 @@ def _load_utils():
 
 _utils = _load_utils()
 get_default_export_path = _utils.get_default_export_path
+normalize_atom_symbol = _utils.normalize_atom_symbol
+determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
+
+# ---------------------------------------------------------------------------
+# RDKit availability — used by skipUnless decorators throughout this module
+# ---------------------------------------------------------------------------
+try:
+    from rdkit import Chem
+    from rdkit.Geometry import Point3D
+
+    _RDKIT_AVAILABLE = True
+except ImportError:
+    Chem = None
+    Point3D = None
+    _RDKIT_AVAILABLE = False
 
 
 class TestGetDefaultExportPath(unittest.TestCase):
@@ -56,12 +71,8 @@ class TestGetDefaultExportPath(unittest.TestCase):
         self.assertTrue(result.endswith("mol_x.png"))
 
 
-normalize_atom_symbol = _utils.normalize_atom_symbol
-determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
-
-
 class TestNormalizeAtomSymbol(unittest.TestCase):
-    """Tests for normalize_atom_symbol — no RDKit required for dummy cases."""
+    """Tests for normalize_atom_symbol — dummy-label cases only (no RDKit required)."""
 
     def _norm(self, raw):
         return normalize_atom_symbol(raw)
@@ -79,16 +90,23 @@ class TestNormalizeAtomSymbol(unittest.TestCase):
         self.assertEqual(self._norm("*"), "*")
 
     def test_colon_suffix_dummy(self):
-        # "X:1" should strip to "X" → dummy
+        # "X:1" strips to "X" which is a known dummy label
         self.assertEqual(self._norm("X:1"), "*")
-
-    def test_colon_suffix_real(self):
-        # "C:2" should strip to "C" → Carbon (real element)
-        result = self._norm("C:2")
-        self.assertEqual(result, "C")
 
     def test_whitespace_stripped(self):
         self.assertEqual(self._norm("  DA  "), "*")
+
+
+@unittest.skipUnless(_RDKIT_AVAILABLE, "RDKit not installed")
+class TestNormalizeAtomSymbolRealElements(unittest.TestCase):
+    """Real-element cases — require RDKit periodic table."""
+
+    def _norm(self, raw):
+        return normalize_atom_symbol(raw)
+
+    def test_colon_suffix_real(self):
+        # "C:2" strips to "C" → Carbon
+        self.assertEqual(self._norm("C:2"), "C")
 
     def test_real_element_carbon(self):
         self.assertEqual(self._norm("C"), "C")
@@ -97,20 +115,7 @@ class TestNormalizeAtomSymbol(unittest.TestCase):
         self.assertEqual(self._norm("Fe"), "Fe")
 
     def test_real_element_lowercase(self):
-        # lowercase input should be capitalised
         self.assertEqual(self._norm("fe"), "Fe")
-
-
-# ---------------------------------------------------------------------------
-# RDKit-dependent tests — skipped when RDKit is not installed
-# ---------------------------------------------------------------------------
-try:
-    from rdkit import Chem
-    from rdkit.Geometry import Point3D
-
-    _RDKIT_AVAILABLE = True
-except ImportError:
-    _RDKIT_AVAILABLE = False
 
 
 @unittest.skipUnless(_RDKIT_AVAILABLE, "RDKit not installed")
