@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .parser import OrcaParser
+from .utils import normalize_atom_symbol
 
 
 class _ClickFilter(QObject):
@@ -891,7 +892,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             conf = Chem.Conformer(len(atoms))
 
             for i, sym in enumerate(atoms):
-                idx = mol.AddAtom(Chem.Atom(sym))
+                idx = mol.AddAtom(Chem.Atom(normalize_atom_symbol(sym)))
                 x, y, z = coords[i]
                 conf.SetAtomPosition(idx, Point3D(x, y, z))
 

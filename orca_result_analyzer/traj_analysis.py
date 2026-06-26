@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from .parser import OrcaParser
-from .utils import get_default_export_path
+from .utils import get_default_export_path, normalize_atom_symbol
 import logging
 
 try:
@@ -697,13 +697,10 @@ class TrajectoryResultDialog(QDialog):
             return
         mol = Chem.RWMol()
         conf = Chem.Conformer()
-        pt = self._periodic_table
         try:
             for i, sym in enumerate(atoms):
-                if ":" in sym:
-                    sym = sym.split(":")[0]
-                an = pt.GetAtomicNumber(sym)
-                mol.AddAtom(Chem.Atom(an))
+                rdkit_sym = normalize_atom_symbol(sym)
+                mol.AddAtom(Chem.Atom(rdkit_sym))
                 conf.SetAtomPosition(
                     i, Point3D(coords[i][0], coords[i][1], coords[i][2])
                 )
