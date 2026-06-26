@@ -11,13 +11,15 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QMenuBar,
     QFileDialog,
+    QListWidget,
+    QListWidgetItem,
     QSizePolicy,
     QApplication,
 )
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .parser import OrcaParser
-from .utils import normalize_atom_symbol
+from .utils import normalize_atom_symbol, determine_bonds_without_dummies
 
 
 class _ClickFilter(QObject):
@@ -98,6 +100,61 @@ from . import PLUGIN_VERSION  # noqa: E402
 import logging  # noqa: E402
 
 
+class _DirectoryFilePicker(QDialog):
+    """Simple dialog that lists *.out files in a directory for selection."""
+
+    def __init__(self, parent, directory: str, filenames: list[str]):
+        super().__init__(parent)
+        self.directory = directory
+        self.selected_path: str | None = None
+
+        self.setWindowTitle(
+            f"Select ORCA Output — {os.path.basename(directory)} ({len(filenames)} files)"
+        )
+        self.resize(500, 380)
+
+        layout = QVBoxLayout(self)
+
+        lbl = QLabel(
+            f"<b>{len(filenames)}</b> file(s) found in:<br><small>{directory}</small>"
+        )
+        lbl.setWordWrap(True)
+        layout.addWidget(lbl)
+
+        self._list = QListWidget()
+        self._list.setAlternatingRowColors(True)
+        for name in filenames:
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, os.path.join(directory, name))
+            self._list.addItem(item)
+        self._list.itemDoubleClicked.connect(self._accept_item)
+        layout.addWidget(self._list)
+
+        btn_box = QHBoxLayout()
+        btn_ok = QPushButton("Open")
+        btn_ok.setDefault(True)
+        btn_ok.clicked.connect(self._accept_selection)
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addStretch()
+        btn_box.addWidget(btn_ok)
+        btn_box.addWidget(btn_cancel)
+        layout.addLayout(btn_box)
+
+        if filenames:
+            self._list.setCurrentRow(0)
+
+    def _accept_item(self, item: QListWidgetItem):
+        self.selected_path = item.data(Qt.ItemDataRole.UserRole)
+        self.accept()
+
+    def _accept_selection(self):
+        item = self._list.currentItem()
+        if item:
+            self.selected_path = item.data(Qt.ItemDataRole.UserRole)
+            self.accept()
+
+
 class OrcaResultAnalyzerDialog(QDialog):
     def __init__(self, parent, parser, file_path, context=None):
         super().__init__(parent)
@@ -139,11 +196,17 @@ class OrcaResultAnalyzerDialog(QDialog):
         # File Menu
         file_menu = menu_bar.addMenu("&File")
 
-        open_action = QAction("&Open File...", self)
+        open_action = QAction("&Select File", self)
         open_action.setShortcut("Ctrl+O")
         open_action.setIcon(self.get_icon("menu_open.svg"))
         open_action.triggered.connect(self.open_file)
         file_menu.addAction(open_action)
+
+        open_dir_action = QAction("Select from &Directory", self)
+        open_dir_action.setShortcut("Ctrl+D")
+        open_dir_action.setIcon(self.get_icon("menu_open.svg"))
+        open_dir_action.triggered.connect(self.open_directory)
+        file_menu.addAction(open_dir_action)
 
         reload_action = QAction("&Reload File", self)
         reload_action.setShortcut("Ctrl+R")
@@ -164,6 +227,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         close_action.setIcon(self.get_icon("menu_close.svg"))
         close_action.triggered.connect(self.close)
         file_menu.addAction(close_action)
+
 
         # Analysis Menu (text-only; mirrors the quick-access buttons below)
         analysis_menu = menu_bar.addMenu("&Analysis")
@@ -280,7 +344,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         btns_top_layout = QVBoxLayout()
 
         # Large Open File Button
-        btn_open_large = QPushButton("Open File...")
+        btn_open_large = QPushButton("Select File")
         btn_open_large.setIcon(self.get_icon("menu_open.svg"))
         btn_open_large.setStyleSheet("""
             QPushButton {
@@ -621,6 +685,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         super().closeEvent(event)
 
     def open_file(self):
+        # Shift+click → open directory picker instead
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.open_directory()
+            return
         # Get last directory from current file
         start_dir = os.path.dirname(self.file_path) if self.file_path else ""
 
@@ -787,6 +855,35 @@ class OrcaResultAnalyzerDialog(QDialog):
                 self, "Error", "No output file path available or file does not exist."
             )
 
+    def open_directory(self):
+        """Scan a directory for ORCA .out files and let the user pick one."""
+        start_dir = os.path.dirname(self.file_path) if self.file_path else ""
+        chosen_dir = QFileDialog.getExistingDirectory(
+            self, "Select from Directory", start_dir
+        )
+        if not chosen_dir:
+            return
+
+        try:
+            found = sorted(
+                f for f in os.listdir(chosen_dir) if f.lower().endswith(".out")
+            )
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not list directory:\n{e}")
+            return
+
+        if not found:
+            QMessageBox.information(
+                self,
+                "No Files Found",
+                f"No ORCA output files (*.out) found in:\n{chosen_dir}",
+            )
+            return
+
+        picker = _DirectoryFilePicker(self, chosen_dir, found)
+        if picker.exec() == QDialog.DialogCode.Accepted and picker.selected_path:
+            self.load_file(picker.selected_path)
+
     def update_button_states(self):
         data = self.parser.data
 
@@ -904,13 +1001,12 @@ class OrcaResultAnalyzerDialog(QDialog):
             _freq_playing = getattr(self, "freq_dlg", None) is not None and getattr(
                 self.freq_dlg, "is_playing", False
             )
-            if rdDetermineBonds and not (_traj_playing or _freq_playing):
-                try:
-                    charge = self.parser.data.get("charge", 0)
-                    rdDetermineBonds.DetermineConnectivity(mol)
-                    rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
-                except Exception:
-                    pass  # Non-fatal; some charge states are unsupported
+            if not (_traj_playing or _freq_playing):
+                charge = self.parser.data.get("charge", 0)
+                # determine_bonds_without_dummies excludes dummy ('*') atoms
+                # from the sub-molecule passed to RDKit, preventing crashes
+                # when QM point charges or ghost atoms are present.
+                determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
 
             final_mol = mol.GetMol()
 

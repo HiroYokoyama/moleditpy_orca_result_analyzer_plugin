@@ -26,7 +26,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from .parser import OrcaParser
-from .utils import get_default_export_path, normalize_atom_symbol
+from .utils import (
+    get_default_export_path,
+    normalize_atom_symbol,
+    determine_bonds_without_dummies,
+)
 import logging
 
 try:
@@ -709,17 +713,12 @@ class TrajectoryResultDialog(QDialog):
 
         mol.AddConformer(conf)
 
-        # Determine bonds and bond orders.
-        # Skip DetermineBondOrders only during animation playback to avoid per-frame
-        # latency; connectivity is sufficient while playing.  On load and on close the
-        # full bond-order pass always runs so the main window gets accurate bond types.
-        if rdDetermineBonds:
-            try:
-                rdDetermineBonds.DetermineConnectivity(mol)
-                if not self.is_playing:
-                    rdDetermineBonds.DetermineBondOrders(mol, charge=self.charge)
-            except Exception:
-                pass  # RDKit bond determination fails for some charge states; non-fatal
+        # Determine bonds — skip dummy atoms to avoid RDKit crashes.
+        # Skip DetermineBondOrders during animation playback to avoid per-frame
+        # latency; connectivity is sufficient while playing.
+        determine_bonds_without_dummies(
+            mol, charge=self.charge, bond_orders=not self.is_playing
+        )
 
         final_mol = mol.GetMol()
 

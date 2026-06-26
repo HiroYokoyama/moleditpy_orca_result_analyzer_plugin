@@ -1,3 +1,4 @@
+import logging
 import os
 
 # Known dummy / pseudo-atom labels used in ORCA and other QC output files.
@@ -43,3 +44,64 @@ def normalize_atom_symbol(raw: str) -> str:
     except Exception:  # noqa: BLE001
         return "*"
     return sym
+
+
+def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = True):
+    """Run RDKit bond determination on *mol*, skipping dummy ('*') atoms.
+
+    Builds a sub-molecule containing only real (non-dummy) atoms, calls
+    ``DetermineConnectivity`` (and optionally ``DetermineBondOrders``) on it,
+    then copies the resulting bonds back to the original *mol* (which must be
+    an ``RWMol``).  Any failure is caught and logged — the function is
+    intentionally non-fatal.
+
+    Parameters
+    ----------
+    mol:
+        An RDKit ``RWMol`` with a conformer already attached.
+    charge:
+        Formal charge to pass to ``DetermineBondOrders``.
+    bond_orders:
+        If *True* (default) also determine bond orders.  Pass *False*
+        during animation playback to avoid per-frame latency.
+    """
+    try:
+        from rdkit import Chem
+        from rdkit.Geometry import Point3D
+        from rdkit.Chem import rdDetermineBonds
+
+        conf = mol.GetConformer()
+
+        # Build index map: sub_idx -> orig_idx (only real atoms)
+        real_indices = [
+            i
+            for i in range(mol.GetNumAtoms())
+            if mol.GetAtomWithIdx(i).GetSymbol() != "*"
+        ]
+
+        if not real_indices:
+            return  # nothing to do
+
+        # Build sub-molecule with only real atoms
+        sub = Chem.RWMol()
+        sub_conf = Chem.Conformer(len(real_indices))
+        for sub_i, orig_i in enumerate(real_indices):
+            sym = mol.GetAtomWithIdx(orig_i).GetSymbol()
+            sub.AddAtom(Chem.Atom(sym))
+            pos = conf.GetAtomPosition(orig_i)
+            sub_conf.SetAtomPosition(sub_i, Point3D(pos.x, pos.y, pos.z))
+        sub.AddConformer(sub_conf)
+
+        # Bond determination on the sub-molecule
+        rdDetermineBonds.DetermineConnectivity(sub)
+        if bond_orders:
+            rdDetermineBonds.DetermineBondOrders(sub, charge=charge)
+
+        # Copy bonds back to the original molecule
+        for bond in sub.GetBonds():
+            orig_i = real_indices[bond.GetBeginAtomIdx()]
+            orig_j = real_indices[bond.GetEndAtomIdx()]
+            mol.AddBond(orig_i, orig_j, bond.GetBondType())
+
+    except Exception as exc:  # noqa: BLE001
+        logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
