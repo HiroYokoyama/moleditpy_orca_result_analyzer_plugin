@@ -143,6 +143,7 @@ def _install_stubs(force=False):
     _orca_utils.determine_bonds_without_dummies = (
         lambda mol, charge=0, bond_orders=True: None  # no-op stub
     )
+    _orca_utils.list_orca_output_files = lambda directory: []  # no-op stub
 
     _orca_spectrum = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _orca_spectrum.SpectrumWidget = MagicMock()

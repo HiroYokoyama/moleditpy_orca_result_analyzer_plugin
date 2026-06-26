@@ -105,3 +105,21 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
 
     except Exception as exc:  # noqa: BLE001
         logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
+
+
+def list_orca_output_files(directory: str) -> list[str]:
+    """Return a sorted list of ``*.out`` filenames found in *directory*.
+
+    Only the bare filenames (not full paths) are returned.  An empty list is
+    returned if *directory* does not exist or cannot be listed.
+
+    Parameters
+    ----------
+    directory:
+        Path to the directory to scan.
+    """
+    try:
+        return sorted(f for f in os.listdir(directory) if f.lower().endswith(".out"))
+    except Exception as exc:  # noqa: BLE001
+        logging.debug("list_orca_output_files: cannot list '%s' — %s", directory, exc)
+        return []

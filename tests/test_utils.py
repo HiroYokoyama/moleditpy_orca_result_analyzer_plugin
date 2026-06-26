@@ -25,6 +25,7 @@ _utils = _load_utils()
 get_default_export_path = _utils.get_default_export_path
 normalize_atom_symbol = _utils.normalize_atom_symbol
 determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
+list_orca_output_files = _utils.list_orca_output_files
 
 # ---------------------------------------------------------------------------
 # RDKit availability — used by skipUnless decorators throughout this module
@@ -190,6 +191,48 @@ class TestDetermineBondsWithoutDummies(unittest.TestCase):
             determine_bonds_without_dummies(mol, charge=999, bond_orders=True)
         except Exception as exc:
             self.fail(f"Should be non-fatal, but raised: {exc}")
+
+
+import tempfile
+
+
+class TestListOrcaOutputFiles(unittest.TestCase):
+    """Tests for list_orca_output_files() — pure Python, no RDKit or Qt needed."""
+
+    def _make_dir(self, filenames):
+        """Create a temp directory containing files with the given names."""
+        d = tempfile.mkdtemp()
+        for name in filenames:
+            open(os.path.join(d, name), "w").close()
+        return d
+
+    def test_returns_only_out_files(self):
+        d = self._make_dir(["job.out", "job.inp", "job.xyz", "result.out"])
+        result = list_orca_output_files(d)
+        self.assertEqual(result, ["job.out", "result.out"])
+
+    def test_case_insensitive(self):
+        d = self._make_dir(["A.OUT", "b.Out", "c.out"])
+        result = list_orca_output_files(d)
+        self.assertEqual(len(result), 3)
+        self.assertIn("A.OUT", result)
+
+    def test_sorted_alphabetically(self):
+        d = self._make_dir(["z.out", "a.out", "m.out"])
+        result = list_orca_output_files(d)
+        self.assertEqual(result, ["a.out", "m.out", "z.out"])
+
+    def test_empty_directory_returns_empty_list(self):
+        d = self._make_dir([])
+        self.assertEqual(list_orca_output_files(d), [])
+
+    def test_no_out_files_returns_empty_list(self):
+        d = self._make_dir(["job.inp", "job.xyz", "README.txt"])
+        self.assertEqual(list_orca_output_files(d), [])
+
+    def test_nonexistent_directory_returns_empty_list(self):
+        result = list_orca_output_files("/nonexistent/path/that/does/not/exist")
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":

@@ -19,7 +19,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .parser import OrcaParser
-from .utils import normalize_atom_symbol, determine_bonds_without_dummies
+from .utils import (
+    normalize_atom_symbol,
+    determine_bonds_without_dummies,
+    list_orca_output_files,
+)
 
 
 class _ClickFilter(QObject):
@@ -165,6 +169,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
         self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
+        self.setAcceptDrops(True)  # enable folder/file drag-and-drop
         self.init_ui()
 
         # Install global picking logic
@@ -182,6 +187,44 @@ class OrcaResultAnalyzerDialog(QDialog):
         if os.path.exists(icon_path):
             return QIcon(icon_path)
         return QIcon()
+
+    # ------------------------------------------------------------------
+    # Drag-and-drop: folder → Select from Directory, .out → load direct
+    # ------------------------------------------------------------------
+
+    def dragEnterEvent(self, event):
+        mime = event.mimeData()
+        if mime.hasUrls():
+            for url in mime.urls():
+                local = url.toLocalFile()
+                if os.path.isdir(local) or local.lower().endswith(".out"):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            local = url.toLocalFile()
+            if os.path.isdir(local):
+                self._open_directory_path(local)
+                return
+            if local.lower().endswith(".out") and os.path.isfile(local):
+                self.load_file(local)
+                return
+
+    def _open_directory_path(self, directory: str):
+        """Run the Select-from-Directory picker for a specific *directory*."""
+        found = list_orca_output_files(directory)
+        if not found:
+            QMessageBox.information(
+                self,
+                "No Files Found",
+                f"No ORCA output files (*.out) found in:\n{directory}",
+            )
+            return
+        picker = _DirectoryFilePicker(self, directory, found)
+        if picker.exec() == QDialog.DialogCode.Accepted and picker.selected_path:
+            self.load_file(picker.selected_path)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -227,7 +270,6 @@ class OrcaResultAnalyzerDialog(QDialog):
         close_action.setIcon(self.get_icon("menu_close.svg"))
         close_action.triggered.connect(self.close)
         file_menu.addAction(close_action)
-
 
         # Analysis Menu (text-only; mirrors the quick-access buttons below)
         analysis_menu = menu_bar.addMenu("&Analysis")
@@ -863,24 +905,19 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         if not chosen_dir:
             return
+        self._open_directory_path(chosen_dir)
 
-        try:
-            found = sorted(
-                f for f in os.listdir(chosen_dir) if f.lower().endswith(".out")
-            )
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Could not list directory:\n{e}")
-            return
-
+    def _open_directory_path(self, directory: str):
+        """Run the Select-from-Directory picker for a specific *directory*."""
+        found = list_orca_output_files(directory)
         if not found:
             QMessageBox.information(
                 self,
                 "No Files Found",
-                f"No ORCA output files (*.out) found in:\n{chosen_dir}",
+                f"No ORCA output files (*.out) found in:\n{directory}",
             )
             return
-
-        picker = _DirectoryFilePicker(self, chosen_dir, found)
+        picker = _DirectoryFilePicker(self, directory, found)
         if picker.exec() == QDialog.DialogCode.Accepted and picker.selected_path:
             self.load_file(picker.selected_path)
 
