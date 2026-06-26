@@ -137,7 +137,9 @@ def _install_stubs(force=False):
     _orca_utils.get_default_export_path = (
         lambda base, suffix="_analyzed", extension="": ""
     )
-    _orca_utils.normalize_atom_symbol = lambda raw: raw.strip().split(":")[0].capitalize()
+    _orca_utils.normalize_atom_symbol = (
+        lambda raw: raw.strip().split(":")[0].capitalize()
+    )
 
     _orca_spectrum = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _orca_spectrum.SpectrumWidget = MagicMock()
