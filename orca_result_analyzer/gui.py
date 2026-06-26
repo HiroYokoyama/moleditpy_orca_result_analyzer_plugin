@@ -118,8 +118,6 @@ class OrcaResultAnalyzerDialog(QDialog):
         mw = context.get_main_window() if context is not None else self.mw
         if mw is not None and hasattr(mw, "init_manager"):
             mw.init_manager.current_file_path = self.file_path
-        if context is not None:
-            context.mark_project_modified()
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -709,8 +707,6 @@ class OrcaResultAnalyzerDialog(QDialog):
             # --- Sync with Main Window Title ---
             if hasattr(self.mw, "init_manager"):
                 self.mw.init_manager.current_file_path = path
-            if self.context is not None:
-                self.context.mark_project_modified()
 
             # Update File Info Labels
             self.update_file_info_labels()
