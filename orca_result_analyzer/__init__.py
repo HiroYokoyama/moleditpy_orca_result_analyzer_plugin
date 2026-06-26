@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "3.4.3"
+PLUGIN_VERSION = "3.4.4"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
@@ -71,6 +71,37 @@ def _open_orca_file(path, context):
     QApplication.processEvents()
 
 
+def _open_orca_analyzer_empty(context):
+    """Open the analyzer dialog with no file pre-loaded."""
+    QApplication.processEvents()
+    mw = context.get_main_window()
+
+    # Close existing window if open
+    existing = context.get_window("analyzer")
+    if existing is not None:
+        try:
+            # If already open, just raise it
+            existing.show()
+            existing.raise_()
+            existing.activateWindow()
+            return
+        except Exception as _e:
+            logging.warning("silenced: %s", _e)
+
+    from .parser import OrcaParser
+    from .gui import OrcaResultAnalyzerDialog
+
+    parser = OrcaParser()  # empty — no file loaded
+
+    win = OrcaResultAnalyzerDialog(mw, parser, "", context)
+    context.register_window("analyzer", win)
+
+    win.show()
+    win.raise_()
+    win.activateWindow()
+    QApplication.processEvents()
+
+
 def initialize(context):
     """Initialize the ORCA Result Analyzer plugin.
 
@@ -98,29 +129,21 @@ def initialize(context):
     context.register_file_opener(".out", open_orca_file, priority=100)
     context.register_drop_handler(handle_drop, priority=100)
 
-    def menu_action():
-        mw = context.get_main_window()
-        path, _ = QFileDialog.getOpenFileName(
-            mw, "Open ORCA Output", "", "ORCA Output (*.out)"
-        )
-        if path:
-            if not handle_drop(path):
-                _open_orca_file(path, context)
-
-    # context.add_menu_action("Analysis/ORCA Result Analyzer", menu_action)
+    # View menu entry — opens analyzer without requiring a file first
+    context.add_menu_action(
+        "View/ORCA Result Analyzer",
+        lambda: _open_orca_analyzer_empty(context),
+    )
 
 
 def run(mw):
-    """Legacy run() entry: called from Plugins menu by the host."""
+    """Legacy run() entry: called from Plugins menu by the host.
+
+    Opens the analyzer directly without requiring a file — the user can
+    use 'Select File' or 'Select from Directory' inside the dialog.
+    """
     context = _context
     if context is None:
         return
 
-    mw = context.get_main_window()
-    path, _ = QFileDialog.getOpenFileName(
-        mw, "Open ORCA Output", "", "ORCA Output (*.out);;All Files (*)"
-    )
-    if not path:
-        return
-
-    _open_orca_file(path, context)
+    _open_orca_analyzer_empty(context)

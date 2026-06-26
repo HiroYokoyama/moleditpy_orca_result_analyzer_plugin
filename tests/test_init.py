@@ -32,11 +32,20 @@ def _install_qt_stubs():
             existing_widgets.QMessageBox = MagicMock()
         if not hasattr(existing_widgets, "QFileDialog"):
             existing_widgets.QFileDialog = MagicMock()
+        if not hasattr(existing_widgets, "QApplication"):
+            app_mock = MagicMock()
+            app_mock.processEvents = MagicMock()
+            existing_widgets.QApplication = app_mock
+        elif not hasattr(existing_widgets.QApplication, "processEvents"):
+            existing_widgets.QApplication.processEvents = MagicMock()
     else:
         _pyqt6 = existing_pyqt6 or types.ModuleType("PyQt6")
         _widgets = types.ModuleType("PyQt6.QtWidgets")
         _widgets.QMessageBox = MagicMock()
         _widgets.QFileDialog = MagicMock()
+        app_mock = MagicMock()
+        app_mock.processEvents = MagicMock()
+        _widgets.QApplication = app_mock
         _pyqt6.QtWidgets = _widgets
 
         sys.modules.update(
@@ -260,6 +269,117 @@ class TestContextRegistryAPI(unittest.TestCase):
             _init_mod.initialize(ctx2)
         except AttributeError as exc:
             self.fail(f"initialize() called a context method not on StubContext: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# TestViewMenuAction — View/ORCA Result Analyzer registered in initialize()
+# ---------------------------------------------------------------------------
+
+
+class TestViewMenuAction(unittest.TestCase):
+    def setUp(self):
+        self.ctx = StubContext()
+        _init_mod.initialize(self.ctx)
+
+    def test_view_menu_action_registered(self):
+        self.assertIn("View/ORCA Result Analyzer", self.ctx.menu_actions)
+
+    def test_view_menu_action_is_callable(self):
+        action = self.ctx.menu_actions.get("View/ORCA Result Analyzer")
+        self.assertTrue(callable(action))
+
+
+# ---------------------------------------------------------------------------
+# TestRunFunction — run() no longer opens a file dialog
+# ---------------------------------------------------------------------------
+
+
+class TestRunFunction(unittest.TestCase):
+    def test_run_is_callable(self):
+        self.assertTrue(callable(_init_mod.run))
+
+    def test_run_without_context_does_not_raise(self):
+        """run() with no prior initialize() should silently return."""
+        original = _init_mod._context
+        _init_mod._context = None
+        try:
+            _init_mod.run(MagicMock())  # must not raise
+        finally:
+            _init_mod._context = original
+
+    def test_run_does_not_open_file_dialog(self):
+        """run() must NOT call QFileDialog.getOpenFileName (no file pre-selection)."""
+        ctx = StubContext()
+        _init_mod.initialize(ctx)
+
+        # Patch _open_orca_analyzer_empty to be a no-op so Qt is never touched
+        original = _init_mod._open_orca_analyzer_empty
+        calls = []
+        _init_mod._open_orca_analyzer_empty = lambda c: calls.append(c)
+
+        # Also make sure QFileDialog is a clean mock we can introspect
+        widgets_mod = sys.modules.get("PyQt6.QtWidgets")
+        file_dialog_mock = MagicMock()
+        original_fd = getattr(widgets_mod, "QFileDialog", None)
+        if widgets_mod:
+            widgets_mod.QFileDialog = file_dialog_mock
+
+        try:
+            _init_mod.run(MagicMock())
+            # _open_orca_analyzer_empty should have been called once
+            self.assertEqual(len(calls), 1)
+            # QFileDialog.getOpenFileName must NOT have been called
+            file_dialog_mock.getOpenFileName.assert_not_called()
+        finally:
+            _init_mod._open_orca_analyzer_empty = original
+            if widgets_mod and original_fd is not None:
+                widgets_mod.QFileDialog = original_fd
+
+
+# ---------------------------------------------------------------------------
+# TestOpenAnalyzerEmpty — singleton + window-registration contract
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAnalyzerEmpty(unittest.TestCase):
+    def _make_ctx_with_empty_open(self):
+        """Return a StubContext where _open_orca_analyzer_empty is
+        monkey-patched to record calls without touching Qt."""
+        ctx = StubContext()
+        _init_mod.initialize(ctx)
+        return ctx
+
+    def test_view_action_invokes_empty_open(self):
+        """Calling the View menu action should invoke _open_orca_analyzer_empty."""
+        ctx = self._make_ctx_with_empty_open()
+        calls = []
+        original = _init_mod._open_orca_analyzer_empty
+        _init_mod._open_orca_analyzer_empty = lambda c: calls.append(c)
+        try:
+            ctx.menu_actions["View/ORCA Result Analyzer"]()
+            self.assertEqual(len(calls), 1)
+            self.assertIs(calls[0], ctx)
+        finally:
+            _init_mod._open_orca_analyzer_empty = original
+
+    def test_singleton_raises_existing_window(self):
+        """If a window is already registered, it should be raised, not replaced."""
+        ctx = StubContext()
+        # Pre-register a fake window
+        fake_win = MagicMock()
+        ctx.register_window("analyzer", fake_win)
+
+        original = _init_mod._open_orca_analyzer_empty
+        # Call the real function — it should detect the existing window and raise it
+        _init_mod._open_orca_analyzer_empty(ctx)
+
+        # The fake window should have been shown/raised
+        fake_win.show.assert_called_once()
+        fake_win.raise_.assert_called_once()
+        fake_win.activateWindow.assert_called_once()
+
+        # A second window must NOT have been registered
+        self.assertIs(ctx.get_window("analyzer"), fake_win)
 
 
 if __name__ == "__main__":
