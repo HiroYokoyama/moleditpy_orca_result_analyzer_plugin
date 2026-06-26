@@ -272,20 +272,20 @@ class TestContextRegistryAPI(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# TestViewMenuAction — View/ORCA Result Analyzer registered in initialize()
+# TestExtensionsMenuAction — Extensions/ORCA Result Analyzer registered in initialize()
 # ---------------------------------------------------------------------------
 
 
-class TestViewMenuAction(unittest.TestCase):
+class TestExtensionsMenuAction(unittest.TestCase):
     def setUp(self):
         self.ctx = StubContext()
         _init_mod.initialize(self.ctx)
 
-    def test_view_menu_action_registered(self):
-        self.assertIn("View/ORCA Result Analyzer", self.ctx.menu_actions)
+    def test_extensions_menu_action_registered(self):
+        self.assertIn("Extensions/ORCA Result Analyzer", self.ctx.menu_actions)
 
-    def test_view_menu_action_is_callable(self):
-        action = self.ctx.menu_actions.get("View/ORCA Result Analyzer")
+    def test_extensions_menu_action_is_callable(self):
+        action = self.ctx.menu_actions.get("Extensions/ORCA Result Analyzer")
         self.assertTrue(callable(action))
 
 
@@ -349,14 +349,14 @@ class TestOpenAnalyzerEmpty(unittest.TestCase):
         _init_mod.initialize(ctx)
         return ctx
 
-    def test_view_action_invokes_empty_open(self):
-        """Calling the View menu action should invoke _open_orca_analyzer_empty."""
+    def test_extensions_action_invokes_empty_open(self):
+        """Calling the Extensions menu action should invoke _open_orca_analyzer_empty."""
         ctx = self._make_ctx_with_empty_open()
         calls = []
         original = _init_mod._open_orca_analyzer_empty
         _init_mod._open_orca_analyzer_empty = lambda c: calls.append(c)
         try:
-            ctx.menu_actions["View/ORCA Result Analyzer"]()
+            ctx.menu_actions["Extensions/ORCA Result Analyzer"]()
             self.assertEqual(len(calls), 1)
             self.assertIs(calls[0], ctx)
         finally:
