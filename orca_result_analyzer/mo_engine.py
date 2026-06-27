@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
-# from .logger import Logger
+
 
 
 class CubeWriter:
@@ -109,7 +109,7 @@ class BasisSetEngine:
             'coeffs': np.array([...])
         }
         """
-        # self.logger = Logger.get_logger("BasisSetEngine")
+
         self.shells = shells
         self.n_basis = 0
         self._prepare_definitions()
@@ -332,7 +332,7 @@ class BasisSetEngine:
             defs = self.basis_definitions.get(l_type, None)
             if not defs:
                 # Fallback or error?
-                # self.logger.warning(f"Unsupported shell type {l_type}")
+                pass
                 logging.warning("Warning: Unsupported shell type %s", l_type)
                 sh["basis_data"] = []
                 continue
