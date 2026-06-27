@@ -11,20 +11,29 @@ from unittest.mock import MagicMock
 if "PyQt6" not in sys.modules:
     pyqt6 = MagicMock()
     qtw = MagicMock()
-    
+
     # We only need QDialog to be a class that we can instantiate
     class _QDialog:
         def __init__(self, *a, **k):
             self.menu_bar_mock = MagicMock()
+
         def menuBar(self):
             return self.menu_bar_mock
-        def setWindowTitle(self, *a): pass
-        def resize(self, *a): pass
-        def setAcceptDrops(self, *a): pass
-        def close(self): pass
-        
+
+        def setWindowTitle(self, *a):
+            pass
+
+        def resize(self, *a):
+            pass
+
+        def setAcceptDrops(self, *a):
+            pass
+
+        def close(self):
+            pass
+
     qtw.QDialog = _QDialog
-        
+
     sys.modules["PyQt6"] = pyqt6
     sys.modules["PyQt6.QtWidgets"] = qtw
     sys.modules["PyQt6.QtCore"] = MagicMock()
