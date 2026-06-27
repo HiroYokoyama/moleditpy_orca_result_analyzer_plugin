@@ -45,6 +45,8 @@ Analyze structural forces for the current structure or the entire trajectory.
 - **Modeless Threshold Graph**: View a non-blocking convergence threshold plot across all optimization steps. The graph features color-matched Y-axes for each metric, complete with a top border line and easy dropdown metric selection.
 - **Data Table**: Full breakdown of gradients, force components, and magnitudes.
 
+![threshold](img/conv_threshold.png)
+
 ### 5. Atomic Charges
 - **Populations**: Mulliken, Loewdin, Hirshfeld, and **NBO** populations (if available).
 - **3D Coloring**: Color atoms in the 3D viewer based on charge value or population type.
