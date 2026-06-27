@@ -42,7 +42,7 @@ Analyze structural forces for the current structure or the entire trajectory.
 - **Visualization Controls**: **Auto Scale** feature automatically optimizes vector size for visibility, especially for small gradients.
 - **Step-by-Step Navigation**: Precise control with `<` and `>` buttons or the trajectory slider.
 - **Convergence Tracking**: Multi-line display of **RMS/MAX Gradient** and **RMS/MAX Step**, color-coded (**Green for YES**, **Red for NO**).
-- **Modeless Threshold Graph**: View a non-blocking convergence threshold plot across all optimization steps. The graph features color-matched Y-axes for each metric, complete with a top border line and easy dropdown metric selection.
+- **Modeless Threshold Graph**: View a non-blocking convergence threshold plot across all optimization steps. The graph features color-matched Y-axes for each metric and easy dropdown metric selection.
 - **Data Table**: Full breakdown of gradients, force components, and magnitudes.
 
 ![threshold](img/conv_threshold.png)
