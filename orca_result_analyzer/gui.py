@@ -411,7 +411,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """)
         btn_open_large.clicked.connect(self.open_file)
-        btn_open_large.setToolTip("Select ORCA Output File\nShift+Click: Select from Directory")
+        btn_open_large.setToolTip(
+            "Select ORCA Output File\nShift+Click: Select from Directory"
+        )
         btns_top_layout.addWidget(btn_open_large)
 
         # Reload Button
@@ -436,6 +438,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """)
         btn_reload.clicked.connect(self.reload_file)
+        btn_reload.setToolTip("Reload the currently opened ORCA output file")
         btns_top_layout.addWidget(btn_reload)
 
         # Open Output Button
@@ -460,6 +463,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """)
         self.btn_view_output.clicked.connect(self.open_output_file)
+        self.btn_view_output.setToolTip(
+            "Open the raw ORCA output file in the text viewer"
+        )
         btns_top_layout.addWidget(self.btn_view_output)
 
         file_frame_layout.addLayout(btns_top_layout)
@@ -709,12 +715,16 @@ class OrcaResultAnalyzerDialog(QDialog):
             "freq_dlg",
             "traj_dlg",
             "forces_dlg",
+            "conv_graph_dlg",
             "thermal_dlg",
             "tddft_dlg",
             "dipole_dlg",
             "charges_dlg",
             "nmr_dlg",
             "scf_dlg",
+            "props_dlg",
+            "bond_dlg",
+            "energy_dlg",
         ]
         for attr in dialog_attrs:
             if getattr(self, attr, None) is not None:
