@@ -8,10 +8,8 @@ at module level in tests that need them.  `parser.py` and `utils.py` are
 loaded directly via `importlib.util` with no stubs at all, since they have
 no Qt or third-party dependencies.
 
-**Current status: 382 tests, all passing. `parser.py` coverage: 79%.
-Static analysis (ruff): 9 minor issues (7 × E741 ambiguous names in quantum
-chemistry code, 2 × E402 intentional imports-after-metadata in `__init__.py`).
-All E722 bare-except violations resolved.**
+**Current status: 613 tests, all passing. `parser.py` coverage: 79%.
+Static analysis (ruff): 0 issues.**
 
 ## Running
 
