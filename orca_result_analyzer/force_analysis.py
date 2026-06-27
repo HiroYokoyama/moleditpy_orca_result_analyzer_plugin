@@ -1042,7 +1042,9 @@ class ForceViewerDialog(QDialog):
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
             self.graph_dlg = None
-        super().closeEvent(event)
+        close_evt = getattr(super(), "closeEvent", None)
+        if close_evt is not None:
+            close_evt(event)
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
