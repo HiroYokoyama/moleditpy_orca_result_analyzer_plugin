@@ -40,6 +40,15 @@ python -m pytest tests/ --cov=orca_result_analyzer --cov-report=term-missing
 
 ---
 
+### test_about_menu.py
+**GUI tests — uses PyQt6 stubs**
+
+| Test | What is tested |
+|---|---|
+| `TestAboutMenu` | Verifies that `show_about` correctly invokes `QMessageBox.about` with the author, license, and GitHub URL |
+
+---
+
 ### test_parser.py
 **OrcaParser — pure Python, no stubs required**
 
