@@ -111,8 +111,8 @@ class TestForceAnalysis(unittest.TestCase):
             # The plot should be called for RMS Grad and Energy Change
             plot_calls1 = mock_ax1.plot.call_args_list
             plot_calls2 = mock_ax2.plot.call_args_list
-            self.assertEqual(len(plot_calls1), 1)
-            self.assertEqual(len(plot_calls2), 1)
+            self.assertEqual(len(plot_calls1), 2)
+            self.assertEqual(len(plot_calls2), 2)
 
             # Check steps values (x-axis)
             x_vals = plot_calls1[0][0][0]
@@ -273,7 +273,7 @@ class TestForceAnalysis(unittest.TestCase):
             # Reset call counts, then call plot_data with a single metric
             mock_ax.reset_mock()
             dlg.plot_data(self._make_traj_steps(), None, selection="RMS Grad")
-            self.assertEqual(mock_ax.plot.call_count, 1)
+            self.assertEqual(mock_ax.plot.call_count, 2)
             # twinx should NOT be called for a single metric
             mock_ax.twinx.assert_not_called()
         finally:
@@ -519,6 +519,58 @@ class TestForceAnalysis(unittest.TestCase):
         finally:
             if original_graph_dialog:
                 fa.ConvergenceGraphDialog = original_graph_dialog
+
+    def test_convergence_graph_dialog_triangle_marker(self):
+        """Test that Y-axis triangle markers are plotted at threshold values when present"""
+        import orca_result_analyzer.force_analysis as fa
+
+        mock_figure = MagicMock()
+        mock_ax = MagicMock()
+        mock_figure.add_subplot.return_value = mock_ax
+        mock_ax.plot.return_value = [MagicMock()]
+
+        original_figure = getattr(fa, "Figure", None)
+        fa.Figure = MagicMock(return_value=mock_figure)
+
+        try:
+            # Traj steps containing convergence threshold
+            steps = [
+                {
+                    "convergence": {
+                        "rms gradient": {
+                            "value": 0.001,
+                            "tolerance": 0.0001,
+                            "converged": "NO",
+                        }
+                    }
+                }
+            ]
+
+            dlg = ConvergenceGraphDialog(None, steps)
+
+            # Reset mock to trace plot_data specifically
+            mock_ax.reset_mock()
+            mock_ax.plot.return_value = [MagicMock()]
+            dlg.plot_data(steps, None, selection="RMS Grad")
+
+            # plot should be called twice: 1st for the data line, 2nd for the triangle marker
+            self.assertEqual(mock_ax.plot.call_count, 2)
+
+            # Check the arguments of the 2nd call (the marker plot call)
+            marker_call_args = mock_ax.plot.call_args_list[1]
+            # Coordinates for 2nd call: X axes coord should be 0.0 (left), Y data should be target 0.0001
+            x_coord = marker_call_args[0][0]
+            y_coord = marker_call_args[0][1]
+            kwargs = marker_call_args[1]
+
+            self.assertEqual(x_coord, 0.0)
+            self.assertEqual(y_coord, 0.0001)
+            self.assertEqual(kwargs.get("marker"), ">")
+            self.assertFalse(kwargs.get("clip_on"))
+
+        finally:
+            if original_figure:
+                fa.Figure = original_figure
 
 
 if __name__ == "__main__":

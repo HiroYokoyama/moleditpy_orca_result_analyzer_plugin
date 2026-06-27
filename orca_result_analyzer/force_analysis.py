@@ -249,13 +249,14 @@ class ConvergenceGraphDialog(QDialog):
                 axes[4].spines["right"].set_position(("axes", 1.36))
                 axes[4].spines["right"].set_visible(True)
 
-            self.figure.subplots_adjust(left=0.12, right=0.62, bottom=0.12, top=0.95)
+            self.figure.subplots_adjust(left=0.22, right=0.62, bottom=0.12, top=0.95)
         else:
             self.figure.subplots_adjust(left=0.12, right=0.78, bottom=0.12, top=0.95)
 
         lines = []
         labels = []
         spine_positions = ["left", "right", "right", "left", "right"]
+        axes_x_coords = [0.0, 1.0, 1.18, -0.18, 1.36]
 
         for idx, (ax, k) in enumerate(zip(axes, keys_with_data)):
             name = display_keys[k]
@@ -276,11 +277,53 @@ class ConvergenceGraphDialog(QDialog):
             lines.append(line)
             labels.append(name)
 
-            # Threshold dashed line
+            # Threshold dashed line and Y-axis triangle marker
             if targets[k] is not None:
                 ax.axhline(
                     y=targets[k], color=color, linestyle="--", linewidth=1.5, alpha=0.8
                 )
+                # Add threshold value to y-ticks
+                try:
+                    yticks = list(ax.get_yticks())
+                    # Filter out ticks that are too close to avoid overlapping labels in log space
+                    yticks = [
+                        t
+                        for t in yticks
+                        if abs(
+                            math.log10(max(1e-10, abs(t)))
+                            - math.log10(max(1e-10, abs(targets[k])))
+                        )
+                        > 0.3
+                    ]
+                    yticks.append(targets[k])
+                    ax.set_yticks(yticks)
+                except Exception as _e:
+                    logging.warning("Failed to add threshold tick: %s", _e)
+
+                # Draw a triangle marker on the side of the Y-axis
+                try:
+                    import matplotlib.transforms as mtransforms
+
+                    trans = mtransforms.blended_transform_factory(
+                        ax.transAxes, ax.transData
+                    )
+                    x_axes_val = (
+                        axes_x_coords[idx % len(axes_x_coords)] if is_multi else 0.0
+                    )
+                    marker_shape = ">" if x_axes_val <= 0.0 else "<"
+
+                    ax.plot(
+                        x_axes_val,
+                        targets[k],
+                        marker=marker_shape,
+                        color=color,
+                        transform=trans,
+                        clip_on=False,
+                        markersize=7,
+                        zorder=5,
+                    )
+                except Exception as _e:
+                    logging.warning("Failed to draw threshold marker on axis: %s", _e)
 
             ax.set_ylabel(name, color=color, fontsize=9)
             ax.tick_params(axis="y", colors=color, labelsize=8)
