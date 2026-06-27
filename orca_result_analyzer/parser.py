@@ -8,7 +8,6 @@ class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
 
     def __init__(self):
-
         self.filename = ""
         self.raw_content = ""
         self.lines = []

@@ -4,8 +4,6 @@ import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
-
-
 class CubeWriter:
     @staticmethod
     def write(filepath, atoms_sym, atoms_coords, origin, vectors, data, comment=""):

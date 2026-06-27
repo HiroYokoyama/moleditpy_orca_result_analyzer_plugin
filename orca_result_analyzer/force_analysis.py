@@ -21,6 +21,102 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 import logging
 
+try:
+    from matplotlib.backends.backend_qtagg import (
+        FigureCanvasQTAgg,
+        NavigationToolbar2QT,
+    )
+    from matplotlib.figure import Figure
+
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+
+class ConvergenceGraphDialog(QDialog):
+    def __init__(self, parent, traj_steps):
+        super().__init__(parent)
+        self.setWindowTitle("Convergence Thresholds")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout(self)
+
+        if not HAS_MATPLOTLIB:
+            layout.addWidget(QLabel("Matplotlib is required to view the graph."))
+            return
+
+        self.figure = Figure()
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        layout.addWidget(self.canvas)
+
+        self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        layout.addWidget(self.toolbar)
+
+        self.plot_data(traj_steps)
+
+    def plot_data(self, traj_steps):
+        ax = self.figure.add_subplot(111)
+
+        display_keys = {
+            "rms gradient": "RMS Grad",
+            "max gradient": "MAX Grad",
+            "rms step": "RMS Step",
+            "max step": "MAX Step",
+            "energy change": "Energy Change",
+        }
+
+        # Gather data
+        data = {k: [] for k in display_keys.keys()}
+        targets = {k: None for k in display_keys.keys()}
+        steps = []
+
+        def safe_float(v):
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                return np.nan
+
+        for i, step in enumerate(traj_steps):
+            conv = step.get("convergence")
+            if not conv:
+                continue
+            steps.append(i + 1)
+            for k in display_keys.keys():
+                val_obj = conv.get(k)
+                if val_obj and isinstance(val_obj, dict):
+                    data[k].append(safe_float(val_obj.get("value", np.nan)))
+                    if targets[k] is None and "target" in val_obj:
+                        targets[k] = safe_float(val_obj["target"])
+                elif val_obj is not None:
+                    data[k].append(safe_float(val_obj))
+                else:
+                    data[k].append(np.nan)
+
+        if not steps:
+            ax.text(0.5, 0.5, "No convergence data available", ha="center", va="center")
+            return
+
+        for k, name in display_keys.items():
+            valid_data = [v for v in data[k] if not np.isnan(v)]
+            if valid_data:
+                (line,) = ax.plot(steps, data[k], marker="o", label=name)
+                # Plot the threshold target as a horizontal line in the same color
+                if targets[k] is not None:
+                    ax.axhline(
+                        y=targets[k],
+                        color=line.get_color(),
+                        linestyle="--",
+                        alpha=0.5,
+                        label=f"{name} Target",
+                    )
+
+        ax.set_xlabel("Optimization Step")
+        ax.set_ylabel("Value (Log Scale)")
+        ax.set_yscale("symlog", linthresh=1e-6)
+        ax.grid(True, which="both", ls="-", alpha=0.2)
+        ax.legend()
+        self.figure.tight_layout()
+
 
 class ForceViewerDialog(QDialog):
     def __init__(self, parent_dlg, gradients, parser=None):
@@ -126,10 +222,11 @@ class ForceViewerDialog(QDialog):
         # Initialize
         self.populate_force_table()
 
-        # Load Settings (Reverse, Color, Etc.) - Scale NOT loaded to allow auto-scaling
         self.load_settings()
 
-        # self.auto_scale() # Manual only per user request
+        # Show the running head force image at launch dialog (no auto scale)
+        self.btn_visualize.setChecked(True)
+        self.update_vectors()
 
     def toggle_visualization(self):
         """Toggle force vector visualization"""
@@ -231,12 +328,39 @@ class ForceViewerDialog(QDialog):
         traj_layout.addWidget(self.traj_info)
         traj_layout.addWidget(self.traj_conv)
 
+        # Show Convergence Graph Button
+        btn_graph = QPushButton("Show Threshold Graph")
+        btn_graph.setToolTip(
+            "Show convergence thresholds plotted across all optimization steps"
+        )
+        btn_graph.clicked.connect(self.show_convergence_graph)
+        traj_layout.addWidget(btn_graph)
+
         # Connect signals AFTER UI construction
         self.traj_slider.valueChanged.connect(self.on_trajectory_change)
 
         # Block signals while setting initial value to avoid firing before data is ready
         self.traj_slider.blockSignals(True)
-        self.traj_slider.setValue(len(self.traj_steps))
+
+        initial_val = len(self.traj_steps)
+        if (
+            self.parser
+            and not self.parser.data.get("converged", False)
+            and self.traj_steps
+        ):
+            # If running, search backwards for the last step that has convergence data
+            found = False
+            for idx in range(len(self.traj_steps) - 1, -1, -1):
+                if self.traj_steps[idx].get("convergence"):
+                    initial_val = idx
+                    found = True
+                    break
+
+            # If none found (very early in calculation), just default to the latest step
+            if not found:
+                initial_val = max(0, len(self.traj_steps) - 1)
+
+        self.traj_slider.setValue(initial_val)
         self.traj_slider.blockSignals(False)
 
         # Manually trigger initial update
@@ -245,6 +369,15 @@ class ForceViewerDialog(QDialog):
         # Insert at the top (index 0) so it appears above other controls
         # even though it is initialized last.
         layout.insertWidget(0, traj_group)
+
+    def show_convergence_graph(self):
+        if getattr(self, "traj_steps", None) is None or not self.traj_steps:
+            QMessageBox.warning(
+                self, "No Data", "No trajectory convergence data available."
+            )
+            return
+        dlg = ConvergenceGraphDialog(self, self.traj_steps)
+        dlg.exec()
 
     def on_trajectory_change(self, val):
         """Handle trajectory step change"""
@@ -371,7 +504,7 @@ class ForceViewerDialog(QDialog):
             self.traj_conv.setText("")
             return
 
-        # split into 2 columns
+        # Split into 2 columns
         half = math.ceil(num_items / 2)
         col1_items = items[:half]
         col2_items = items[half:]
@@ -453,6 +586,7 @@ class ForceViewerDialog(QDialog):
             from rdkit import Chem
             from rdkit.Geometry import Point3D
             from rdkit.Chem import rdDetermineBonds
+            from .utils import normalize_atom_symbol, determine_bonds_without_dummies
         except ImportError:
             return
 
@@ -465,8 +599,7 @@ class ForceViewerDialog(QDialog):
 
         try:
             for i, sym in enumerate(atoms):
-                if ":" in sym:
-                    sym = sym.split(":")[0]
+                sym = normalize_atom_symbol(sym)
                 an = pt.GetAtomicNumber(sym)
                 mol.AddAtom(Chem.Atom(an))
                 conf.SetAtomPosition(
@@ -481,8 +614,7 @@ class ForceViewerDialog(QDialog):
         if rdDetermineBonds:
             try:
                 charge = self.parser.data.get("charge", 0) if self.parser else 0
-                rdDetermineBonds.DetermineConnectivity(mol)
-                rdDetermineBonds.DetermineBondOrders(mol, charge=charge)
+                determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
 
