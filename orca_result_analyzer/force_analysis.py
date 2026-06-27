@@ -227,9 +227,10 @@ class ConvergenceGraphDialog(QDialog):
                 for spine in ax.spines.values():
                     spine.set_visible(False)
 
-            # ax[0]: left + bottom
+            # ax[0]: left + bottom + top (upper line)
             axes[0].spines["left"].set_visible(True)
             axes[0].spines["bottom"].set_visible(True)
+            axes[0].spines["top"].set_visible(True)
             # ax[1]: right at 1.0
             if len(axes) > 1:
                 axes[1].spines["right"].set_visible(True)
@@ -254,8 +255,9 @@ class ConvergenceGraphDialog(QDialog):
 
         lines = []
         labels = []
+        spine_positions = ["left", "right", "right", "left", "right"]
 
-        for ax, k in zip(axes, keys_with_data):
+        for idx, (ax, k) in enumerate(zip(axes, keys_with_data)):
             name = display_keys[k]
             color = color_map[k]
 
@@ -283,6 +285,12 @@ class ConvergenceGraphDialog(QDialog):
             ax.set_ylabel(name, color=color, fontsize=9)
             ax.tick_params(axis="y", colors=color, labelsize=8)
             ax.set_yscale("symlog", linthresh=1e-6)
+
+            # Set spine color for the twin axes (keep primary/first axis black, color the others)
+            if is_multi:
+                pos = spine_positions[idx % len(spine_positions)]
+                if idx > 0:
+                    ax.spines[pos].set_color(color)
 
         ax1.set_xlabel("Optimization Step", fontsize=9)
         ax1.tick_params(axis="x", labelsize=8)
@@ -523,27 +531,36 @@ class ForceViewerDialog(QDialog):
         # Block signals while setting initial value to avoid firing before data is ready
         self.traj_slider.blockSignals(True)
 
-        initial_val = len(self.traj_steps)
-        if (
-            self.parser
-            and not self.parser.data.get("converged", False)
-            and self.traj_steps
-        ):
-            # Prefer last step that has convergence data
-            found = False
-            for idx in range(len(self.traj_steps) - 1, -1, -1):
-                step = self.traj_steps[idx]
-                if step.get("convergence"):
-                    initial_val = idx
-                    found = True
-                    break
+        is_running = False
+        if self.parser:
+            status = self.parser.data.get("termination_status", "Running")
+            if "Running" in status:
+                is_running = True
 
-            # Fall back to last step with coords (very early in calc)
-            if not found:
+        if is_running:
+            initial_val = self.get_last_force_containing_step_idx()
+        else:
+            initial_val = len(self.traj_steps)
+            if (
+                self.parser
+                and not self.parser.data.get("converged", False)
+                and self.traj_steps
+            ):
+                # Prefer last step that has convergence data
+                found = False
                 for idx in range(len(self.traj_steps) - 1, -1, -1):
-                    if self.traj_steps[idx].get("atoms"):
+                    step = self.traj_steps[idx]
+                    if step.get("convergence"):
                         initial_val = idx
+                        found = True
                         break
+
+                # Fall back to last step with coords (very early in calc)
+                if not found:
+                    for idx in range(len(self.traj_steps) - 1, -1, -1):
+                        if self.traj_steps[idx].get("atoms"):
+                            initial_val = idx
+                            break
 
         self.traj_slider.setValue(initial_val)
         self.traj_slider.blockSignals(False)
@@ -565,6 +582,26 @@ class ForceViewerDialog(QDialog):
         current_idx = getattr(self, "current_step_idx", None)
         dlg = ConvergenceGraphDialog(self, self.traj_steps, current_idx)
         dlg.exec()
+
+    def get_last_force_containing_step_idx(self):
+        """Find the index of the last step/frame that contains force data.
+        Returns len(self.traj_steps) if the final/current structure has forces.
+        Otherwise, returns the index of the last step in traj_steps that has forces.
+        If no forces are found anywhere, returns len(self.traj_steps).
+        """
+        # 1. Check final/current structure gradients
+        final_grads = self.parser.data.get("gradients", []) if self.parser else []
+        if final_grads:
+            return len(self.traj_steps)
+
+        # 2. Check trajectory steps from last to first
+        for idx in range(len(self.traj_steps) - 1, -1, -1):
+            step = self.traj_steps[idx]
+            if step.get("gradients"):
+                return idx
+
+        # Fallback to len(self.traj_steps) if none found
+        return len(self.traj_steps)
 
     def on_trajectory_change(self, val):
         """Handle trajectory step change"""
@@ -750,10 +787,28 @@ class ForceViewerDialog(QDialog):
 
             # Update slider if it exists
             if getattr(self, "traj_slider", None) is not None:
-                self.traj_slider.setRange(-1, len(self.traj_steps) - 1)
-                # Ensure current_step_idx is still valid
-                if self.current_step_idx >= len(self.traj_steps):
-                    self.current_step_idx = -1
+                self.traj_slider.blockSignals(True)
+                self.traj_slider.setRange(0, len(self.traj_steps))
+
+                # Check if job is running
+                is_running = False
+                if self.parser:
+                    status = self.parser.data.get("termination_status", "Running")
+                    if "Running" in status:
+                        is_running = True
+
+                if is_running:
+                    # Switch to the last force containing frame
+                    self.current_step_idx = self.get_last_force_containing_step_idx()
+                else:
+                    # Keep current selection within bounds
+                    if self.current_step_idx < 0 or self.current_step_idx > len(
+                        self.traj_steps
+                    ):
+                        self.current_step_idx = len(self.traj_steps)
+
+                self.traj_slider.setValue(self.current_step_idx)
+                self.traj_slider.blockSignals(False)
 
                 # Update label/text
                 self.on_trajectory_change(self.current_step_idx)
