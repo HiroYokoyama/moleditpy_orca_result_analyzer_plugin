@@ -55,8 +55,6 @@ class ConvergenceGraphDialog(QDialog):
         self.plot_data(traj_steps)
 
     def plot_data(self, traj_steps):
-        ax = self.figure.add_subplot(111)
-
         display_keys = {
             "rms gradient": "RMS Grad",
             "max gradient": "MAX Grad",
@@ -92,29 +90,37 @@ class ConvergenceGraphDialog(QDialog):
                 else:
                     data[k].append(np.nan)
 
-        if not steps:
+        keys_with_data = [k for k in display_keys.keys() if any(not np.isnan(v) for v in data[k])]
+
+        if not steps or not keys_with_data:
+            ax = self.figure.add_subplot(111)
             ax.text(0.5, 0.5, "No convergence data available", ha="center", va="center")
             return
 
-        for k, name in display_keys.items():
-            valid_data = [v for v in data[k] if not np.isnan(v)]
-            if valid_data:
-                (line,) = ax.plot(steps, data[k], marker="o", label=name)
-                # Plot the threshold target as a horizontal line in the same color
-                if targets[k] is not None:
-                    ax.axhline(
-                        y=targets[k],
-                        color=line.get_color(),
-                        linestyle="--",
-                        alpha=0.5,
-                        label=f"{name} Target",
-                    )
+        num_plots = len(keys_with_data)
+        axes = self.figure.subplots(num_plots, 1, sharex=True)
+        if num_plots == 1:
+            axes = [axes]
 
-        ax.set_xlabel("Optimization Step")
-        ax.set_ylabel("Value (Log Scale)")
-        ax.set_yscale("symlog", linthresh=1e-6)
-        ax.grid(True, which="both", ls="-", alpha=0.2)
-        ax.legend()
+        for ax, k in zip(axes, keys_with_data):
+            name = display_keys[k]
+            (line,) = ax.plot(steps, data[k], marker="o", label=name)
+            # Plot the threshold target as a dotted line (horizontal, since it's a Y threshold)
+            if targets[k] is not None:
+                ax.axhline(
+                    y=targets[k],
+                    color=line.get_color(),
+                    linestyle=":",
+                    alpha=0.7,
+                    label=f"Target",
+                )
+
+            ax.set_ylabel(name)
+            ax.set_yscale("symlog", linthresh=1e-6)
+            ax.grid(True, which="both", ls="-", alpha=0.2)
+            ax.legend(loc="upper right")
+
+        axes[-1].set_xlabel("Optimization Step")
         self.figure.tight_layout()
 
 
@@ -224,9 +230,8 @@ class ForceViewerDialog(QDialog):
 
         self.load_settings()
 
-        # Show the running head force image at launch dialog (no auto scale)
-        self.btn_visualize.setChecked(True)
-        self.update_vectors()
+        # Vector visualization is OFF by default as per user request
+        self.btn_visualize.setChecked(False)
 
     def toggle_visualization(self):
         """Toggle force vector visualization"""

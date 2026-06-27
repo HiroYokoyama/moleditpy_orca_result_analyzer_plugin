@@ -48,11 +48,14 @@ class TestForceAnalysis(unittest.TestCase):
         """Test the data parsing logic inside ConvergenceGraphDialog plot_data"""
         # Create a mock figure to capture ax.plot
         mock_figure = MagicMock()
-        mock_ax = MagicMock()
-        mock_figure.add_subplot.return_value = mock_ax
-
-        mock_line = MagicMock()
-        mock_ax.plot.return_value = [mock_line]
+        mock_ax1 = MagicMock()
+        mock_ax2 = MagicMock()
+        mock_figure.subplots.return_value = [mock_ax1, mock_ax2]
+        
+        mock_line1 = MagicMock()
+        mock_ax1.plot.return_value = [mock_line1]
+        mock_line2 = MagicMock()
+        mock_ax2.plot.return_value = [mock_line2]
 
         # Override the Figure class in the module temporarily
         import orca_result_analyzer.force_analysis as fa
@@ -96,15 +99,19 @@ class TestForceAnalysis(unittest.TestCase):
             dlg = ConvergenceGraphDialog(None, traj_steps)
 
             # Verify ax.plot and ax.axhline were called
-            self.assertTrue(mock_ax.plot.called)
-            self.assertTrue(mock_ax.axhline.called)
+            self.assertTrue(mock_ax1.plot.called)
+            self.assertTrue(mock_ax1.axhline.called)
+            self.assertTrue(mock_ax2.plot.called)
+            self.assertTrue(mock_ax2.axhline.called)
 
             # The plot should be called for RMS Grad and Energy Change
-            plot_calls = mock_ax.plot.call_args_list
-            self.assertEqual(len(plot_calls), 2)
+            plot_calls1 = mock_ax1.plot.call_args_list
+            plot_calls2 = mock_ax2.plot.call_args_list
+            self.assertEqual(len(plot_calls1), 1)
+            self.assertEqual(len(plot_calls2), 1)
 
             # Check steps values (x-axis)
-            x_vals = plot_calls[0][0][0]
+            x_vals = plot_calls1[0][0][0]
             self.assertEqual(list(x_vals), [1, 2])
 
         finally:
