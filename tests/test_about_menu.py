@@ -7,11 +7,75 @@ import unittest
 from unittest.mock import MagicMock
 
 # Stub Qt
-if "PyQt6" not in sys.modules:
-    pyqt6 = MagicMock()
+if "PyQt6.QtWidgets" in sys.modules:
+    qtw = sys.modules["PyQt6.QtWidgets"]
+else:
     qtw = MagicMock()
+    sys.modules["PyQt6.QtWidgets"] = qtw
 
-    # We only need QDialog to be a class that we can instantiate
+if not hasattr(qtw, "QLabel") or "Mock" in type(getattr(qtw, "QLabel")).__name__:
+
+    class _QLabel:
+        def __init__(self, *a, **k):
+            pass
+
+        def setText(self, *a):
+            pass
+
+        def fontMetrics(self):
+            fm = MagicMock()
+            fm.elidedText.return_value = ""
+            return fm
+
+        def width(self):
+            return 100
+
+        def resizeEvent(self, *a):
+            pass
+
+        def __getattr__(self, name):
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return MagicMock()
+
+    qtw.QLabel = _QLabel
+
+if (
+    not hasattr(qtw, "QPushButton")
+    or "Mock" in type(getattr(qtw, "QPushButton")).__name__
+):
+
+    class _QPushButton:
+        def __init__(self, *a, **k):
+            self.clicked = MagicMock()
+
+        def setIcon(self, *a):
+            pass
+
+        def setIconSize(self, *a):
+            pass
+
+        def setStyleSheet(self, *a):
+            pass
+
+        def setEnabled(self, *a):
+            pass
+
+        def setToolTip(self, *a):
+            pass
+
+        def installEventFilter(self, *a):
+            pass
+
+        def __getattr__(self, name):
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return MagicMock()
+
+    qtw.QPushButton = _QPushButton
+
+if not hasattr(qtw, "QDialog") or "Mock" in type(getattr(qtw, "QDialog")).__name__:
+
     class _QDialog:
         def __init__(self, *a, **k):
             self.menu_bar_mock = MagicMock()
@@ -31,19 +95,44 @@ if "PyQt6" not in sys.modules:
         def close(self):
             pass
 
+        def __getattr__(self, name):
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return MagicMock()
+
     qtw.QDialog = _QDialog
 
-    sys.modules["PyQt6"] = pyqt6
-    sys.modules["PyQt6.QtWidgets"] = qtw
+if "PyQt6" not in sys.modules:
+    sys.modules["PyQt6"] = MagicMock()
+if "PyQt6.QtCore" not in sys.modules:
     sys.modules["PyQt6.QtCore"] = MagicMock()
+qt_core = sys.modules["PyQt6.QtCore"]
+if (
+    not hasattr(qt_core, "QObject")
+    or "Mock" in type(getattr(qt_core, "QObject")).__name__
+):
+
+    class _QObject:
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, name):
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return MagicMock()
+
+    qt_core.QObject = _QObject
+if "PyQt6.QtGui" not in sys.modules:
     sys.modules["PyQt6.QtGui"] = MagicMock()
 
-    # Stub matplotlib backends
+# Stub matplotlib and pyvista backends if not present
+if "matplotlib.backends.backend_qtagg" not in sys.modules:
     sys.modules["matplotlib.backends.backend_qtagg"] = MagicMock()
+if "pyvista" not in sys.modules:
     sys.modules["pyvista"] = MagicMock()
 
-from orca_result_analyzer.gui import OrcaResultAnalyzerDialog
-from orca_result_analyzer.parser import OrcaParser
+from orca_result_analyzer.gui import OrcaResultAnalyzerDialog  # noqa: E402
+from orca_result_analyzer.parser import OrcaParser  # noqa: E402
 
 
 class TestAboutMenu(unittest.TestCase):
@@ -68,6 +157,125 @@ class TestAboutMenu(unittest.TestCase):
         self.assertEqual(args[1], "About ORCA Result Analyzer")
         self.assertIn("Author:</b> Hiromichi Yokoyama", args[2])
         self.assertIn("GitHub:", args[2])
+
+    def test_open_file_no_shift(self):
+        """Test that open_file calls getOpenFileName when Shift is not pressed."""
+        from unittest.mock import patch
+        from orca_result_analyzer.gui import Qt
+
+        no_mod = Qt.KeyboardModifier.NoModifier
+
+        if hasattr(no_mod, "mock_add_spec") or "Mock" in type(no_mod).__name__:
+            no_mod.__and__ = MagicMock(return_value=0)
+
+        parser = OrcaParser()
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+
+        dlg.open_directory = MagicMock()
+
+        with patch(
+            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+            return_value=no_mod,
+        ):
+            with patch(
+                "orca_result_analyzer.gui.QFileDialog.getOpenFileName",
+                return_value=("", ""),
+            ) as mock_get:
+                dlg.open_file()
+                mock_get.assert_called_once()
+                dlg.open_directory.assert_not_called()
+
+    def test_open_file_with_shift(self):
+        """Test that open_file calls open_directory instead when Shift is pressed."""
+        from unittest.mock import patch
+        from orca_result_analyzer.gui import Qt
+
+        shift_mod = Qt.KeyboardModifier.ShiftModifier
+
+        if hasattr(shift_mod, "mock_add_spec") or "Mock" in type(shift_mod).__name__:
+            shift_mod.__and__ = MagicMock(return_value=1)
+
+        parser = OrcaParser()
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+
+        dlg.open_directory = MagicMock()
+
+        with patch(
+            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+            return_value=shift_mod,
+        ):
+            with patch(
+                "orca_result_analyzer.gui.QFileDialog.getOpenFileName",
+                return_value=("", ""),
+            ) as mock_get:
+                dlg.open_file()
+                mock_get.assert_not_called()
+                dlg.open_directory.assert_called_once()
+
+    def test_show_convergence_graph_direct(self):
+        """Test that show_convergence_graph_direct opens the graph dialog."""
+        from unittest.mock import patch
+
+        parser = OrcaParser()
+        parser.data["scan_steps"] = [{"convergence": {"rms gradient": 0.001}}]
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+
+        with patch("orca_result_analyzer.gui.ConvergenceGraphDialog") as mock_graph_dlg:
+            dlg.show_convergence_graph_direct()
+            mock_graph_dlg.assert_called_once()
+            mock_graph_dlg.return_value.show.assert_called_once()
+
+    def test_show_forces_no_shift(self):
+        """Test that show_forces opens ForceViewerDialog when Shift is not pressed."""
+        from unittest.mock import patch
+        from orca_result_analyzer.gui import Qt
+
+        no_mod = Qt.KeyboardModifier.NoModifier
+
+        if hasattr(no_mod, "mock_add_spec") or "Mock" in type(no_mod).__name__:
+            no_mod.__and__ = MagicMock(return_value=0)
+
+        parser = OrcaParser()
+        parser.data["gradients"] = [{"atom_idx": 0, "vector": [0.0, 0.0, 0.0]}]
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+
+        with patch(
+            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+            return_value=no_mod,
+        ):
+            with patch("orca_result_analyzer.gui.ForceViewerDialog") as mock_force_dlg:
+                dlg.show_forces()
+                mock_force_dlg.assert_called_once()
+
+    def test_show_forces_with_shift(self):
+        """Test that show_forces opens ConvergenceGraphDialog directly when Shift is pressed."""
+        from unittest.mock import patch
+        from orca_result_analyzer.gui import Qt
+
+        shift_mod = Qt.KeyboardModifier.ShiftModifier
+
+        if hasattr(shift_mod, "mock_add_spec") or "Mock" in type(shift_mod).__name__:
+            shift_mod.__and__ = MagicMock(return_value=1)
+
+        parser = OrcaParser()
+        parser.data["gradients"] = [{"atom_idx": 0, "vector": [0.0, 0.0, 0.0]}]
+        parser.data["scan_steps"] = [{"convergence": {"rms gradient": 0.001}}]
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+
+        with patch(
+            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+            return_value=shift_mod,
+        ):
+            with patch(
+                "orca_result_analyzer.gui.ConvergenceGraphDialog"
+            ) as mock_graph_dlg:
+                dlg.show_forces()
+                mock_graph_dlg.assert_called_once()
 
 
 if __name__ == "__main__":

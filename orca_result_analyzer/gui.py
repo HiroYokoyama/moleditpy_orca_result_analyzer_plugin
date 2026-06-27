@@ -92,7 +92,7 @@ except ImportError:
 from .mo_analysis import MODialog  # noqa: E402
 from .freq_analysis import FrequencyDialog  # noqa: E402
 from .traj_analysis import TrajectoryResultDialog  # noqa: E402
-from .force_analysis import ForceViewerDialog  # noqa: E402
+from .force_analysis import ForceViewerDialog, ConvergenceGraphDialog  # noqa: E402
 from .charge_analysis import ChargeDialog  # noqa: E402
 from .dipole_analysis import DipoleDialog  # noqa: E402
 from .nmr_analysis import NMRDialog  # noqa: E402
@@ -411,6 +411,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             }
         """)
         btn_open_large.clicked.connect(self.open_file)
+        btn_open_large.setToolTip("Select ORCA Output File\nShift+Click: Select from Directory")
         btns_top_layout.addWidget(btn_open_large)
 
         # Reload Button
@@ -525,6 +526,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.btn_forces.setIcon(self.get_icon("icon_forces.svg"))
         self.btn_forces.setIconSize(icon_size)
         self.btn_forces.setStyleSheet(button_style)
+        # Shift+click → open convergence graph directly; plain click → force viewer
         self.btn_forces.clicked.connect(self.show_forces)
         grid.addWidget(self.btn_forces, 1, 1)
 
@@ -1001,9 +1003,13 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not has_forces:
             tooltip = "No gradients or optimization trajectory found"
         elif grads:
-            tooltip = "View Forces (Gradients)"
+            tooltip = (
+                "View Forces (Gradients)\nShift+Click: Open convergence graph directly"
+            )
         elif scan_steps:
-            tooltip = "View trajectory steps"
+            tooltip = (
+                "View trajectory steps\nShift+Click: Open convergence graph directly"
+            )
         self.btn_forces.setToolTip(tooltip)
 
         bool(
@@ -1168,7 +1174,34 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
         self.traj_dlg.show()
 
+    def show_convergence_graph_direct(self):
+        """Open the convergence graph directly (Shift+click shortcut), without the force viewer."""
+        scan_steps = self.parser.data.get("scan_steps", [])
+        if not scan_steps:
+            QMessageBox.warning(
+                self, "No Convergence Data", "No optimization trajectory steps found."
+            )
+            return
+        # Find the current step index based on which step has data
+        has_conv = [bool(s.get("convergence")) for s in scan_steps]
+        current_idx = next(
+            (len(scan_steps) - 1 - i for i, v in enumerate(reversed(has_conv)) if v),
+            0,
+        )
+        if getattr(self, "conv_graph_dlg", None) is not None:
+            try:
+                self.conv_graph_dlg.close()
+            except Exception:
+                pass
+        self.conv_graph_dlg = ConvergenceGraphDialog(self, scan_steps, current_idx)
+        self.conv_graph_dlg.show()
+
     def show_forces(self):
+        # Shift+click → open convergence graph directly instead
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.show_convergence_graph_direct()
+            return
+
         grads = self.parser.data.get("gradients", [])
         has_scan = bool(self.parser.data.get("scan_steps"))
 

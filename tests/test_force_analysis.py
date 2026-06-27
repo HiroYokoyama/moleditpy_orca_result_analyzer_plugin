@@ -30,6 +30,11 @@ if "PyQt6" not in sys.modules:
         def closeEvent(self, *a):
             pass
 
+        def __getattr__(self, name):
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return MagicMock()
+
     qtw.QDialog = _QDialog
 
     sys.modules["PyQt6"] = pyqt6
@@ -41,6 +46,25 @@ if "PyQt6" not in sys.modules:
     sys.modules["matplotlib.backends.backend_qtagg"] = MagicMock()
     sys.modules["matplotlib.figure"] = MagicMock()
     sys.modules["pyvista"] = MagicMock()
+
+# Ensure QObject is a class on sys.modules["PyQt6.QtCore"]
+if "PyQt6.QtCore" in sys.modules:
+    qt_core = sys.modules["PyQt6.QtCore"]
+    if (
+        not hasattr(qt_core, "QObject")
+        or "Mock" in type(getattr(qt_core, "QObject")).__name__
+    ):
+
+        class _QObject:
+            def __init__(self, *a, **k):
+                pass
+
+            def __getattr__(self, name):
+                if name.startswith("_"):
+                    raise AttributeError(name)
+                return MagicMock()
+
+        qt_core.QObject = _QObject
 
 # Import the module to test
 from orca_result_analyzer.force_analysis import ConvergenceGraphDialog
