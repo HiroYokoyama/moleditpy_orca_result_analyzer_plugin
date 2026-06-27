@@ -91,11 +91,14 @@ Comprehensive bonding and orbital analysis:
 - **Properties**: Parse and display physical parameters such as spin contamination expectation values (\(\langle S^2 \rangle\)) and dispersion corrections.
 
 ## Interface & Usability
+- **MoleditPy v4 Ready**: Fully integrated with the new `PluginContext` architecture for stable window management and safe main-window interaction.
+- **Standalone Launch**: Open the analyzer at any time via **Extensions > ORCA Result Analyzer** without selecting a file first.
+- **Drag-and-Drop**: Drag a `.out` file directly onto the analyzer window to open it, or drag a folder to open the "Select from Directory" picker.
 - **Logical Workflow**: Buttons grouped by task: Electronic -> Geometry -> Properties -> Spectroscopy.
 - **Modeless Design**: All analysis windows are modeless, allowing side-by-side comparison and 3D viewer interaction.
 - **Copyable Tables**: Support selecting and copying data (via `Ctrl+C`) from analysis tables to external spreadsheet editors.
 - **Interactive Highlighting**: Highlight atoms in the 3D viewer (with VDW scaling) when selecting rows in the Properties or Bond Analysis tables.
-- **Keyboard Shortcuts**: `Ctrl+O` (Open), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
+- **Keyboard Shortcuts**: `Ctrl+O` (Open File), `Shift+Ctrl+O` (Select from Directory), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
 - **Persistence**: Remembers your presets, NMR references, and merged peaks across sessions.
 
 ## Installation
@@ -104,6 +107,7 @@ Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
 ## Requirements
+- **MoleditPy**: Version 4.0.0 or higher.
 - **ORCA Output**: Reads `.out` or `.log` files. Basis set info (`Print[P_Basis] 2`) is required for MO Cube generation.
 - **Dependencies**: `rdkit`, `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `nmrsim` is optional (for J-coupling simulation). 
 
