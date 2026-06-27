@@ -176,14 +176,20 @@ class ConvergenceGraphDialog(QDialog):
             for k in display_keys.keys():
                 val_obj = conv.get(k)
                 if val_obj and isinstance(val_obj, dict):
-                    data[k].append(safe_float(val_obj.get("value", np.nan)))
+                    val = safe_float(val_obj.get("value", np.nan))
+                    if k == "energy change":
+                        val = abs(val)
+                    data[k].append(val)
                     if targets[k] is None:
                         # parser uses "tolerance" key; also accept "target" for compat
                         tol = val_obj.get("tolerance") or val_obj.get("target")
                         if tol not in (None, ""):
                             targets[k] = safe_float(tol)
                 elif val_obj is not None:
-                    data[k].append(safe_float(val_obj))
+                    val = safe_float(val_obj)
+                    if k == "energy change":
+                        val = abs(val)
+                    data[k].append(val)
                 else:
                     data[k].append(np.nan)
 
