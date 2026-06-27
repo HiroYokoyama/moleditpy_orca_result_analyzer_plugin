@@ -34,10 +34,10 @@ except ImportError:
 
 
 class ConvergenceGraphDialog(QDialog):
-    def __init__(self, parent, traj_steps):
+    def __init__(self, parent, traj_steps, current_idx=None):
         super().__init__(parent)
         self.setWindowTitle("Convergence Thresholds")
-        self.resize(800, 600)
+        self.resize(800, 1000)
 
         layout = QVBoxLayout(self)
 
@@ -52,9 +52,9 @@ class ConvergenceGraphDialog(QDialog):
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         layout.addWidget(self.toolbar)
 
-        self.plot_data(traj_steps)
+        self.plot_data(traj_steps, current_idx)
 
-    def plot_data(self, traj_steps):
+    def plot_data(self, traj_steps, current_idx):
         display_keys = {
             "rms gradient": "RMS Grad",
             "max gradient": "MAX Grad",
@@ -102,17 +102,35 @@ class ConvergenceGraphDialog(QDialog):
         if num_plots == 1:
             axes = [axes]
 
-        for ax, k in zip(axes, keys_with_data):
+        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+        for idx, (ax, k) in enumerate(zip(axes, keys_with_data)):
             name = display_keys[k]
-            (line,) = ax.plot(steps, data[k], marker="o", label=name)
-            # Plot the threshold target as a dotted line (horizontal, since it's a Y threshold)
+            color = colors[idx % len(colors)]
+            
+            (line,) = ax.plot(steps, data[k], marker="o", color=color, label=name)
+            
+            # Plot the threshold target as a dashed line
             if targets[k] is not None:
                 ax.axhline(
                     y=targets[k],
-                    color=line.get_color(),
-                    linestyle=":",
+                    color=color,
+                    linestyle="--",
+                    linewidth=2,
                     alpha=0.7,
                     label=f"Target",
+                )
+
+            # Draw a vertical dashed line if there is a current frame selected
+            if current_idx is not None and current_idx < len(steps):
+                current_step_num = steps[current_idx]
+                ax.axvline(
+                    x=current_step_num,
+                    color="#444444",
+                    linestyle=":",
+                    linewidth=1.5,
+                    alpha=0.8,
+                    label="Current Frame" if idx == 0 else ""
                 )
 
             ax.set_ylabel(name)
@@ -353,17 +371,18 @@ class ForceViewerDialog(QDialog):
             and not self.parser.data.get("converged", False)
             and self.traj_steps
         ):
-            # If running, search backwards for the last step that has convergence data
+            # If running, search backwards for the last step that has convergence data AND coords
             found = False
             for idx in range(len(self.traj_steps) - 1, -1, -1):
-                if self.traj_steps[idx].get("convergence"):
+                step = self.traj_steps[idx]
+                if step.get("convergence") and step.get("coords") and step.get("atoms"):
                     initial_val = idx
                     found = True
                     break
 
             # If none found (very early in calculation), just default to the latest step
             if not found:
-                initial_val = max(0, len(self.traj_steps) - 1)
+                initial_val = len(self.traj_steps)
 
         self.traj_slider.setValue(initial_val)
         self.traj_slider.blockSignals(False)
@@ -381,7 +400,10 @@ class ForceViewerDialog(QDialog):
                 self, "No Data", "No trajectory convergence data available."
             )
             return
-        dlg = ConvergenceGraphDialog(self, self.traj_steps)
+        
+        # pass current_step_idx so it can draw a vertical line for the current frame
+        current_idx = getattr(self, "current_step_idx", None)
+        dlg = ConvergenceGraphDialog(self, self.traj_steps, current_idx)
         dlg.exec()
 
     def on_trajectory_change(self, val):
