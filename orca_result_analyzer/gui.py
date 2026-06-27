@@ -296,6 +296,10 @@ class OrcaResultAnalyzerDialog(QDialog):
             act = QAction(label, self)
             act.triggered.connect(slot)
             analysis_menu.addAction(act)
+        help_menu = menu_bar.addMenu("&Help")
+        about_action = QAction("&About ORCA Result Analyzer", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
 
         # Current File Display with Open Button
         file_frame = QWidget()
@@ -725,6 +729,18 @@ class OrcaResultAnalyzerDialog(QDialog):
         self._disable_plotter_picking()
         self.close_all_sub_dialogs()
         super().closeEvent(event)
+
+    def show_about(self):
+        """Show About dialog."""
+        QMessageBox.about(
+            self,
+            "About ORCA Result Analyzer",
+            f"<b>ORCA Result Analyzer v{PLUGIN_VERSION}</b><br><br>"
+            "Comprehensive analyzer for ORCA quantum chemistry output files.<br><br>"
+            "<b>Author:</b> Hiromichi Yokoyama<br>"
+            "<b>License:</b> GPL-3.0 License<br>"
+            '<b>GitHub:</b> <a href="https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin">https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin</a>',
+        )
 
     def open_file(self):
         # Shift+click → open directory picker instead
