@@ -3,7 +3,6 @@ Tests for the Help > About menu action.
 """
 
 import sys
-import types
 import unittest
 from unittest.mock import MagicMock
 

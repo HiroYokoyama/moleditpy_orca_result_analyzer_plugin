@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QAbstractItemView,
     QMessageBox,
+    QComboBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 import logging
@@ -37,13 +38,31 @@ class ConvergenceGraphDialog(QDialog):
     def __init__(self, parent, traj_steps, current_idx=None):
         super().__init__(parent)
         self.setWindowTitle("Convergence Thresholds")
-        self.resize(800, 1000)
+        self.resize(1100, 600)
+
+        self.traj_steps = traj_steps
+        self.current_idx = current_idx
 
         layout = QVBoxLayout(self)
 
         if not HAS_MATPLOTLIB:
             layout.addWidget(QLabel("Matplotlib is required to view the graph."))
             return
+
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Display Metric:"))
+        self.metric_combo = QComboBox()
+        self.metric_combo.addItem("All")
+        self.metric_combo.addItems(
+            ["RMS Grad", "MAX Grad", "RMS Step", "MAX Step", "Energy Change"]
+        )
+        self.metric_combo.currentTextChanged.connect(self.redraw_graph)
+        controls_layout.addWidget(self.metric_combo)
+        controls_layout.addStretch()
+        btn_export = QPushButton("Export CSV")
+        btn_export.clicked.connect(self.export_csv)
+        controls_layout.addWidget(btn_export)
+        layout.addLayout(controls_layout)
 
         self.figure = Figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
@@ -52,9 +71,21 @@ class ConvergenceGraphDialog(QDialog):
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         layout.addWidget(self.toolbar)
 
-        self.plot_data(traj_steps, current_idx)
+        self.redraw_graph()
 
-    def plot_data(self, traj_steps, current_idx):
+    def redraw_graph(self):
+        self.figure.clear()
+        selection = self.metric_combo.currentText()
+        if not isinstance(selection, str) or not selection:
+            selection = "All"
+        self.plot_data(self.traj_steps, self.current_idx, selection)
+        self.canvas.draw()
+
+    def export_csv(self):
+        """Export convergence data to CSV."""
+        from PyQt6.QtWidgets import QFileDialog
+        import csv
+
         display_keys = {
             "rms gradient": "RMS Grad",
             "max gradient": "MAX Grad",
@@ -62,6 +93,69 @@ class ConvergenceGraphDialog(QDialog):
             "max step": "MAX Step",
             "energy change": "Energy Change",
         }
+
+        def safe_float(v):
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                return ""
+
+        # Gather all data
+        rows = []
+        for i, step in enumerate(self.traj_steps):
+            conv = step.get("convergence")
+            if not conv:
+                continue
+            row = {"Step": i + 1}
+            for k, label in display_keys.items():
+                val_obj = conv.get(k)
+                if val_obj and isinstance(val_obj, dict):
+                    row[f"{label} Value"] = safe_float(val_obj.get("value", ""))
+                    tol = val_obj.get("tolerance") or val_obj.get("target", "")
+                    row[f"{label} Tolerance"] = safe_float(tol) if tol else ""
+                    row[f"{label} Converged"] = val_obj.get("converged", "")
+                else:
+                    row[f"{label} Value"] = ""
+                    row[f"{label} Tolerance"] = ""
+                    row[f"{label} Converged"] = ""
+            rows.append(row)
+
+        if not rows:
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(self, "No Data", "No convergence data to export.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Convergence CSV", "convergence.csv", "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.information(self, "Exported", f"Saved to:\n{path}")
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.critical(self, "Export Error", str(e))
+
+    def plot_data(self, traj_steps, current_idx, selection="All"):
+        display_keys = {
+            "rms gradient": "RMS Grad",
+            "max gradient": "MAX Grad",
+            "rms step": "RMS Step",
+            "max step": "MAX Step",
+            "energy change": "Energy Change",
+        }
+
+        if selection != "All":
+            display_keys = {k: v for k, v in display_keys.items() if v == selection}
 
         # Gather data
         data = {k: [] for k in display_keys.keys()}
@@ -83,69 +177,127 @@ class ConvergenceGraphDialog(QDialog):
                 val_obj = conv.get(k)
                 if val_obj and isinstance(val_obj, dict):
                     data[k].append(safe_float(val_obj.get("value", np.nan)))
-                    if targets[k] is None and "target" in val_obj:
-                        targets[k] = safe_float(val_obj["target"])
+                    if targets[k] is None:
+                        # parser uses "tolerance" key; also accept "target" for compat
+                        tol = val_obj.get("tolerance") or val_obj.get("target")
+                        if tol not in (None, ""):
+                            targets[k] = safe_float(tol)
                 elif val_obj is not None:
                     data[k].append(safe_float(val_obj))
                 else:
                     data[k].append(np.nan)
 
-        keys_with_data = [k for k in display_keys.keys() if any(not np.isnan(v) for v in data[k])]
+        keys_with_data = [
+            k for k in display_keys.keys() if any(not np.isnan(v) for v in data[k])
+        ]
 
         if not steps or not keys_with_data:
             ax = self.figure.add_subplot(111)
-            ax.text(0.5, 0.5, "No convergence data available", ha="center", va="center")
+            ax.text(
+                0.5,
+                0.5,
+                f"No convergence data available for {selection}",
+                ha="center",
+                va="center",
+            )
             return
+
+        # Fixed color per metric — stable no matter which dropdown selection is active
+        ALL_KEYS = [
+            "rms gradient",
+            "max gradient",
+            "rms step",
+            "max step",
+            "energy change",
+        ]
+        COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+        color_map = {k: COLORS[i % len(COLORS)] for i, k in enumerate(ALL_KEYS)}
+
+        is_multi = selection == "All" and len(keys_with_data) > 1
 
         ax1 = self.figure.add_subplot(111)
         axes = [ax1]
-        for _ in range(1, len(keys_with_data)):
-            axes.append(ax1.twinx())
 
-        # Adjust spines to prevent overlap when there are more than 2 axes
-        if len(axes) > 2:
-            axes[2].spines["right"].set_position(("axes", 1.15))
-        if len(axes) > 3:
-            axes[3].spines["left"].set_position(("axes", -0.15))
-            axes[3].yaxis.set_label_position("left")
-            axes[3].yaxis.set_ticks_position("left")
-        if len(axes) > 4:
-            axes[4].spines["right"].set_position(("axes", 1.30))
+        if is_multi:
+            for _ in range(1, len(keys_with_data)):
+                axes.append(ax1.twinx())
 
-        # Add padding to figure to fit the extra axes
-        self.figure.subplots_adjust(left=0.2, right=0.75, bottom=0.1, top=0.9)
+            # Hide ALL spines on every axis first, then selectively show each one
+            for ax in axes:
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
 
-        colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+            # ax[0]: left + bottom
+            axes[0].spines["left"].set_visible(True)
+            axes[0].spines["bottom"].set_visible(True)
+            # ax[1]: right at 1.0
+            if len(axes) > 1:
+                axes[1].spines["right"].set_visible(True)
+            # ax[2]: right at 1.18
+            if len(axes) > 2:
+                axes[2].spines["right"].set_position(("axes", 1.18))
+                axes[2].spines["right"].set_visible(True)
+            # ax[3]: left at -0.18
+            if len(axes) > 3:
+                axes[3].spines["left"].set_position(("axes", -0.18))
+                axes[3].spines["left"].set_visible(True)
+                axes[3].yaxis.set_label_position("left")
+                axes[3].yaxis.set_ticks_position("left")
+            # ax[4]: right at 1.36
+            if len(axes) > 4:
+                axes[4].spines["right"].set_position(("axes", 1.36))
+                axes[4].spines["right"].set_visible(True)
+
+            self.figure.subplots_adjust(left=0.12, right=0.62, bottom=0.12, top=0.95)
+        else:
+            self.figure.subplots_adjust(left=0.12, right=0.78, bottom=0.12, top=0.95)
+
         lines = []
         labels = []
 
-        for idx, (ax, k) in enumerate(zip(axes, keys_with_data)):
+        for ax, k in zip(axes, keys_with_data):
             name = display_keys[k]
-            color = colors[idx % len(colors)]
-            
-            (line,) = ax.plot(steps, data[k], marker="o", color=color, label=name)
+            color = color_map[k]
+
+            plot_result = ax.plot(
+                steps,
+                data[k],
+                marker="o",
+                markersize=4,
+                color=color,
+                label=name,
+                linewidth=1.5,
+            )
+            if not plot_result:
+                continue
+            line = plot_result[0]
             lines.append(line)
             labels.append(name)
-            
-            # Plot the threshold target as a dashed line
+
+            # Threshold dashed line
             if targets[k] is not None:
                 ax.axhline(
-                    y=targets[k],
-                    color=color,
-                    linestyle="--",
-                    linewidth=2,
-                    alpha=0.7,
+                    y=targets[k], color=color, linestyle="--", linewidth=1.5, alpha=0.8
                 )
 
-            ax.set_ylabel(name, color=color)
-            ax.tick_params(axis="y", colors=color)
+            ax.set_ylabel(name, color=color, fontsize=9)
+            ax.tick_params(axis="y", colors=color, labelsize=8)
             ax.set_yscale("symlog", linthresh=1e-6)
 
-        ax1.set_xlabel("Optimization Step")
-        ax1.grid(True, which="both", ls="-", alpha=0.2)
-        
-        # Create a single legend for all lines
-        ax1.legend(lines, labels, loc="upper right")
+        ax1.set_xlabel("Optimization Step", fontsize=9)
+        ax1.tick_params(axis="x", labelsize=8)
+        ax1.grid(True, which="both", ls="--", alpha=0.15)
+
+        # Legend outside to the right, never overlapping
+        ax1.legend(
+            lines,
+            labels,
+            loc="upper left",
+            bbox_to_anchor=(1.05 if not is_multi else 1.45, 1.0),
+            borderaxespad=0,
+            fontsize=8,
+            framealpha=0.9,
+        )
 
 
 class ForceViewerDialog(QDialog):
@@ -377,24 +529,26 @@ class ForceViewerDialog(QDialog):
             and not self.parser.data.get("converged", False)
             and self.traj_steps
         ):
-            # If running, search backwards for the last step that has convergence data AND coords
+            # Prefer last step that has convergence data
             found = False
             for idx in range(len(self.traj_steps) - 1, -1, -1):
                 step = self.traj_steps[idx]
-                if step.get("convergence") and step.get("coords") and step.get("atoms"):
+                if step.get("convergence"):
                     initial_val = idx
                     found = True
                     break
 
-            # If none found (very early in calculation), just default to the latest step
+            # Fall back to last step with coords (very early in calc)
             if not found:
-                initial_val = len(self.traj_steps)
+                for idx in range(len(self.traj_steps) - 1, -1, -1):
+                    if self.traj_steps[idx].get("atoms"):
+                        initial_val = idx
+                        break
 
         self.traj_slider.setValue(initial_val)
         self.traj_slider.blockSignals(False)
-
-        # Manually trigger initial update
-        self.on_trajectory_change(self.traj_slider.value())
+        # Manually fire the handler since setValue was called while signals were blocked
+        self.on_trajectory_change(initial_val)
 
         # Insert at the top (index 0) so it appears above other controls
         # even though it is initialized last.
@@ -406,7 +560,7 @@ class ForceViewerDialog(QDialog):
                 self, "No Data", "No trajectory convergence data available."
             )
             return
-        
+
         # pass current_step_idx so it can draw a vertical line for the current frame
         current_idx = getattr(self, "current_step_idx", None)
         dlg = ConvergenceGraphDialog(self, self.traj_steps, current_idx)
@@ -458,8 +612,9 @@ class ForceViewerDialog(QDialog):
                     self.parser.data["atoms"], self.parser.data["coords"]
                 )
 
-            # Then update vectors with a slight delay to ensure structure is drawn
-            QTimer.singleShot(100, self.update_vectors)
+            # Then update vectors only if visualization is active
+            if self.btn_visualize.isChecked():
+                QTimer.singleShot(100, self.update_vectors)
         else:
             # Historical step
             step = self.traj_steps[val]
@@ -489,8 +644,9 @@ class ForceViewerDialog(QDialog):
             if atoms and coords:
                 self.update_structure(atoms, coords)
 
-            # Then update vectors with delay
-            QTimer.singleShot(100, self.update_vectors)
+            # Then update vectors only if visualization is active
+            if self.btn_visualize.isChecked():
+                QTimer.singleShot(100, self.update_vectors)
 
     def _update_conv_label(self, conv):
         """Helper to update the convergence info label with rich text and normalization"""
