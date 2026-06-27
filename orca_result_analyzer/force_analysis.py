@@ -249,7 +249,7 @@ class ConvergenceGraphDialog(QDialog):
                 axes[4].spines["right"].set_position(("axes", 1.36))
                 axes[4].spines["right"].set_visible(True)
 
-            self.figure.subplots_adjust(left=0.22, right=0.62, bottom=0.12, top=0.95)
+            self.figure.subplots_adjust(left=0.22, right=0.68, bottom=0.12, top=0.95)
         else:
             self.figure.subplots_adjust(left=0.12, right=0.78, bottom=0.12, top=0.95)
 
@@ -310,10 +310,15 @@ class ConvergenceGraphDialog(QDialog):
                     x_axes_val = (
                         axes_x_coords[idx % len(axes_x_coords)] if is_multi else 0.0
                     )
-                    marker_shape = ">" if x_axes_val <= 0.0 else "<"
+                    if x_axes_val <= 0.0:
+                        marker_shape = ">"
+                        x_marker_val = x_axes_val - 0.015
+                    else:
+                        marker_shape = "<"
+                        x_marker_val = x_axes_val + 0.015
 
                     ax.plot(
-                        x_axes_val,
+                        x_marker_val,
                         targets[k],
                         marker=marker_shape,
                         color=color,

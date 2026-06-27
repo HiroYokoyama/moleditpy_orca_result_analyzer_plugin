@@ -558,12 +558,12 @@ class TestForceAnalysis(unittest.TestCase):
 
             # Check the arguments of the 2nd call (the marker plot call)
             marker_call_args = mock_ax.plot.call_args_list[1]
-            # Coordinates for 2nd call: X axes coord should be 0.0 (left), Y data should be target 0.0001
+            # Coordinates for 2nd call: X axes coord should be offset to -0.015 (left side of left axis), Y data should be target 0.0001
             x_coord = marker_call_args[0][0]
             y_coord = marker_call_args[0][1]
             kwargs = marker_call_args[1]
 
-            self.assertEqual(x_coord, 0.0)
+            self.assertEqual(x_coord, -0.015)
             self.assertEqual(y_coord, 0.0001)
             self.assertEqual(kwargs.get("marker"), ">")
             self.assertFalse(kwargs.get("clip_on"))
