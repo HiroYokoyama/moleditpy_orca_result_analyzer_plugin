@@ -286,11 +286,12 @@ class ConvergenceGraphDialog(QDialog):
             ax.tick_params(axis="y", colors=color, labelsize=8)
             ax.set_yscale("symlog", linthresh=1e-6)
 
-            # Set spine color for the twin axes (keep primary/first axis black, color the others)
+            # Set Y-axis spine color to match the metric color
             if is_multi:
                 pos = spine_positions[idx % len(spine_positions)]
-                if idx > 0:
-                    ax.spines[pos].set_color(color)
+                ax.spines[pos].set_color(color)
+            else:
+                ax.spines["left"].set_color(color)
 
         ax1.set_xlabel("Optimization Step", fontsize=9)
         ax1.tick_params(axis="x", labelsize=8)
@@ -584,17 +585,10 @@ class ForceViewerDialog(QDialog):
         dlg.exec()
 
     def get_last_force_containing_step_idx(self):
-        """Find the index of the last step/frame that contains force data.
-        Returns len(self.traj_steps) if the final/current structure has forces.
-        Otherwise, returns the index of the last step in traj_steps that has forces.
+        """Find the index of the last step/frame in traj_steps that contains force data.
         If no forces are found anywhere, returns len(self.traj_steps).
         """
-        # 1. Check final/current structure gradients
-        final_grads = self.parser.data.get("gradients", []) if self.parser else []
-        if final_grads:
-            return len(self.traj_steps)
-
-        # 2. Check trajectory steps from last to first
+        # Check trajectory steps from last to first
         for idx in range(len(self.traj_steps) - 1, -1, -1):
             step = self.traj_steps[idx]
             if step.get("gradients"):

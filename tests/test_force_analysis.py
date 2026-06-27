@@ -347,8 +347,8 @@ class TestForceAnalysis(unittest.TestCase):
             # Check that twin axis spine is colored to match the metric color
             # Since index of energy change is > 0, it should color mock_ax2's right spine
             spines2["right"].set_color.assert_called()
-            # The first axis (ax1) spine should NOT be colored (keep black axis)
-            spines1["left"].set_color.assert_not_called()
+            # The first axis (ax1) spine should also be colored to match the metric color
+            spines1["left"].set_color.assert_called()
 
         finally:
             if original_figure:
@@ -382,13 +382,13 @@ class TestForceAnalysis(unittest.TestCase):
             "termination_status": "Running",
         }
 
-        # Gradients are present in final/current structure
+        # Gradients are present in final/current structure but ignored by the method in favor of step data
         dlg = ForceViewerDialog(
             mock_parent, mock_parser.data["gradients"], parser=mock_parser
         )
 
-        # Test index when final gradients are non-empty
-        self.assertEqual(dlg.get_last_force_containing_step_idx(), 2)
+        # Test index when only first step has gradients (ignoring final_grads)
+        self.assertEqual(dlg.get_last_force_containing_step_idx(), 0)
 
         # Test index when final gradients are empty but first step has gradients
         mock_parser.data["gradients"] = []
