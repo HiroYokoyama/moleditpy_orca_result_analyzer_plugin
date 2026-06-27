@@ -249,7 +249,7 @@ class ConvergenceGraphDialog(QDialog):
                 axes[4].spines["right"].set_position(("axes", 1.36))
                 axes[4].spines["right"].set_visible(True)
 
-            self.figure.subplots_adjust(left=0.22, right=0.68, bottom=0.12, top=0.95)
+            self.figure.subplots_adjust(left=0.15, right=0.65, bottom=0.10, top=0.96)
         else:
             self.figure.subplots_adjust(left=0.12, right=0.78, bottom=0.12, top=0.95)
 
