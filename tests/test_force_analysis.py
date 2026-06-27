@@ -27,6 +27,9 @@ if "PyQt6" not in sys.modules:
         def setLayout(self, *a):
             pass
 
+        def closeEvent(self, *a):
+            pass
+
     qtw.QDialog = _QDialog
 
     sys.modules["PyQt6"] = pyqt6
@@ -464,6 +467,58 @@ class TestForceAnalysis(unittest.TestCase):
         finally:
             builtins.open = original_open
             os.path.exists = original_exists
+
+    def test_force_viewer_dialog_modeless_graph(self):
+        """Test that show_convergence_graph shows dialog modelessly and cleans it up on close"""
+        from orca_result_analyzer.force_analysis import ForceViewerDialog
+
+        mock_parent = MagicMock()
+        mock_parent.context = MagicMock()
+
+        mock_parser = MagicMock()
+        mock_parser.data = {
+            "gradients": [],
+            "scan_steps": [
+                {"step": 1, "convergence": {"rms gradient": {"value": 0.001}}}
+            ],
+            "termination_status": "Running",
+        }
+
+        import orca_result_analyzer.force_analysis as fa
+
+        original_graph_dialog = getattr(fa, "ConvergenceGraphDialog", None)
+        mock_graph_dlg_class = MagicMock()
+        mock_graph_instance = MagicMock()
+        mock_graph_dlg_class.return_value = mock_graph_instance
+        fa.ConvergenceGraphDialog = mock_graph_dlg_class
+
+        try:
+            dlg = ForceViewerDialog(mock_parent, [], parser=mock_parser)
+            self.assertIsNone(dlg.graph_dlg)
+
+            # Call show_convergence_graph
+            dlg.show_convergence_graph()
+
+            # Verify graph dialog is instantiated and shown modelessly
+            mock_graph_dlg_class.assert_called()
+            mock_graph_instance.show.assert_called()
+            self.assertEqual(dlg.graph_dlg, mock_graph_instance)
+
+            # Call it again and verify previous is closed
+            mock_graph_instance.reset_mock()
+            dlg.show_convergence_graph()
+            mock_graph_instance.close.assert_called()
+
+            # Call closeEvent and verify graph dialog is closed and reference cleared
+            mock_graph_instance.reset_mock()
+            mock_event = MagicMock()
+            dlg.closeEvent(mock_event)
+            mock_graph_instance.close.assert_called()
+            self.assertIsNone(dlg.graph_dlg)
+
+        finally:
+            if original_graph_dialog:
+                fa.ConvergenceGraphDialog = original_graph_dialog
 
 
 if __name__ == "__main__":

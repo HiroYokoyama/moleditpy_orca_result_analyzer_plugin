@@ -320,6 +320,7 @@ class ForceViewerDialog(QDialog):
         self.actors = []
         self.force_color = "red"
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+        self.graph_dlg = None
 
         # Get trajectory steps if available
         self.traj_steps = []
@@ -579,10 +580,19 @@ class ForceViewerDialog(QDialog):
             )
             return
 
+        # Close existing graph dialog if open
+        if getattr(self, "graph_dlg", None) is not None:
+            try:
+                self.graph_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+
         # pass current_step_idx so it can draw a vertical line for the current frame
         current_idx = getattr(self, "current_step_idx", None)
-        dlg = ConvergenceGraphDialog(self, self.traj_steps, current_idx)
-        dlg.exec()
+        self.graph_dlg = ConvergenceGraphDialog(self, self.traj_steps, current_idx)
+        self.graph_dlg.show()
+        self.graph_dlg.raise_()
+        self.graph_dlg.activateWindow()
 
     def get_last_force_containing_step_idx(self):
         """Find the index of the last step/frame in traj_steps that contains force data.
@@ -1066,3 +1076,13 @@ class ForceViewerDialog(QDialog):
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
             logging.warning("Error saving force settings: %s", e)
+
+    def closeEvent(self, event):
+        """Ensure modeless graph dialog is closed when this dialog is closed"""
+        if getattr(self, "graph_dlg", None) is not None:
+            try:
+                self.graph_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+            self.graph_dlg = None
+        super().closeEvent(event)
