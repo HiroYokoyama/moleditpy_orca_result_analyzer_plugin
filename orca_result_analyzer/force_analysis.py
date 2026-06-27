@@ -1036,6 +1036,12 @@ class ForceViewerDialog(QDialog):
         """Clean up when dialog closes"""
         self.clear_vectors()
         self.save_settings()
+        if getattr(self, "graph_dlg", None) is not None:
+            try:
+                self.graph_dlg.close()
+            except Exception as _e:
+                logging.warning("silenced: %s", _e)
+            self.graph_dlg = None
         super().closeEvent(event)
 
     def load_settings(self):
@@ -1076,13 +1082,3 @@ class ForceViewerDialog(QDialog):
                 json.dump(all_settings, f, indent=2)
         except Exception as e:
             logging.warning("Error saving force settings: %s", e)
-
-    def closeEvent(self, event):
-        """Ensure modeless graph dialog is closed when this dialog is closed"""
-        if getattr(self, "graph_dlg", None) is not None:
-            try:
-                self.graph_dlg.close()
-            except Exception as _e:
-                logging.warning("silenced: %s", _e)
-            self.graph_dlg = None
-        super().closeEvent(event)

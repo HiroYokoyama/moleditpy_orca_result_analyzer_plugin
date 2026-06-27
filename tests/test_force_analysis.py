@@ -100,7 +100,7 @@ class TestForceAnalysis(unittest.TestCase):
                 },
             ]
 
-            dlg = ConvergenceGraphDialog(None, traj_steps)
+            ConvergenceGraphDialog(None, traj_steps)
 
             # Verify ax.plot and ax.axhline were called
             self.assertTrue(mock_ax1.plot.called)
