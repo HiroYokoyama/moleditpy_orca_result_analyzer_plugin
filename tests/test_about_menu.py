@@ -77,6 +77,10 @@ if (
 if not hasattr(qtw, "QDialog") or "Mock" in type(getattr(qtw, "QDialog")).__name__:
 
     class _QDialog:
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *a, **k):
             self.menu_bar_mock = MagicMock()
 
@@ -276,6 +280,49 @@ class TestAboutMenu(unittest.TestCase):
             ) as mock_graph_dlg:
                 dlg.show_forces()
                 mock_graph_dlg.assert_called_once()
+
+    def test_open_directory_path_single_file(self):
+        """Test that _open_directory_path loads the file directly if only one is found."""
+        from unittest.mock import patch
+        import os
+
+        parser = OrcaParser()
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+        dlg.load_file = MagicMock()
+
+        with patch(
+            "orca_result_analyzer.gui.list_orca_output_files",
+            return_value=["only_one.out"],
+        ):
+            with patch("orca_result_analyzer.gui._DirectoryFilePicker") as mock_picker:
+                dlg._open_directory_path("/mock/dir")
+                expected_path = os.path.join("/mock/dir", "only_one.out")
+                dlg.load_file.assert_called_once_with(expected_path)
+                mock_picker.assert_not_called()
+
+    def test_open_directory_path_multiple_files(self):
+        """Test that _open_directory_path opens the picker if multiple files are found."""
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QDialog
+
+        parser = OrcaParser()
+        ctx = MagicMock()
+        dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
+        dlg.load_file = MagicMock()
+
+        with patch(
+            "orca_result_analyzer.gui.list_orca_output_files",
+            return_value=["one.out", "two.out"],
+        ):
+            with patch("orca_result_analyzer.gui._DirectoryFilePicker") as mock_picker:
+                mock_inst = mock_picker.return_value
+                mock_inst.exec.return_value = QDialog.DialogCode.Accepted
+                mock_inst.selected_path = "/mock/dir/one.out"
+
+                dlg._open_directory_path("/mock/dir")
+                mock_picker.assert_called_once()
+                dlg.load_file.assert_called_once_with("/mock/dir/one.out")
 
 
 if __name__ == "__main__":

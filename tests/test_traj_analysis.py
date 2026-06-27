@@ -31,6 +31,10 @@ def _install_stubs(force=False):
     class _BaseWidget:
         """Stub base class for Qt widgets used as base classes."""
 
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *args, **kwargs):
             pass
 

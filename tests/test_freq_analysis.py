@@ -32,6 +32,10 @@ def _install_stubs():
         return
 
     class _QBase:
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *a, **kw):
             pass
 

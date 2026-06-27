@@ -12,6 +12,10 @@ if "PyQt6" not in sys.modules:
     qtw = MagicMock()
 
     class _QDialog:
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *a, **k):
             pass
 

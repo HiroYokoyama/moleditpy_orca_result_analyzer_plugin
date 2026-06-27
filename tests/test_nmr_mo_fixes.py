@@ -33,6 +33,10 @@ def _make_qt_base():
     """Return a base class stub for QDialog/QWidget with noop Qt methods."""
 
     class _Base:
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *a, **kw):
             pass
 

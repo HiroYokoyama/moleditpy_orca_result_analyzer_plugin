@@ -42,6 +42,10 @@ def _install_stubs():
         sys.modules.setdefault(name, types.ModuleType(name))
 
     class _Base:
+        class DialogCode:
+            Accepted = 1
+            Rejected = 0
+
         def __init__(self, *a, **k):
             pass
 

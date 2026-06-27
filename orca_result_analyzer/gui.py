@@ -222,6 +222,9 @@ class OrcaResultAnalyzerDialog(QDialog):
                 f"No ORCA output files (*.out) found in:\n{directory}",
             )
             return
+        if len(found) == 1:
+            self.load_file(os.path.join(directory, found[0]))
+            return
         picker = _DirectoryFilePicker(self, directory, found)
         if picker.exec() == QDialog.DialogCode.Accepted and picker.selected_path:
             self.load_file(picker.selected_path)
@@ -941,20 +944,6 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not chosen_dir:
             return
         self._open_directory_path(chosen_dir)
-
-    def _open_directory_path(self, directory: str):
-        """Run the Select-from-Directory picker for a specific *directory*."""
-        found = list_orca_output_files(directory)
-        if not found:
-            QMessageBox.information(
-                self,
-                "No Files Found",
-                f"No ORCA output files (*.out) found in:\n{directory}",
-            )
-            return
-        picker = _DirectoryFilePicker(self, directory, found)
-        if picker.exec() == QDialog.DialogCode.Accepted and picker.selected_path:
-            self.load_file(picker.selected_path)
 
     def update_button_states(self):
         data = self.parser.data
