@@ -97,18 +97,35 @@ class ConvergenceGraphDialog(QDialog):
             ax.text(0.5, 0.5, "No convergence data available", ha="center", va="center")
             return
 
-        num_plots = len(keys_with_data)
-        axes = self.figure.subplots(num_plots, 1, sharex=True)
-        if num_plots == 1:
-            axes = [axes]
+        ax1 = self.figure.add_subplot(111)
+        axes = [ax1]
+        for _ in range(1, len(keys_with_data)):
+            axes.append(ax1.twinx())
+
+        # Adjust spines to prevent overlap when there are more than 2 axes
+        if len(axes) > 2:
+            axes[2].spines["right"].set_position(("axes", 1.15))
+        if len(axes) > 3:
+            axes[3].spines["left"].set_position(("axes", -0.15))
+            axes[3].yaxis.set_label_position("left")
+            axes[3].yaxis.set_ticks_position("left")
+        if len(axes) > 4:
+            axes[4].spines["right"].set_position(("axes", 1.30))
+
+        # Add padding to figure to fit the extra axes
+        self.figure.subplots_adjust(left=0.2, right=0.75, bottom=0.1, top=0.9)
 
         colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+        lines = []
+        labels = []
 
         for idx, (ax, k) in enumerate(zip(axes, keys_with_data)):
             name = display_keys[k]
             color = colors[idx % len(colors)]
             
             (line,) = ax.plot(steps, data[k], marker="o", color=color, label=name)
+            lines.append(line)
+            labels.append(name)
             
             # Plot the threshold target as a dashed line
             if targets[k] is not None:
@@ -118,28 +135,17 @@ class ConvergenceGraphDialog(QDialog):
                     linestyle="--",
                     linewidth=2,
                     alpha=0.7,
-                    label=f"Target",
                 )
 
-            # Draw a vertical dashed line if there is a current frame selected
-            if current_idx is not None and current_idx < len(steps):
-                current_step_num = steps[current_idx]
-                ax.axvline(
-                    x=current_step_num,
-                    color="#444444",
-                    linestyle=":",
-                    linewidth=1.5,
-                    alpha=0.8,
-                    label="Current Frame" if idx == 0 else ""
-                )
-
-            ax.set_ylabel(name)
+            ax.set_ylabel(name, color=color)
+            ax.tick_params(axis="y", colors=color)
             ax.set_yscale("symlog", linthresh=1e-6)
-            ax.grid(True, which="both", ls="-", alpha=0.2)
-            ax.legend(loc="upper right")
 
-        axes[-1].set_xlabel("Optimization Step")
-        self.figure.tight_layout()
+        ax1.set_xlabel("Optimization Step")
+        ax1.grid(True, which="both", ls="-", alpha=0.2)
+        
+        # Create a single legend for all lines
+        ax1.legend(lines, labels, loc="upper right")
 
 
 class ForceViewerDialog(QDialog):

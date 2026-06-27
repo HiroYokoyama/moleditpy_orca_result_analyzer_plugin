@@ -50,7 +50,8 @@ class TestForceAnalysis(unittest.TestCase):
         mock_figure = MagicMock()
         mock_ax1 = MagicMock()
         mock_ax2 = MagicMock()
-        mock_figure.subplots.return_value = [mock_ax1, mock_ax2]
+        mock_figure.add_subplot.return_value = mock_ax1
+        mock_ax1.twinx.return_value = mock_ax2
         
         mock_line1 = MagicMock()
         mock_ax1.plot.return_value = [mock_line1]
