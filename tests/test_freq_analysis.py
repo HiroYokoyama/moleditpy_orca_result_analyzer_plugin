@@ -208,6 +208,58 @@ def _install_stubs():
         def stateChanged(self):
             return MagicMock()
 
+        def toggled(self):
+            return MagicMock()
+
+    class _QSlider:
+        def __init__(self, *a, **kw):
+            self._val = 0
+            self._enabled = True
+
+        def value(self):
+            return self._val
+
+        def setValue(self, v):
+            self._val = v
+
+        def setRange(self, *a):
+            pass
+
+        def setEnabled(self, v):
+            self._enabled = v
+
+        def valueChanged(self):
+            return MagicMock()
+
+    class _QPushButton:
+        def __init__(self, *a, **kw):
+            self._enabled = True
+
+        def setEnabled(self, v):
+            self._enabled = v
+
+        def isEnabled(self):
+            return self._enabled
+
+        def clicked(self):
+            return MagicMock()
+
+    class _QLabel:
+        def __init__(self, text="", *a, **kw):
+            self._text = text
+
+        def setText(self, t):
+            self._text = t
+
+        def text(self):
+            return self._text
+
+        def setFixedWidth(self, *a):
+            pass
+
+        def setAlignment(self, *a):
+            pass
+
     existing_widgets = sys.modules.get("PyQt6.QtWidgets")
     existing_core = sys.modules.get("PyQt6.QtCore")
     existing_gui = sys.modules.get("PyQt6.QtGui")
@@ -216,8 +268,6 @@ def _install_stubs():
     _WIDGET_MOCKS = [
         "QVBoxLayout",
         "QHBoxLayout",
-        "QPushButton",
-        "QLabel",
         "QFileDialog",
         "QMessageBox",
         "QFormLayout",
@@ -238,6 +288,9 @@ def _install_stubs():
         "QDoubleSpinBox": _QDoubleSpinBox,
         "QSpinBox": _QSpinBox,
         "QCheckBox": _QCheckBox,
+        "QSlider": _QSlider,
+        "QPushButton": _QPushButton,
+        "QLabel": _QLabel,
     }
 
     # Build and install new stubs, overriding any existing PyQt6 modules to avoid
@@ -362,6 +415,19 @@ def _make_dialog(frequencies):
 
     # Tree widget (real stub class)
     dlg.tree = sys.modules["PyQt6.QtWidgets"].QTreeWidget()
+
+    # Manual displacement mocks
+    dlg.chk_manual_displ = sys.modules["PyQt6.QtWidgets"].QCheckBox()
+    dlg.slider_displ = sys.modules["PyQt6.QtWidgets"].QSlider()
+    dlg.lbl_displ_val = sys.modules["PyQt6.QtWidgets"].QLabel()
+    dlg.spin_amp = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.spin_amp._val = 1.0
+
+    # Playback button mocks
+    dlg.btn_play = sys.modules["PyQt6.QtWidgets"].QPushButton()
+    dlg.btn_pause = sys.modules["PyQt6.QtWidgets"].QPushButton()
+    dlg.btn_stop = sys.modules["PyQt6.QtWidgets"].QPushButton()
+    dlg.btn_gif = sys.modules["PyQt6.QtWidgets"].QPushButton()
 
     return dlg
 
@@ -541,6 +607,84 @@ class TestUpdateDataColouring(unittest.TestCase):
         dlg.update_data()
         updated_unscaled = dlg.tree.invisibleRootItem().child(0).text(2)
         self.assertEqual(original_unscaled, updated_unscaled)
+
+
+# ---------------------------------------------------------------------------
+# Tests: manual_displacement
+# ---------------------------------------------------------------------------
+
+
+class TestManualDisplacement(unittest.TestCase):
+    def setUp(self):
+        freqs = [{"freq": 1200.0, "vector": [(0.1, 0.0, 0.0), (0.0, 0.2, 0.0)]}]
+        self.dlg = _make_dialog(freqs)
+        self.dlg.current_mode_idx = 0
+
+        # Setup base coordinates for 2 atoms
+        self.dlg.base_coords = [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
+        self.dlg.atoms = ["C", "H"]
+
+        # Mock conformer and molecule
+        self.mock_conf = MagicMock()
+        self.mock_mol = MagicMock()
+        self.mock_mol.GetConformer.return_value = self.mock_conf
+
+        # Position storage to verify SetAtomPosition calls
+        self.positions_set = {}
+
+        def set_atom_pos(idx, pt):
+            self.positions_set[idx] = (pt.x, pt.y, pt.z)
+
+        self.mock_conf.SetAtomPosition.side_effect = set_atom_pos
+        self.mock_conf.GetNumAtoms.return_value = 2
+
+        # Helper to return displaced positions
+        def get_atom_pos(idx):
+            class Pt:
+                def __init__(self, coords):
+                    self.x, self.y, self.z = coords
+
+            coords = self.positions_set.get(idx, self.dlg.base_coords[idx])
+            return Pt(coords)
+
+        self.mock_conf.GetAtomPosition.side_effect = get_atom_pos
+
+        self.dlg.mw.current_mol = self.mock_mol
+        self.dlg.context = MagicMock()
+        self.dlg.chk_vector = sys.modules["PyQt6.QtWidgets"].QCheckBox()
+        self.dlg.chk_vector.setChecked(False)
+        self.dlg.spin_vec_scale = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+        self.dlg.spin_vec_scale._val = 2.0
+
+    def test_toggle_manual_displacement(self):
+        # By default, manual displacement is not active
+        self.dlg.chk_manual_displ.setChecked(False)
+        self.dlg.slider_displ.setEnabled(False)
+
+        # 1. Activate manual displacement
+        self.dlg.toggle_manual_displacement(True)
+        self.assertTrue(self.dlg.slider_displ._enabled)
+        self.assertFalse(self.dlg.btn_play._enabled)
+
+        # 2. Change slider to +50 (represents fraction 0.5)
+        self.dlg.slider_displ.setValue(50)
+        self.dlg.spin_amp.setValue(0.6)  # displacement scale
+        self.dlg.on_displacement_slider_changed()
+
+        # factor = 0.5 * 0.6 = 0.3
+        # Atom 0: base(1,2,3) + vector(0.1,0,0)*0.3 = (1.03, 2, 3)
+        self.assertAlmostEqual(self.positions_set[0][0], 1.03, places=4)
+        self.assertAlmostEqual(self.positions_set[1][1], 5.06, places=4)
+        self.assertEqual(self.dlg.lbl_displ_val.text(), "+0.30")
+
+        # 3. Deactivate manual displacement
+        self.dlg.toggle_manual_displacement(False)
+        self.assertFalse(self.dlg.slider_displ._enabled)
+        self.assertTrue(self.dlg.btn_play._enabled)
+        self.assertEqual(self.dlg.slider_displ.value(), 0)
+        # Atom positions should be reset to base_coords
+        self.assertAlmostEqual(self.positions_set[0][0], 1.0, places=4)
+        self.assertAlmostEqual(self.positions_set[1][1], 5.0, places=4)
 
 
 if __name__ == "__main__":

@@ -191,6 +191,8 @@ class TestDetermineBondsWithoutDummies(unittest.TestCase):
             determine_bonds_without_dummies(mol, charge=999, bond_orders=True)
         except Exception as exc:
             self.fail(f"Should be non-fatal, but raised: {exc}")
+        # Even with bad charge/bond orders, connectivity should fall back successfully
+        self.assertEqual(mol.GetNumBonds(), 2)
 
 
 import tempfile

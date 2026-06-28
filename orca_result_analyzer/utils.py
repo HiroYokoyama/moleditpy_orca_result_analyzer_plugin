@@ -95,7 +95,12 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
         # Bond determination on the sub-molecule
         rdDetermineBonds.DetermineConnectivity(sub)
         if bond_orders:
-            rdDetermineBonds.DetermineBondOrders(sub, charge=charge)
+            try:
+                rdDetermineBonds.DetermineBondOrders(sub, charge=charge)
+            except Exception as e:
+                logging.debug(
+                    "DetermineBondOrders failed, falling back to connectivity: %s", e
+                )
 
         # Copy bonds back to the original molecule
         for bond in sub.GetBonds():

@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QTreeWidgetItemIterator,
     QComboBox,
+    QSlider,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
@@ -44,6 +45,15 @@ try:
     HAS_PIL = True
 except ImportError:
     HAS_PIL = False
+
+
+class ResetSlider(QSlider):
+    """QSlider that resets to 0 when double-clicked."""
+
+    def mouseDoubleClickEvent(self, event):
+        self.setValue(0)
+        if hasattr(super(), "mouseDoubleClickEvent"):
+            super().mouseDoubleClickEvent(event)
 
 
 class FreqSpectrumWindow(QWidget):
@@ -583,7 +593,8 @@ class FrequencyDialog(QDialog):
         self.spin_amp = QDoubleSpinBox()
         self.spin_amp.setRange(0.1, 10.0)
         self.spin_amp.setSingleStep(0.1)
-        self.spin_amp.setValue(0.5)
+        self.spin_amp.setValue(1.0)
+        self.spin_amp.valueChanged.connect(self.on_amp_changed)
         anim_row1.addWidget(self.spin_amp)
 
         anim_row1.addWidget(QLabel(" | FPS:"))
@@ -593,6 +604,28 @@ class FrequencyDialog(QDialog):
         self.spin_fps.valueChanged.connect(self.update_fps)
         anim_row1.addWidget(self.spin_fps)
         anim_layout.addLayout(anim_row1)
+
+        # Manual Displacement Row
+        manual_row = QHBoxLayout()
+        self.chk_manual_displ = QCheckBox("Manual Displacement")
+        self.chk_manual_displ.setChecked(False)
+        self.chk_manual_displ.toggled.connect(self.toggle_manual_displacement)
+        manual_row.addWidget(self.chk_manual_displ)
+
+        self.slider_displ = ResetSlider(Qt.Orientation.Horizontal)
+        self.slider_displ.setRange(-100, 100)
+        self.slider_displ.setValue(0)
+        self.slider_displ.setEnabled(False)
+        self.slider_displ.valueChanged.connect(self.on_displacement_slider_changed)
+        manual_row.addWidget(self.slider_displ)
+
+        self.lbl_displ_val = QLabel("+0.00")
+        self.lbl_displ_val.setFixedWidth(50)
+        self.lbl_displ_val.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        manual_row.addWidget(self.lbl_displ_val)
+        anim_layout.addLayout(manual_row)
 
         # Playback row
         action_row = QHBoxLayout()
@@ -861,6 +894,10 @@ class FrequencyDialog(QDialog):
         # 2. Reset geometry
         self.reset_geometry()
 
+        if self.chk_manual_displ.isChecked():
+            self.apply_manual_displacement()
+            return
+
         if not self.chk_vector.isChecked():
             return
 
@@ -890,6 +927,75 @@ class FrequencyDialog(QDialog):
             self.mw.plotter.render()
         except Exception as e:
             logging.warning("Error in FrequencyDialog.update_view: %s", e)
+
+    def toggle_manual_displacement(self, checked):
+        self.slider_displ.setEnabled(checked)
+        # Disable/enable play buttons
+        self.btn_play.setEnabled(not checked)
+        self.btn_pause.setEnabled(False)
+        self.btn_stop.setEnabled(False)
+        self.btn_gif.setEnabled(HAS_PIL and not checked)
+
+        if checked:
+            if self.is_playing:
+                self.stop_animation()
+            self.apply_manual_displacement()
+        else:
+            self.slider_displ.setValue(0)
+            self.reset_geometry()
+            if self.chk_vector.isChecked():
+                self.update_view()  # Restore vectors
+
+    def on_displacement_slider_changed(self):
+        self.apply_manual_displacement()
+
+    def on_amp_changed(self):
+        if self.chk_manual_displ.isChecked():
+            self.apply_manual_displacement()
+
+    def apply_manual_displacement(self):
+        if self.current_mode_idx < 0:
+            return
+
+        amp = self.spin_amp.value()
+        val = self.slider_displ.value() / 100.0
+        factor = val * amp
+
+        self.lbl_displ_val.setText(f"{factor:+.2f}")
+
+        vecs = self.frequencies[self.current_mode_idx].get("vector", [])
+        if not vecs:
+            return
+
+        try:
+            mol = self.mw.current_mol
+            conf = mol.GetConformer()
+            for i, (bx, by, bz) in enumerate(self.base_coords):
+                vx, vy, vz = vecs[i]
+                nx = bx + vx * factor
+                ny = by + vy * factor
+                nz = bz + vz * factor
+                conf.SetAtomPosition(i, Point3D(nx, ny, nz))
+
+            if self.context:
+                self.context.draw_molecule_3d(mol)
+            else:
+                self.mw.view_3d_manager.draw_molecule_3d(mol)
+
+            # Update vectors if enabled
+            if self.chk_vector.isChecked():
+                self.update_vectors_at_displaced_position()
+            else:
+                # Remove vectors if disabled
+                if self.vector_actor:
+                    try:
+                        self.mw.plotter.remove_actor(self.vector_actor)
+                    except Exception as _e:
+                        logging.warning("silenced: %s", _e)
+                    self.vector_actor = None
+
+        except Exception as e:
+            logging.warning("Error in apply_manual_displacement: %s", e)
 
     def start_animation(self):
         if self.current_mode_idx < 0:
