@@ -1,6 +1,7 @@
 import glob
 import os
 import math
+import logging
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -314,13 +315,43 @@ class EnergyDiagramDialog(QDialog):
             patterns.append(f"{target_idx:03d}_*.cube")  # Legacy
             patterns.append(f"{index:03d}_*.cube")  # Legacy 0-based
 
-        for p in patterns:
-            full_p = os.path.join(self.result_dir, p)
-            files = glob.glob(full_p)
+        # Check for dedicated _cubes subfolder
+        search_dirs = [self.result_dir]
+
+        # 1. Try to find the exact _cubes subfolder from parser filename
+        parent_dlg = self.parent()
+        if parent_dlg and hasattr(parent_dlg, "parent_dlg") and parent_dlg.parent_dlg:
+            main_dlg = parent_dlg.parent_dlg
+            if hasattr(main_dlg, "parser") and main_dlg.parser:
+                if hasattr(main_dlg.parser, "filename") and main_dlg.parser.filename:
+                    res_dir = os.path.dirname(main_dlg.parser.filename)
+                    base = os.path.splitext(os.path.basename(main_dlg.parser.filename))[
+                        0
+                    ]
+                    cube_dir = os.path.join(res_dir, f"{base}_cubes")
+                    if os.path.exists(cube_dir) and cube_dir not in search_dirs:
+                        search_dirs.append(cube_dir)
+
+        # 2. Also search for any subdirectories ending with '_cubes' in self.result_dir
+        if os.path.isdir(self.result_dir):
+            try:
+                for item in os.listdir(self.result_dir):
+                    item_path = os.path.join(self.result_dir, item)
+                    if os.path.isdir(item_path) and item.endswith("_cubes"):
+                        if item_path not in search_dirs:
+                            search_dirs.append(item_path)
+            except Exception as e:
+                logging.warning("Error listing result_dir in try_load_cube: %s", e)
+
+        files = []
+        for s_dir in search_dirs:
+            for p in patterns:
+                full_p = os.path.join(s_dir, p)
+                files = glob.glob(full_p)
+                if files:
+                    break
             if files:
                 break
-
-        # Fallback to unpadded (legacy support) - handled in loop above
 
         if files:
             target = files[0]  # Take first match
