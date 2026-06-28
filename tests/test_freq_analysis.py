@@ -337,6 +337,23 @@ def _install_stubs():
     _pil = types.ModuleType("PIL")
     _pil.Image = MagicMock
 
+    # rdkit stub (only if not already installed)
+    try:
+        from rdkit.Geometry import Point3D  # noqa: F401
+    except ImportError:
+
+        class _Point3D:
+            def __init__(self, x, y, z):
+                self.x = x
+                self.y = y
+                self.z = z
+
+        _rdkit = types.ModuleType("rdkit")
+        _rdkit_geom = types.ModuleType("rdkit.Geometry")
+        _rdkit_geom.Point3D = _Point3D
+        sys.modules["rdkit"] = _rdkit
+        sys.modules["rdkit.Geometry"] = _rdkit_geom
+
     # numpy stub (keep real numpy if available, else stub)
     try:
         import numpy  # noqa: F401
