@@ -24,19 +24,37 @@ except ImportError:
     nist = None
 
 
-def calculate_arrow_shifts(items, val_to_y, threshold=15, shift_step=10):
+def calculate_arrow_shifts(items, val_to_y, threshold=15, distance=20):
     shifts = {}
     if not items:
         return shifts
-    n = len(items)
-    arrow_shifts = [0] * n
-    for idx in range(n - 2, -1, -1):
+
+    # Group consecutive overlapping items into clusters
+    clusters = []
+    current_cluster = [0]
+    for idx in range(1, len(items)):
+        y_prev = val_to_y(items[idx - 1][1])
         y_curr = val_to_y(items[idx][1])
-        y_next = val_to_y(items[idx + 1][1])
-        if (y_next - y_curr) < threshold:
-            arrow_shifts[idx] = arrow_shifts[idx + 1] + shift_step
-    for idx, (i_orig, _, _) in enumerate(items):
-        shifts[i_orig] = arrow_shifts[idx]
+        if (y_curr - y_prev) < threshold:
+            current_cluster.append(idx)
+        else:
+            clusters.append(current_cluster)
+            current_cluster = [idx]
+    clusters.append(current_cluster)
+
+    # Calculate shifts for each cluster
+    for cluster in clusters:
+        n = len(cluster)
+        if n == 1:
+            i_orig = items[cluster[0]][0]
+            shifts[i_orig] = 0
+        else:
+            start_shift = (distance / 2) * (n - 1)
+            for i, idx in enumerate(cluster):
+                i_orig = items[idx][0]
+                shift_val = start_shift - i * distance
+                shifts[i_orig] = int(shift_val)
+
     return shifts
 
 
@@ -713,7 +731,8 @@ class EnergyDiagramDialog(QDialog):
             occupied_items.sort(key=lambda x: x[1], reverse=True)
             virtual_items.sort(key=lambda x: x[1], reverse=False)
 
-            shifts = calculate_arrow_shifts(occupied_items, val_to_y)
+            distance = 10 if self.is_uhf else 20
+            shifts = calculate_arrow_shifts(occupied_items, val_to_y, distance=distance)
 
             # Colors and Labels
             is_alpha_col = title == "Alpha"
