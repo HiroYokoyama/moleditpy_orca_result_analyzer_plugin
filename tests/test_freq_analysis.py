@@ -686,6 +686,40 @@ class TestManualDisplacement(unittest.TestCase):
         self.assertAlmostEqual(self.positions_set[0][0], 1.0, places=4)
         self.assertAlmostEqual(self.positions_set[1][1], 5.0, places=4)
 
+    def test_close_event_does_not_reset_geometry_if_manual_active(self):
+        # 1. Activate manual displacement and apply displacement
+        self.dlg.chk_manual_displ.setChecked(True)
+        self.dlg.toggle_manual_displacement(True)
+        self.dlg.slider_displ.setValue(50)
+        self.dlg.on_displacement_slider_changed()
+
+        # Verify initial displaced coordinates
+        self.assertAlmostEqual(self.positions_set[0][0], 1.05, places=4)
+
+        # 2. Call closeEvent
+        mock_event = MagicMock()
+        self.dlg.closeEvent(mock_event)
+
+        # 3. Assert coordinates were NOT reset (still holds displaced position)
+        self.assertAlmostEqual(self.positions_set[0][0], 1.05, places=4)
+        self.assertAlmostEqual(self.positions_set[1][1], 5.10, places=4)
+
+    def test_close_event_resets_geometry_if_manual_inactive(self):
+        # 1. Start with inactive manual displacement (it should be reset)
+        self.dlg.chk_manual_displ.setChecked(False)
+
+        # Apply a displacement first to simulate a state
+        self.positions_set[0] = (1.03, 2.0, 3.0)
+        self.positions_set[1] = (4.0, 5.06, 6.0)
+
+        # 2. Call closeEvent
+        mock_event = MagicMock()
+        self.dlg.closeEvent(mock_event)
+
+        # 3. Assert coordinates were reset to base coordinates
+        self.assertAlmostEqual(self.positions_set[0][0], 1.0, places=4)
+        self.assertAlmostEqual(self.positions_set[1][1], 5.0, places=4)
+
 
 if __name__ == "__main__":
     unittest.main()

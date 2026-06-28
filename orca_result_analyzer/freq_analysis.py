@@ -1316,7 +1316,13 @@ class FrequencyDialog(QDialog):
         self.update_view()
 
     def closeEvent(self, event):
-        self.stop_animation()
+        if self.chk_manual_displ.isChecked():
+            self.is_playing = False
+            self.timer.stop()
+            self.animation_step = 0
+        else:
+            self.stop_animation()
+
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
