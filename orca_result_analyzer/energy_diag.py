@@ -24,6 +24,22 @@ except ImportError:
     nist = None
 
 
+def calculate_arrow_shifts(items, val_to_y, threshold=15, shift_step=10):
+    shifts = {}
+    if not items:
+        return shifts
+    n = len(items)
+    arrow_shifts = [0] * n
+    for idx in range(n - 2, -1, -1):
+        y_curr = val_to_y(items[idx][1])
+        y_next = val_to_y(items[idx + 1][1])
+        if (y_next - y_curr) < threshold:
+            arrow_shifts[idx] = arrow_shifts[idx + 1] + shift_step
+    for idx, (i_orig, _, _) in enumerate(items):
+        shifts[i_orig] = arrow_shifts[idx]
+    return shifts
+
+
 class EnergyDiagramDialog(QDialog):
     def __init__(self, mo_data, parent=None, result_dir=None):
         super().__init__(parent)
@@ -694,9 +710,10 @@ class EnergyDiagramDialog(QDialog):
                         occupied_items.append(item)
                     else:
                         virtual_items.append(item)
-
             occupied_items.sort(key=lambda x: x[1], reverse=True)
             virtual_items.sort(key=lambda x: x[1], reverse=False)
+
+            shifts = calculate_arrow_shifts(occupied_items, val_to_y)
 
             # Colors and Labels
             is_alpha_col = title == "Alpha"
@@ -753,7 +770,10 @@ class EnergyDiagramDialog(QDialog):
                             elif is_beta_col:
                                 arrow_txt = "↓"
 
-                        rect_icon = QRect(int(x1), int(y) - 14, int(level_w), 28)
+                        shift_x = shifts.get(i_orig, 0)
+                        rect_icon = QRect(
+                            int(x1) + shift_x, int(y) - 14, int(level_w), 28
+                        )
                         painter.drawText(
                             rect_icon, Qt.AlignmentFlag.AlignCenter, arrow_txt
                         )
