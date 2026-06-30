@@ -2675,7 +2675,6 @@ class OrcaParser:
                         l_scf = self.lines[idx].strip()
                         if (
                             not l_scf
-                            or "---" in l_scf
                             or "SUCCESS" in l_scf
                             or "Energy Check" in l_scf
                         ):
