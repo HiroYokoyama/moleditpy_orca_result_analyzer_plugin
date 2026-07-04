@@ -852,8 +852,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             # Update File Info Labels
             self.update_file_info_labels()
 
-            # Auto-load 3D structure
-            self.load_structure_3d()
+            # Auto-load 3D structure. This is a fresh file load, so frame the
+            # molecule once (fit_camera=True); later analysis popups won't refit.
+            self.load_structure_3d(fit_camera=True)
             self.update_button_states()
 
             self.context.show_status_message(
@@ -1034,8 +1035,14 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.btn_scf.setEnabled(has_scf)
         self.btn_scf.setToolTip("" if has_scf else "No SCF iteration data found")
 
-    def load_structure_3d(self):
-        # Helper to ensure 3D structure is loaded
+    def load_structure_3d(self, fit_camera=False):
+        # Helper to ensure the 3D structure is (re)drawn.
+        #
+        # Analysis dialogs redraw the optimized/final molecule on popup so the
+        # 3D view always matches the data being shown (accurate result), but
+        # they must NOT refit the camera — the user's current zoom and
+        # orientation are preserved. Only an explicit file load passes
+        # fit_camera=True to frame a freshly loaded molecule.
         atoms = self.parser.data.get("atoms", [])
         coords = self.parser.data.get("coords", [])
 
@@ -1096,15 +1103,26 @@ class OrcaResultAnalyzerDialog(QDialog):
                     if hasattr(self.mw.ui_manager, "minimize_2d_panel"):
                         self.mw.ui_manager.minimize_2d_panel()
 
-            # Reset 3D camera to fit molecule
-            try:
-                self.context.reset_3d_camera()
-                if hasattr(self.mw, "view_3d_manager") and hasattr(
-                    self.mw.view_3d_manager, "plotter"
-                ):
+            # Fit the camera only on an explicit file load. On analysis-dialog
+            # popups (fit_camera=False) the molecule is redrawn above but the
+            # camera is left untouched, preserving the user's zoom/orientation.
+            if fit_camera:
+                try:
+                    self.context.reset_3d_camera()
+                    if hasattr(self.mw, "view_3d_manager") and hasattr(
+                        self.mw.view_3d_manager, "plotter"
+                    ):
+                        self.mw.view_3d_manager.plotter.render()
+                except Exception as _e:
+                    logging.debug("3D camera/render update failed: %s", _e)
+            elif hasattr(self.mw, "view_3d_manager") and hasattr(
+                self.mw.view_3d_manager, "plotter"
+            ):
+                # Still render so the redrawn structure is shown immediately.
+                try:
                     self.mw.view_3d_manager.plotter.render()
-            except Exception as _e:
-                logging.warning("silenced: %s", _e)
+                except Exception as _e:
+                    logging.debug("3D render update failed: %s", _e)
         except Exception as e:
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",
