@@ -1114,7 +1114,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                     ):
                         self.mw.view_3d_manager.plotter.render()
                 except Exception as _e:
-                    logging.debug("3D camera/render update failed: %s", _e)
+                    logging.warning("3D camera/render update failed: %s", _e)
             elif hasattr(self.mw, "view_3d_manager") and hasattr(
                 self.mw.view_3d_manager, "plotter"
             ):
@@ -1122,7 +1122,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 try:
                     self.mw.view_3d_manager.plotter.render()
                 except Exception as _e:
-                    logging.debug("3D render update failed: %s", _e)
+                    logging.warning("3D render update failed: %s", _e)
         except Exception as e:
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",
