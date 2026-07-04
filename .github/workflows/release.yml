@@ -54,6 +54,7 @@ jobs:
       - name: Build release package
         run: |
           TAG="$VERSION"
+          cp README.md LICENSE orca_result_analyzer/
           zip -r "orca_result_analyzer_${TAG}.zip" orca_result_analyzer/ --exclude "*/__pycache__/*" "*/.git/*"
 
       - name: Create GitHub Release
