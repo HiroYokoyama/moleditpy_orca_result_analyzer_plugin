@@ -1012,10 +1012,6 @@ class OrcaResultAnalyzerDialog(QDialog):
             )
         self.btn_forces.setToolTip(tooltip)
 
-        bool(
-            data.get("thermal")
-            or (data.get("frequencies", None) and "thermo" in str(data))
-        )
         self.btn_therm.setEnabled(bool(data.get("thermal")))
 
         has_tddft = bool(data.get("tddft"))

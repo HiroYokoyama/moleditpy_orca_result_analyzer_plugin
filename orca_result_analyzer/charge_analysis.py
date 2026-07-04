@@ -32,9 +32,9 @@ import logging
 
 # GradientBar Widget
 class GradientBar(QWidget):
-    def __init__(self, parent=None, colors=["red", "white", "blue"]):
+    def __init__(self, parent=None, colors=None):
         super().__init__(parent)
-        self.colors = colors
+        self.colors = colors if colors is not None else ["red", "white", "blue"]
         self.setFixedHeight(30)
 
     def set_colors(self, colors):
