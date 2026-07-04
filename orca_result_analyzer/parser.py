@@ -961,7 +961,7 @@ class OrcaParser:
                                 else:
                                     mag_au = val
                             except Exception:
-                                pass
+                                logging.debug("Unparseable dipole magnitude line: %r", lk, exc_info=True)
                     if mag_debye is not None:
                         mag = mag_debye
                     elif mag_au is not None:
@@ -1064,7 +1064,7 @@ class OrcaParser:
                         try:
                             found[label] = (float(nums[-1]), dimensionless)
                         except ValueError:
-                            pass
+                            logging.debug("Unparseable energy component value in line: %r", line, exc_info=True)
         self.data["energy_components"] = [
             {"label": label, "value": found[label][0], "dimensionless": found[label][1]}
             for _sub, label, _dim in specs
@@ -1981,7 +1981,8 @@ class OrcaParser:
                                 except Exception as _e:
                                     logging.warning("silenced: %s", _e)
                     except Exception:
-                        pass  # パース失敗行はスキップ
+                        # パース失敗行はスキップ
+                        logging.debug("Skipping unparseable TDDFT line", exc_info=True)
 
                 # --- パターンB: 矢印なしの短縮フォーマット ---
                 # 例: 1    2.78    446.0    0.001 ...
@@ -2690,7 +2691,8 @@ class OrcaParser:
                                 it_en = float(parts[1])
                                 trace.append({"iter": it_no, "energy": it_en})
                             except Exception:
-                                pass  # ORCA prints '***' for overflow values; skip unparseable lines
+                                # ORCA prints '***' for overflow values; skip unparseable lines
+                                logging.debug("Skipping unparseable SCF iteration line: %r", l_scf, exc_info=True)
                         idx += 1
 
                     if trace:

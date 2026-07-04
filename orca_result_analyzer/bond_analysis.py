@@ -149,7 +149,7 @@ def _vdw(sym):
         try:
             return _PERIODIC_TABLE.GetRvdw(sym)
         except Exception:
-            pass
+            logging.debug("vdW radius lookup failed for '%s'; using default", sym, exc_info=True)
     return 1.70
 
 

@@ -220,7 +220,8 @@ class DipoleDialog(QDialog):
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except Exception:
-                pass  # settings file may be empty or corrupt; start fresh
+                # settings file may be empty or corrupt; start fresh
+                logging.debug("Could not read settings file; starting fresh", exc_info=True)
 
         dipole_settings = {
             # "scale": self.spin_scale.value(),

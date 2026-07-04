@@ -202,4 +202,4 @@ class ThermalTableDialog(QDialog):
                         f"Data exported to {path}", 5000
                     )
             except Exception:
-                pass  # Simple error handling
+                logging.debug("Thermochemistry export failed", exc_info=True)
