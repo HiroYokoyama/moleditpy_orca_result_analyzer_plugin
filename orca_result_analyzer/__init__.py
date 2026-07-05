@@ -102,6 +102,31 @@ def _open_orca_analyzer_empty(context):
     QApplication.processEvents()
 
 
+def _on_document_reset(context):
+    """Close the analyzer window and drop stale 3D overlay state on File->New.
+
+    File->New wipes the plotter (mw.clear_3d_view()) but does not know about
+    plugin-owned state: the analyzer window would otherwise keep showing the
+    previous file's data, and any atom-color overrides applied by the Atomic
+    Charges view would survive and could bleed onto a differently-indexed
+    molecule loaded afterwards.
+    """
+    win = context.get_window("analyzer")
+    if win is not None:
+        try:
+            win.close()
+        except Exception as e:
+            logging.warning("silenced: %s", e)
+
+    mw = context.get_main_window()
+    v3d = getattr(mw, "view_3d_manager", None) if mw is not None else None
+    if v3d is not None and hasattr(v3d, "_plugin_color_overrides"):
+        try:
+            v3d._plugin_color_overrides.clear()
+        except Exception as e:
+            logging.warning("silenced: %s", e)
+
+
 def initialize(context):
     """Initialize the ORCA Result Analyzer plugin.
 
@@ -128,6 +153,7 @@ def initialize(context):
 
     context.register_file_opener(".out", open_orca_file, priority=100)
     context.register_drop_handler(handle_drop, priority=100)
+    context.register_document_reset_handler(lambda: _on_document_reset(context))
 
     # Extensions menu entry — opens analyzer without requiring a file first
     context.add_menu_action(

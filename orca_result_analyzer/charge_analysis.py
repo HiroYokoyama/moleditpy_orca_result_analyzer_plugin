@@ -377,12 +377,19 @@ class ChargeDialog(QDialog):
         """Reset atom colors to default CPK colors"""
         try:
             mw = self.parent_dlg.mw
-            if hasattr(mw, "view_3d_manager"):
+            v3d = getattr(mw, "view_3d_manager", None)
+            if v3d is not None:
                 data = self.all_charges.get(self.current_type, [])
-                for item in data:
-                    mw.view_3d_manager.update_atom_color_override(
-                        item["atom_idx"], None
-                    )
+                overrides = getattr(v3d, "_plugin_color_overrides", None)
+                if overrides is not None:
+                    # Clear entries directly instead of calling
+                    # update_atom_color_override() per atom -- that helper
+                    # redraws the whole molecule on every single call.
+                    for item in data:
+                        overrides.pop(item["atom_idx"], None)
+                else:
+                    for item in data:
+                        v3d.update_atom_color_override(item["atom_idx"], None)
 
             # Remove scalar bar if exists
             if getattr(self, "_charge_scalar_bar", None) is not None:
@@ -548,12 +555,21 @@ class ChargeDialog(QDialog):
 
         try:
             mw = self.parent_dlg.mw
-            if hasattr(mw, "view_3d_manager"):
-                for item in data:
-                    idx = item["atom_idx"]
-                    q = item["charge"]
-                    color = get_color(q)
-                    mw.view_3d_manager.update_atom_color_override(idx, color)
+            v3d = getattr(mw, "view_3d_manager", None)
+            if v3d is not None:
+                overrides = getattr(v3d, "_plugin_color_overrides", None)
+                if overrides is not None:
+                    # Write overrides directly instead of calling
+                    # update_atom_color_override() per atom -- that helper
+                    # triggers a full molecule redraw on every call, which is
+                    # O(n_atoms) redraws for a single "Apply Coloring" click.
+                    for item in data:
+                        overrides[item["atom_idx"]] = get_color(item["charge"])
+                else:
+                    for item in data:
+                        v3d.update_atom_color_override(
+                            item["atom_idx"], get_color(item["charge"])
+                        )
 
             # Redraw molecule once after all colors are set
             if self.parent_dlg.mw.current_mol:

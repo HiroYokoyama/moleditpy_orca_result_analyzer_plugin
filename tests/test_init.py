@@ -83,12 +83,16 @@ class StubContext:
         self.menu_actions = {}
         self._windows = {}
         self.mark_project_modified_call_count = 0
+        self.document_reset_handlers = []
 
     def register_file_opener(self, ext, callback, priority=0):
         self.file_openers[ext] = (callback, priority)
 
     def register_drop_handler(self, handler, priority=0):
         self.drop_handlers.append((handler, priority))
+
+    def register_document_reset_handler(self, callback):
+        self.document_reset_handlers.append(callback)
 
     def add_menu_action(self, path, callback):
         self.menu_actions[path] = callback

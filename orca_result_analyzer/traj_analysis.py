@@ -317,6 +317,12 @@ class TrajectoryResultDialog(QDialog):
             self.btn_play.setEnabled(False)
         btn_layout.addWidget(self.btn_play)
 
+        self.btn_first = QPushButton("|<")
+        self.btn_first.setFixedWidth(30)
+        self.btn_first.setToolTip("Go to first step")
+        self.btn_first.clicked.connect(self.go_to_first_frame)
+        btn_layout.addWidget(self.btn_first)
+
         self.btn_prev = QPushButton("<")
         self.btn_prev.setFixedWidth(30)
         self.btn_prev.clicked.connect(self.prev_frame)
@@ -326,6 +332,12 @@ class TrajectoryResultDialog(QDialog):
         self.btn_next.setFixedWidth(30)
         self.btn_next.clicked.connect(self.next_frame)
         btn_layout.addWidget(self.btn_next)
+
+        self.btn_last = QPushButton(">|")
+        self.btn_last.setFixedWidth(30)
+        self.btn_last.setToolTip("Go to last step")
+        self.btn_last.clicked.connect(self.go_to_last_frame)
+        btn_layout.addWidget(self.btn_last)
 
         btn_layout.addWidget(QLabel(" | FPS:"))
         self.spin_fps = QSpinBox()
@@ -994,6 +1006,16 @@ class TrajectoryResultDialog(QDialog):
             else:
                 idx = 0
         self.slider.setValue(idx)
+
+    def go_to_first_frame(self):
+        if self.is_playing:
+            self.toggle_play()
+        self.slider.setValue(0)
+
+    def go_to_last_frame(self):
+        if self.is_playing:
+            self.toggle_play()
+        self.slider.setValue(len(self.steps) - 1)
 
     def save_graph(self):
         # Hide annotation before saving
