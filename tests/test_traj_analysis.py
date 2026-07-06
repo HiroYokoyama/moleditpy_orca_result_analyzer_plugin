@@ -148,6 +148,7 @@ def _install_stubs(force=False):
         lambda mol, charge=0, bond_orders=True: None  # no-op stub
     )
     _orca_utils.list_orca_output_files = lambda directory: []  # no-op stub
+    _orca_utils.clear_atom_color_overrides = lambda mw: None  # no-op stub
 
     _orca_spectrum = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _orca_spectrum.SpectrumWidget = MagicMock()
@@ -516,6 +517,66 @@ class TestEmptyStepsGuards(unittest.TestCase):
         TrajectoryResultDialog.on_hover(fake, event)
         event.inaxes = MagicMock()
         TrajectoryResultDialog.on_hover(fake, event)
+
+
+# ---------------------------------------------------------------------------
+# TestGoToFirstLastFrame — "|<" / ">|" navigation buttons
+# ---------------------------------------------------------------------------
+
+
+class _FakeNavDialog:
+    """Minimal stand-in exposing just what go_to_first/last_frame touch."""
+
+    def __init__(self, steps, is_playing=False):
+        self.steps = steps
+        self.is_playing = is_playing
+        self.slider = MagicMock()
+        self.toggle_play_calls = 0
+
+    def toggle_play(self):
+        self.toggle_play_calls += 1
+        self.is_playing = not self.is_playing
+
+
+class TestGoToFirstLastFrame(unittest.TestCase):
+    def test_go_to_first_frame_sets_slider_to_zero(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}, {"energy": 2.0}, {"energy": 3.0}])
+        TrajectoryResultDialog.go_to_first_frame(fake)
+        fake.slider.setValue.assert_called_once_with(0)
+
+    def test_go_to_last_frame_sets_slider_to_last_index(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}, {"energy": 2.0}, {"energy": 3.0}])
+        TrajectoryResultDialog.go_to_last_frame(fake)
+        fake.slider.setValue.assert_called_once_with(2)
+
+    def test_go_to_last_frame_single_step(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}])
+        TrajectoryResultDialog.go_to_last_frame(fake)
+        fake.slider.setValue.assert_called_once_with(0)
+
+    def test_go_to_first_frame_stops_playback_first(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}], is_playing=True)
+        TrajectoryResultDialog.go_to_first_frame(fake)
+        self.assertEqual(fake.toggle_play_calls, 1)
+        fake.slider.setValue.assert_called_once_with(0)
+
+    def test_go_to_last_frame_stops_playback_first(self):
+        fake = _FakeNavDialog(
+            steps=[{"energy": 1.0}, {"energy": 2.0}], is_playing=True
+        )
+        TrajectoryResultDialog.go_to_last_frame(fake)
+        self.assertEqual(fake.toggle_play_calls, 1)
+        fake.slider.setValue.assert_called_once_with(1)
+
+    def test_go_to_first_frame_no_playback_toggle_when_stopped(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}], is_playing=False)
+        TrajectoryResultDialog.go_to_first_frame(fake)
+        self.assertEqual(fake.toggle_play_calls, 0)
+
+    def test_go_to_last_frame_no_playback_toggle_when_stopped(self):
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}], is_playing=False)
+        TrajectoryResultDialog.go_to_last_frame(fake)
+        self.assertEqual(fake.toggle_play_calls, 0)
 
 
 if __name__ == "__main__":

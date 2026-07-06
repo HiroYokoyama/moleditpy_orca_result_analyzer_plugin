@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "3.8.2"
+PLUGIN_VERSION = "3.8.3"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
@@ -57,6 +57,12 @@ def _open_orca_file(path, context):
         except Exception as _e:
             logging.warning("silenced: %s", _e)
 
+    # New result loaded — any atom colors applied to the previous molecule's
+    # indices must not bleed onto this (possibly differently-indexed) one.
+    from .utils import clear_atom_color_overrides
+
+    clear_atom_color_overrides(mw)
+
     from .gui import OrcaResultAnalyzerDialog
 
     win = OrcaResultAnalyzerDialog(mw, parser, path, context)
@@ -90,8 +96,10 @@ def _open_orca_analyzer_empty(context):
 
     from .parser import OrcaParser
     from .gui import OrcaResultAnalyzerDialog
+    from .utils import clear_atom_color_overrides
 
     parser = OrcaParser()  # empty — no file loaded
+    clear_atom_color_overrides(mw)
 
     win = OrcaResultAnalyzerDialog(mw, parser, "", context)
     context.register_window("analyzer", win)
@@ -118,13 +126,9 @@ def _on_document_reset(context):
         except Exception as e:
             logging.warning("silenced: %s", e)
 
-    mw = context.get_main_window()
-    v3d = getattr(mw, "view_3d_manager", None) if mw is not None else None
-    if v3d is not None and hasattr(v3d, "_plugin_color_overrides"):
-        try:
-            v3d._plugin_color_overrides.clear()
-        except Exception as e:
-            logging.warning("silenced: %s", e)
+    from .utils import clear_atom_color_overrides
+
+    clear_atom_color_overrides(context.get_main_window())
 
 
 def initialize(context):

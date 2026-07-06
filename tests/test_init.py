@@ -386,5 +386,97 @@ class TestOpenAnalyzerEmpty(unittest.TestCase):
         self.assertIs(ctx.get_window("analyzer"), fake_win)
 
 
+# ---------------------------------------------------------------------------
+# TestDocumentResetHandler — File->New must close the analyzer and drop
+# stale atom-color overrides (they otherwise survive clear_3d_view()).
+# ---------------------------------------------------------------------------
+
+
+def _real_utils_module():
+    """Load the real utils.py directly.
+
+    Several other test files in this suite install a bare-bones fake module
+    at sys.modules["orca_result_analyzer.utils"] (for their own isolated
+    imports) and never clean it up, so by the time the full suite runs, that
+    slot may hold a stub whose clear_atom_color_overrides (if present at all)
+    is a no-op MagicMock. _on_document_reset()'s deferred `from .utils import
+    clear_atom_color_overrides` would then silently pick up the stub instead
+    of the real implementation. Tests that need the real dict-clearing
+    behavior swap this module in for the duration of the test.
+    """
+    path = os.path.normpath(
+        os.path.join(_SRC_DIR, "orca_result_analyzer", "utils.py")
+    )
+    spec = importlib.util.spec_from_file_location("orca_result_analyzer.utils", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestDocumentResetHandler(unittest.TestCase):
+    def setUp(self):
+        self.ctx = StubContext()
+        _init_mod.initialize(self.ctx)
+        self._original_utils_mod = sys.modules.get("orca_result_analyzer.utils")
+        sys.modules["orca_result_analyzer.utils"] = _real_utils_module()
+
+    def tearDown(self):
+        if self._original_utils_mod is not None:
+            sys.modules["orca_result_analyzer.utils"] = self._original_utils_mod
+        else:
+            sys.modules.pop("orca_result_analyzer.utils", None)
+
+    def test_registers_document_reset_handler(self):
+        self.assertEqual(len(self.ctx.document_reset_handlers), 1)
+
+    def test_handler_closes_existing_analyzer_window(self):
+        fake_win = MagicMock()
+        self.ctx.register_window("analyzer", fake_win)
+        handler = self.ctx.document_reset_handlers[0]
+
+        handler()
+
+        fake_win.close.assert_called_once()
+
+    def test_handler_noop_when_no_window_registered(self):
+        handler = self.ctx.document_reset_handlers[0]
+        try:
+            handler()
+        except Exception as exc:
+            self.fail(f"document reset handler should not raise without a window: {exc}")
+
+    def test_handler_survives_window_close_exception(self):
+        fake_win = MagicMock()
+        fake_win.close.side_effect = RuntimeError("boom")
+        self.ctx.register_window("analyzer", fake_win)
+        handler = self.ctx.document_reset_handlers[0]
+
+        try:
+            handler()
+        except Exception as exc:
+            self.fail(f"document reset handler must swallow close() errors: {exc}")
+
+    def test_handler_clears_atom_color_overrides(self):
+        fixed_mw = MagicMock()
+        fixed_mw.view_3d_manager._plugin_color_overrides = {0: "#ff0000", 1: "#00ff00"}
+        self.ctx.get_main_window = lambda: fixed_mw
+        handler = self.ctx.document_reset_handlers[0]
+
+        handler()
+
+        self.assertEqual(fixed_mw.view_3d_manager._plugin_color_overrides, {})
+
+    def test_handler_clears_overrides_even_without_a_window(self):
+        """Overrides must be dropped even if the analyzer was already closed."""
+        fixed_mw = MagicMock()
+        fixed_mw.view_3d_manager._plugin_color_overrides = {2: "#0000ff"}
+        self.ctx.get_main_window = lambda: fixed_mw
+        handler = self.ctx.document_reset_handlers[0]
+
+        handler()
+
+        self.assertEqual(fixed_mw.view_3d_manager._plugin_color_overrides, {})
+
+
 if __name__ == "__main__":
     unittest.main()

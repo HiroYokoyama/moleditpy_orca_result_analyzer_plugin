@@ -26,6 +26,7 @@ get_default_export_path = _utils.get_default_export_path
 normalize_atom_symbol = _utils.normalize_atom_symbol
 determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
 list_orca_output_files = _utils.list_orca_output_files
+clear_atom_color_overrides = _utils.clear_atom_color_overrides
 
 # ---------------------------------------------------------------------------
 # RDKit availability — used by skipUnless decorators throughout this module
@@ -235,6 +236,61 @@ class TestListOrcaOutputFiles(unittest.TestCase):
     def test_nonexistent_directory_returns_empty_list(self):
         result = list_orca_output_files("/nonexistent/path/that/does/not/exist")
         self.assertEqual(result, [])
+
+
+class _FakeV3D:
+    def __init__(self, overrides=None):
+        self._plugin_color_overrides = dict(overrides or {})
+
+
+class _FakeMW:
+    def __init__(self, v3d):
+        self.view_3d_manager = v3d
+
+
+class TestClearAtomColorOverrides(unittest.TestCase):
+    """Tests for clear_atom_color_overrides() — used on every 'new file loaded'
+    entry point so charge-coloring from a previous result never bleeds onto a
+    differently-indexed molecule."""
+
+    def test_clears_existing_overrides(self):
+        v3d = _FakeV3D({0: "#ff0000", 1: "#0000ff"})
+        mw = _FakeMW(v3d)
+        clear_atom_color_overrides(mw)
+        self.assertEqual(v3d._plugin_color_overrides, {})
+
+    def test_leaves_empty_dict_empty(self):
+        v3d = _FakeV3D()
+        mw = _FakeMW(v3d)
+        clear_atom_color_overrides(mw)
+        self.assertEqual(v3d._plugin_color_overrides, {})
+
+    def test_none_main_window_is_noop(self):
+        try:
+            clear_atom_color_overrides(None)
+        except Exception as exc:
+            self.fail(f"Should be non-fatal with mw=None, raised: {exc}")
+
+    def test_missing_view_3d_manager_is_noop(self):
+        class _MWNoView3D:
+            pass
+
+        try:
+            clear_atom_color_overrides(_MWNoView3D())
+        except Exception as exc:
+            self.fail(f"Should be non-fatal without view_3d_manager, raised: {exc}")
+
+    def test_missing_overrides_attr_is_noop(self):
+        class _V3DNoOverrides:
+            pass
+
+        mw = _FakeMW(_V3DNoOverrides())
+        try:
+            clear_atom_color_overrides(mw)
+        except Exception as exc:
+            self.fail(
+                f"Should be non-fatal without _plugin_color_overrides, raised: {exc}"
+            )
 
 
 if __name__ == "__main__":

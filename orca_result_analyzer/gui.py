@@ -23,6 +23,7 @@ from .utils import (
     normalize_atom_symbol,
     determine_bonds_without_dummies,
     list_orca_output_files,
+    clear_atom_color_overrides,
 )
 
 
@@ -777,6 +778,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         """Load a file and update UI"""
         # Close existing dialogs to prevent confusion
         self.close_all_sub_dialogs()
+
+        # New result loaded — any atom colors applied to the previous
+        # molecule's indices must not bleed onto this (possibly
+        # differently-indexed) one.
+        clear_atom_color_overrides(self.mw)
 
         try:
             content = ""

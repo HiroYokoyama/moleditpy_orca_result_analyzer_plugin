@@ -294,6 +294,7 @@ def _install_nmr_stubs():
 
     _utils_mod = types.ModuleType("orca_result_analyzer.utils")
     _utils_mod.get_default_export_path = MagicMock(return_value="")
+    _utils_mod.clear_atom_color_overrides = MagicMock()
 
     _custom_ref = types.ModuleType("orca_result_analyzer.nmr_custom_ref_dialog")
     _custom_ref.CustomReferenceDialog = MagicMock
@@ -511,6 +512,7 @@ def _install_mo_stubs():
 
     _utils_mo = types.ModuleType("orca_result_analyzer.utils")
     _utils_mo.get_default_export_path = MagicMock(return_value="")
+    _utils_mo.clear_atom_color_overrides = MagicMock()
     sys.modules.setdefault("orca_result_analyzer.utils", _utils_mo)
 
     sys.modules[marker] = types.ModuleType(marker)

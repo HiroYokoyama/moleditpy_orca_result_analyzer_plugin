@@ -332,6 +332,7 @@ def _install_stubs():
     # utils stub
     _ut = types.ModuleType("orca_result_analyzer.utils")
     _ut.get_default_export_path = MagicMock(return_value="")
+    _ut.clear_atom_color_overrides = MagicMock()
 
     # PIL stub
     _pil = types.ModuleType("PIL")

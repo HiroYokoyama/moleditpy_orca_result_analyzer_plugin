@@ -112,6 +112,23 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
         logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
 
 
+def clear_atom_color_overrides(mw) -> None:
+    """Clear any 3D atom-color overrides left by the Atomic Charges view.
+
+    Loading a *different* result (new file, reload, or a fresh analyzer
+    window) must not let colors keyed to the previous molecule's atom
+    indices bleed onto a differently-indexed molecule. Called on every
+    "new file" entry point (drag-drop / Select File / Reload / opening a
+    fresh analyzer from the main GUI) as well as on document reset.
+    """
+    v3d = getattr(mw, "view_3d_manager", None) if mw is not None else None
+    if v3d is not None and hasattr(v3d, "_plugin_color_overrides"):
+        try:
+            v3d._plugin_color_overrides.clear()
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("clear_atom_color_overrides: %s", exc)
+
+
 def list_orca_output_files(directory: str) -> list[str]:
     """Return a sorted list of ``*.out`` filenames found in *directory*.
 
