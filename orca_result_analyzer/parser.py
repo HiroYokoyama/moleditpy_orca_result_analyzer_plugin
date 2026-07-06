@@ -1133,6 +1133,9 @@ class OrcaParser:
         Stored as a list of {index, type, atoms, occupancy, energy}, or [].
         Types: CR (core), LP (lone pair), BD (bond), BD* (antibond),
         RY/RY* (Rydberg), LV (lone vacancy).
+
+        If the section appears more than once (e.g. multiple NBO analyses
+        across an optimization/scan job), the last occurrence wins.
         """
         self.data["nbo_orbitals"] = []
         start = -1
@@ -1173,13 +1176,15 @@ class OrcaParser:
         giving donor NBO, acceptor NBO, E(2) [kcal/mol], E(NL)-E(L) [a.u.],
         and F(L,NL) [a.u.]. Stored as a list of
         {donor, acceptor, e2_kcal, e_diff, fock}, or [].
+
+        If the section appears more than once (e.g. multiple NBO analyses
+        across an optimization/scan job), the last occurrence wins.
         """
         self.data["nbo_perturbation"] = []
         start = -1
         for i, line in enumerate(self.lines):
             if "SECOND ORDER PERTURBATION THEORY ANALYSIS" in line.upper():
                 start = i
-                break
         if start == -1:
             return
         pattern = re.compile(
@@ -1219,6 +1224,10 @@ class OrcaParser:
                        ( 27.65%)   0.5258* H  2 s( 99.76%)p 0.00(  0.24%)
         Adds a "hybrids" list to each matching NBO: one component per atom with
         {atom_sym, atom_idx, s_pct, p_pct, d_pct, weight_pct?, label}.
+
+        If the section appears more than once, the last occurrence wins (it
+        corresponds to the same NBO analysis run as nbo_orbitals/
+        nbo_perturbation, which both already pick their last occurrence).
         """
         orbitals = self.data.get("nbo_orbitals", [])
         if not orbitals:
@@ -1228,7 +1237,6 @@ class OrcaParser:
         for i, line in enumerate(self.lines):
             if "Bond orbital / Coefficients / Hybrids" in line:
                 start = i
-                break
         if start == -1:
             return
 

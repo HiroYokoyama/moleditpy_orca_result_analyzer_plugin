@@ -849,6 +849,89 @@ class TestParseMayerBondOrders(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# TestParseNboMultipleBlocks — a re-run NBO analysis (e.g. two %print NBO
+# blocks in a multi-step job) must use the LAST occurrence, not the first.
+# ---------------------------------------------------------------------------
+
+_NBO_PERTURBATION_TWO_BLOCKS = """\
+ SECOND ORDER PERTURBATION THEORY ANALYSIS OF FOCK MATRIX IN NBO BASIS
+
+     Threshold for printing:   0.50 kcal/mol
+                                                          E(2) E(NL)-E(L) F(L,NL)
+      Donor (L) NBO              Acceptor (NL) NBO      kcal/mol   a.u.    a.u.
+ ===============================================================================
+
+ within unit  1
+    2. LP ( 1) O  1            18. RY ( 2) H  2            1.00    1.00   0.010
+
+
+ NATURAL BOND ORBITALS (Summary):
+   (first-run summary, ignored by this test)
+
+
+ SECOND ORDER PERTURBATION THEORY ANALYSIS OF FOCK MATRIX IN NBO BASIS
+
+     Threshold for printing:   0.50 kcal/mol
+                                                          E(2) E(NL)-E(L) F(L,NL)
+      Donor (L) NBO              Acceptor (NL) NBO      kcal/mol   a.u.    a.u.
+ ===============================================================================
+
+ within unit  1
+    4. BD ( 1) O  1- H  2      23. RY ( 3) H  3            9.99    8.88   0.077
+
+ NBO analysis completed in 0.02 CPU seconds (0 wall seconds)
+"""
+
+_NBO_HYBRIDS_TWO_BLOCKS = """\
+     (Occupancy)   Bond orbital / Coefficients / Hybrids
+ ------------------ Lewis ------------------------------------------------------
+   1. (1.99996) CR ( 1) O  1            s(  0.00%)p 0.00(  0.00%)d100.00(100.00%)
+
+ NBO analysis completed in 0.02 CPU seconds (0 wall seconds)
+
+
+ NATURAL BOND ORBITALS (Summary):
+
+           NBO                 Occupancy    Energy
+    1. CR ( 1) O  1             1.99996   -18.75648
+
+ NBO analysis completed in 0.02 CPU seconds (0 wall seconds)
+
+
+     (Occupancy)   Bond orbital / Coefficients / Hybrids
+ ------------------ Lewis ------------------------------------------------------
+   1. (1.99996) CR ( 1) O  1            s(100.00%)
+
+ NBO analysis completed in 0.02 CPU seconds (0 wall seconds)
+"""
+
+
+class TestParseNboMultipleBlocks(unittest.TestCase):
+    def test_perturbation_uses_last_block(self):
+        p = _parse_method(
+            _NBO_PERTURBATION_TWO_BLOCKS, "parse_nbo_perturbation"
+        )
+        rows = p.data["nbo_perturbation"]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("BD", rows[0]["donor"])
+        self.assertAlmostEqual(rows[0]["e2_kcal"], 9.99, places=2)
+
+    def test_hybrids_use_last_block(self):
+        p = OrcaParser()
+        p.raw_content = _NBO_HYBRIDS_TWO_BLOCKS
+        p.lines = _NBO_HYBRIDS_TWO_BLOCKS.splitlines()
+        p.filename = "test.out"
+        p.parse_nbo_orbitals()
+        p.parse_nbo_hybrids()
+
+        cr = next(o for o in p.data["nbo_orbitals"] if o["type"] == "CR")
+        self.assertEqual(len(cr["hybrids"]), 1)
+        # Last block is pure-s (100%), not the first block's pure-d (100%).
+        self.assertEqual(cr["hybrids"][0]["label"], "s")
+        self.assertAlmostEqual(cr["hybrids"][0]["s_pct"], 100.0, places=1)
+
+
+# ---------------------------------------------------------------------------
 # TestParseTerminationStatus
 # ---------------------------------------------------------------------------
 
