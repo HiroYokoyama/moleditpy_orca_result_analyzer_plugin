@@ -20,12 +20,13 @@ import logging
 
 
 class SCFTraceDialog(QDialog):
-    def __init__(self, parent, scf_traces, dispersion=None):
+    def __init__(self, parent, scf_traces, dispersion=None, spin_s2=None):
         super().__init__(parent)
         self.setWindowTitle("SCF Energy Trace")
         self.resize(700, 500)
         self.scf_traces = scf_traces
         self.dispersion = dispersion
+        self.spin_s2 = spin_s2
 
         layout = QVBoxLayout(self)
 
@@ -70,6 +71,25 @@ class SCFTraceDialog(QDialog):
                 "London dispersion correction (DFT-D3/D4), included in the final energy."
             )
             layout.addWidget(lbl_disp)
+
+        # Spin contamination summary (open-shell / UHF only) — lives here
+        # alongside SCF convergence rather than Atomic Charges, since <S**2>
+        # is a wavefunction-quality diagnostic, not a per-atom property.
+        if self.spin_s2 and self.spin_s2.get("actual") is not None:
+            actual = self.spin_s2["actual"]
+            ideal = self.spin_s2.get("ideal")
+            cont = self.spin_s2.get("contamination")
+            parts = [f"⟨S²⟩ = {actual:.4f}"]
+            if ideal is not None:
+                parts.append(f"ideal {ideal:.4f}")
+            if cont is not None:
+                parts.append(f"contamination {cont:+.4f}")
+            lbl_s2 = QLabel("   •   ".join(parts))
+            lbl_s2.setStyleSheet("color:#444; font-size:9pt; padding:2px;")
+            lbl_s2.setToolTip(
+                "UHF/UKS spin expectation value <S**2> vs the ideal S(S+1)."
+            )
+            layout.addWidget(lbl_s2)
 
         # Plotting Area
         self.figure = Figure(figsize=(5, 4), dpi=100)

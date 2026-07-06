@@ -1293,9 +1293,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             and self.charges_dlg is not None
         ):
             self.charges_dlg.close()
-        self.charges_dlg = ChargeDialog(
-            self, charges, spin_s2=self.parser.data.get("spin_s2")
-        )
+        self.charges_dlg = ChargeDialog(self, charges)
         self.charges_dlg.show()
 
     def show_nmr(self):
@@ -1323,7 +1321,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "scf_dlg", None) is not None and self.scf_dlg is not None:
             self.scf_dlg.close()
         self.scf_dlg = SCFTraceDialog(
-            self, data, dispersion=self.parser.data.get("dispersion")
+            self,
+            data,
+            dispersion=self.parser.data.get("dispersion"),
+            spin_s2=self.parser.data.get("spin_s2"),
         )
         self.scf_dlg.show()
 
