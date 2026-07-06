@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "3.8.3"
+PLUGIN_VERSION = "3.8.4"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
@@ -73,7 +73,10 @@ def _open_orca_file(path, context):
     win.activateWindow()
 
     QApplication.processEvents()
-    win.load_structure_3d()
+    # fit_camera=True: this is a fresh file load (drop or file-opener), so
+    # reframe the camera after drawing. Without it the newly loaded molecule
+    # keeps the previous view's zoom/center and can fall outside the sphere.
+    win.load_structure_3d(fit_camera=True)
     QApplication.processEvents()
 
 
