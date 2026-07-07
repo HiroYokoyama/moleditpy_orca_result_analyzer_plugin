@@ -83,8 +83,11 @@ class OrcaParser:
             dist_val = None
 
             # 1. Look for Energy Label: "Energy: -123.4" or "Energy -123.4" or "E -123.4"
+            # The label must be a whole word: without \b the trailing "e" of a
+            # preceding word (e.g. "Coordinate 1.2") matches the bare-"E"
+            # alternative case-insensitively and steals the wrong number.
             e_match = re.search(
-                r"(?:Energy|E)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                r"\b(?:Energy|E)\b[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
                 comment,
                 re.IGNORECASE,
             )
@@ -104,7 +107,7 @@ class OrcaParser:
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
             d_match = re.search(
-                r"(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                r"\b(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
                 comment,
                 re.IGNORECASE,
             )
@@ -124,8 +127,15 @@ class OrcaParser:
                     break
                 parts = lines[i].split()
                 if len(parts) >= 4:
+                    # A single malformed coordinate line must not abort the
+                    # whole multi-frame parse — skip just that atom.
+                    try:
+                        xyz = [float(parts[1]), float(parts[2]), float(parts[3])]
+                    except ValueError:
+                        i += 1
+                        continue
                     atoms.append(parts[0])
-                    coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
+                    coords.append(xyz)
                 i += 1
 
             steps.append(
