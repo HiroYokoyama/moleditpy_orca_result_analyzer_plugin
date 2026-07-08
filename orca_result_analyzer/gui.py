@@ -160,6 +160,25 @@ class _DirectoryFilePicker(QDialog):
             self.accept()
 
 
+def build_load_summary(data, filename):
+    """One-line status-bar summary for a freshly loaded output file."""
+    parts = [f"Loaded: {filename}"]
+    status = data.get("termination_status")
+    if status:
+        parts.append(status)
+    freqs = data.get("frequencies") or []
+    imag = []
+    if freqs:
+        imag = sorted(f.get("freq", 0) for f in freqs if f.get("freq", 0) < 0)
+        if not imag:
+            parts.append("no imaginary modes")
+        elif len(imag) == 1:
+            parts.append(f"1 imaginary mode ({imag[0]:.2f} cm-1)")
+        else:
+            parts.append(f"{len(imag)} imaginary modes (lowest: {imag[0]:.2f} cm-1)")
+    return " | ".join(parts), len(imag) if freqs else 0
+
+
 class OrcaResultAnalyzerDialog(QDialog):
     def __init__(self, parent, parser, file_path, context=None):
         super().__init__(parent)
@@ -863,8 +882,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_structure_3d(fit_camera=True)
             self.update_button_states()
 
+            summary, imaginary_count = build_load_summary(
+                self.parser.data, os.path.basename(path)
+            )
             self.context.show_status_message(
-                f"Successfully loaded: {os.path.basename(path)}", 5000
+                summary, 10000 if imaginary_count > 0 else 5000
             )
 
         except Exception as e:
