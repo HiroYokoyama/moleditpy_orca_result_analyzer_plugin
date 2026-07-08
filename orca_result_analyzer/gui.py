@@ -160,23 +160,21 @@ class _DirectoryFilePicker(QDialog):
             self.accept()
 
 
-def build_load_summary(data, filename):
-    """One-line status-bar summary for a freshly loaded output file."""
-    parts = [f"Loaded: {filename}"]
-    status = data.get("termination_status")
-    if status:
-        parts.append(status)
+def build_status_suffix(data):
+    """Suffix for the status label: imaginary-mode count.
+
+    Returns (suffix, imaginary_count). suffix is "" when there is no
+    frequency data or no imaginary modes.
+    """
     freqs = data.get("frequencies") or []
-    imag = []
-    if freqs:
-        imag = sorted(f.get("freq", 0) for f in freqs if f.get("freq", 0) < 0)
-        if not imag:
-            parts.append("no imaginary modes")
-        elif len(imag) == 1:
-            parts.append(f"1 imaginary mode ({imag[0]:.2f} cm-1)")
-        else:
-            parts.append(f"{len(imag)} imaginary modes (lowest: {imag[0]:.2f} cm-1)")
-    return " | ".join(parts), len(imag) if freqs else 0
+    if not freqs:
+        return "", 0
+    imag = [f for f in freqs if f.get("freq", 0) < 0]
+    if not imag:
+        return "", 0
+    n = len(imag)
+    label = "imaginary mode" if n == 1 else "imaginary modes"
+    return f" ({n} {label})", n
 
 
 class OrcaResultAnalyzerDialog(QDialog):
@@ -882,11 +880,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_structure_3d(fit_camera=True)
             self.update_button_states()
 
-            summary, imaginary_count = build_load_summary(
-                self.parser.data, os.path.basename(path)
-            )
             self.context.show_status_message(
-                summary, 10000 if imaginary_count > 0 else 5000
+                f"Successfully loaded: {os.path.basename(path)}", 5000
             )
 
         except Exception as e:
@@ -930,8 +925,15 @@ class OrcaResultAnalyzerDialog(QDialog):
                 else "Unknown"
             )
         if getattr(self, "lbl_status", None) is not None:
-            self.lbl_status.setText(f"Status: {status}")
-            if "Terminated normally" in status:
+            suffix, imag_count = (
+                build_status_suffix(self.parser.data) if self.parser else ("", 0)
+            )
+            self.lbl_status.setText(f"Status: {status}{suffix}")
+            if "Terminated normally" in status and imag_count > 0:
+                self.lbl_status.setStyleSheet(
+                    "color: #fd7e14; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
+                )
+            elif "Terminated normally" in status:
                 self.lbl_status.setStyleSheet(
                     "color: #28a745; font-size: 9pt; font-weight: bold; background: transparent; border: none; padding: 0;"
                 )
