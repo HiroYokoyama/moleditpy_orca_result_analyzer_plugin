@@ -818,28 +818,32 @@ class NMRDialog(QDialog):
         self.chk_label_shifts.stateChanged.connect(self.on_label_shifts_toggled)
         spec_settings.addWidget(self.chk_label_shifts)
 
+        # Selection/merge workflow gets its own row: together with the two
+        # checkboxes and the export buttons a single line exceeds the
+        # dialog's 600px default width.
+        merge_row = QHBoxLayout()
+
         # Add button to clear selection
         btn_clear_selection = QPushButton("Clear Selection")
         btn_clear_selection.setFixedWidth(120)
         btn_clear_selection.setAutoDefault(False)
         btn_clear_selection.setToolTip("Clear all selected peaks and labels")
         btn_clear_selection.clicked.connect(self.clear_peak_selection)
-        spec_settings.addWidget(btn_clear_selection)
+        merge_row.addWidget(btn_clear_selection)
 
-        # Add merge selected button
         btn_merge = QPushButton("Merge Selected")
         btn_merge.setFixedWidth(120)
         btn_merge.setAutoDefault(False)
         btn_merge.setToolTip("Merge selected peaks into one entry")
         btn_merge.clicked.connect(self.merge_selected_peaks)
-        spec_settings.addWidget(btn_merge)
+        merge_row.addWidget(btn_merge)
 
         btn_unmerge = QPushButton("Unmerge")
         btn_unmerge.setFixedWidth(120)
         btn_unmerge.setAutoDefault(False)
         btn_unmerge.setToolTip("Separate merged peaks back to individuals")
         btn_unmerge.clicked.connect(self.unmerge_selected_peaks)
-        spec_settings.addWidget(btn_unmerge)
+        merge_row.addWidget(btn_unmerge)
 
         self.btn_save_merge = QPushButton("Save Merges")
         self.btn_save_merge.setFixedWidth(120)
@@ -849,7 +853,8 @@ class NMRDialog(QDialog):
         )
         self.btn_save_merge.setEnabled(False)  # enabled once there are unsaved changes
         self.btn_save_merge.clicked.connect(self.save_merges_clicked)
-        spec_settings.addWidget(self.btn_save_merge)
+        merge_row.addWidget(self.btn_save_merge)
+        merge_row.addStretch()
 
         # new line for Real Spectrum controls
         real_spec_layout = QHBoxLayout()
@@ -944,6 +949,7 @@ class NMRDialog(QDialog):
         spec_settings.addWidget(btn_export_csv)
 
         spec_layout.addLayout(spec_settings)
+        spec_layout.addLayout(merge_row)
 
         # Matplotlib canvas - adjusted for narrower dialog
         self.figure = Figure(figsize=(5.5, 4))  # Narrower to fit 600px width
