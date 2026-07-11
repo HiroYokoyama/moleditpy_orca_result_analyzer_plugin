@@ -696,3 +696,76 @@ class TestMOApplyPresetSignalBlock(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# merge_selected_peaks: nuclei validation with missing atom symbols
+# ---------------------------------------------------------------------------
+
+
+def _make_merge_dialog(data, metadata, selected):
+    dlg = _make_nmr_dialog()
+    dlg.data = data
+    dlg.peaks_metadata = metadata
+    dlg.selected_peak_indices = set(selected)
+    dlg.merged_peaks = []
+    dlg.save_merged_peaks = MagicMock()
+    dlg.clear_peak_selection = MagicMock()
+    dlg.recalc = MagicMock()
+    return dlg
+
+
+class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
+    """v3.9.1: an entry without atom_sym must not count as a distinct nucleus
+    (previously None entered the set and ', '.join(...) raised TypeError)."""
+
+    def setUp(self):
+        self._orig_msgbox = _nmr_mod.QMessageBox
+        _nmr_mod.QMessageBox = MagicMock()
+
+    def tearDown(self):
+        _nmr_mod.QMessageBox = self._orig_msgbox
+
+    def test_missing_symbol_does_not_block_merge_or_crash(self):
+        data = [
+            {"atom_idx": 0, "atom_sym": "C", "shielding": 100.0},
+            {"atom_idx": 1, "shielding": 101.0},  # no atom_sym key
+        ]
+        metadata = [(0, 0, 0, [0]), (0, 0, 0, [1])]
+        dlg = _make_merge_dialog(data, metadata, {0, 1})
+
+        dlg.merge_selected_peaks()  # crashed with TypeError before the fix
+
+        _nmr_mod.QMessageBox.critical.assert_not_called()
+        self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])
+        dlg.save_merged_peaks.assert_called_once()
+        dlg.recalc.assert_called_once()
+
+    def test_truly_mixed_nuclei_still_rejected_with_readable_message(self):
+        data = [
+            {"atom_idx": 0, "atom_sym": "H", "shielding": 30.0},
+            {"atom_idx": 1, "atom_sym": "C", "shielding": 100.0},
+        ]
+        metadata = [(0, 0, 0, [0]), (0, 0, 0, [1])]
+        dlg = _make_merge_dialog(data, metadata, {0, 1})
+
+        dlg.merge_selected_peaks()
+
+        _nmr_mod.QMessageBox.critical.assert_called_once()
+        msg = _nmr_mod.QMessageBox.critical.call_args[0][2]
+        self.assertIn("H", msg)
+        self.assertIn("C", msg)
+        self.assertEqual(dlg.merged_peaks, [])
+
+    def test_all_symbols_missing_merge_allowed(self):
+        data = [
+            {"atom_idx": 0, "shielding": 30.0},
+            {"atom_idx": 1, "shielding": 31.0},
+        ]
+        metadata = [(0, 0, 0, [0]), (0, 0, 0, [1])]
+        dlg = _make_merge_dialog(data, metadata, {0, 1})
+
+        dlg.merge_selected_peaks()
+
+        _nmr_mod.QMessageBox.critical.assert_not_called()
+        self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])

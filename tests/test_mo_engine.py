@@ -260,3 +260,47 @@ class TestBasisSetEngine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCalcWorkerGridGuard(unittest.TestCase):
+    """v3.9.1: n_points < 2 used to divide span by zero — numpy silently
+    produced inf grid vectors and a corrupt cube file was written."""
+
+    def _make_worker(self, n_points):
+        worker = _mod.CalcWorker(
+            engine=MagicMock(),
+            mo_idx=0,
+            n_points=n_points,
+            margin=3.0,
+            atoms_sym=["H"],
+            atoms_coords=[[0.0, 0.0, 0.0]],
+            mo_coeffs=[1.0],
+            output_path=os.path.join("nonexistent_dir", "x.cube"),
+        )
+        worker.finished_sig = MagicMock()
+        worker.progress_sig = MagicMock()
+        return worker
+
+    def test_single_point_grid_rejected_not_silently_written(self):
+        worker = self._make_worker(n_points=1)
+        worker.run()
+        success, msg = worker.finished_sig.emit.call_args[0]
+        self.assertFalse(success)
+        self.assertIn("at least 2 points", msg)
+        worker.engine.evaluate_mo_on_grid.assert_not_called()
+
+    def test_zero_points_also_rejected(self):
+        worker = self._make_worker(n_points=0)
+        worker.run()
+        success, _ = worker.finished_sig.emit.call_args[0]
+        self.assertFalse(success)
+
+    def test_two_points_passes_the_guard(self):
+        worker = self._make_worker(n_points=2)
+        worker.engine.evaluate_mo_on_grid.return_value = np.zeros(8)
+        worker.run()
+        success, _ = worker.finished_sig.emit.call_args[0]
+        # Guard passed: either full success (cube written) or a failure from a
+        # later stage — but never the grid-resolution message.
+        args = worker.finished_sig.emit.call_args[0]
+        self.assertNotIn("at least 2 points", str(args[1]))

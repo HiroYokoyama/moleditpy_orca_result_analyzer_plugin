@@ -460,6 +460,15 @@ class CalcWorker(QThread):
 
     def run(self):
         try:
+            # Guard: with a single grid point per axis span/(n-1) divides by
+            # zero, which numpy turns into inf spacing and a silently corrupt
+            # cube file instead of an exception.
+            if self.n_points < 2:
+                self.finished_sig.emit(
+                    False, "Grid resolution must be at least 2 points per axis."
+                )
+                return
+
             BOHR_TO_ANG = 0.529177249
             ANG_TO_BOHR = 1.0 / BOHR_TO_ANG
 

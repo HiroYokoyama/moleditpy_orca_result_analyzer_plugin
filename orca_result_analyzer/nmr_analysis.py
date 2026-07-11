@@ -474,7 +474,12 @@ class NMRDialog(QDialog):
                             None,
                         )
                         if item:
-                            atom_symbols.add(item.get("atom_sym", None))
+                            # A missing symbol must not count as a distinct
+                            # nucleus (and None would crash the ', '.join in
+                            # the mixed-nuclei error message below).
+                            sym = item.get("atom_sym", None)
+                            if sym:
+                                atom_symbols.add(sym)
 
         # 2. 【物理バリデーション】異なる元素が混ざっていないかチェック
         if len(atom_symbols) > 1:
