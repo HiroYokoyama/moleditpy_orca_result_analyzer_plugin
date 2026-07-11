@@ -80,7 +80,7 @@ Advanced NMR chemical shielding validation and visualization.
 - **Multiplet Simulation**: Realistic J-coupling splitting patterns and first-order multiplicity calculations with adjustable Lorentzian line-widths.
 - **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
 - **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks. Merges are saved explicitly via the **Save Merges** button (you are prompted to save or discard unsaved merges when closing the dialog).
-- **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels show the chemical shift; merged atoms show both their original and merged values (δ orig → merged).
+- **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels can optionally show the chemical shift ("Show shift values" checkbox, off by default); merged atoms show both their original and merged values (δ orig → merged).
 
 ![NMR](img/nmr.png)
 

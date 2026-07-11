@@ -358,8 +358,10 @@ def _make_nmr_dialog():
     dlg._last_synced_mw_selection = frozenset()
     dlg.peaks_metadata = None
     # The Qt stub base auto-creates truthy MagicMocks for missing attributes,
-    # so the unsaved-merge flag must be set explicitly on fakes.
+    # so the unsaved-merge flag and the shift-label checkbox must be set
+    # explicitly on fakes.
     dlg._merged_dirty = False
+    dlg.chk_label_shifts = None  # default: shift values hidden
 
     # Real recording timer
     timer = _RecordingTimer()
@@ -893,6 +895,9 @@ class TestNMRShiftLabels(unittest.TestCase):
         dlg.clear_atom_labels = MagicMock()
         dlg.draw_custom_nmr_highlights_3d = MagicMock()
         dlg.add_atom_label = MagicMock()
+        chk = MagicMock()
+        chk.isChecked.return_value = True  # opt in: show shift values
+        dlg.chk_label_shifts = chk
         return dlg
 
     def test_individual_peak_label_has_own_shift(self):
@@ -933,3 +938,53 @@ class TestNMRShiftLabels(unittest.TestCase):
         dlg.add_atom_label(0, "H")
         label_arg = v3d.plotter.add_point_labels.call_args[0][1]
         self.assertEqual(label_arg, ["H0"])
+
+
+class TestNMRShiftLabelsToggle(unittest.TestCase):
+    """Shift values on 3D labels are opt-in; the default (checkbox absent or
+    unchecked) keeps the compact SymbolIndex-only labels."""
+
+    def _dialog(self, checkbox):
+        dlg = _make_nmr_dialog()
+        dlg.delta_ref = 0.0
+        dlg.sigma_ref = 31.8
+        dlg.data = [{"atom_idx": 0, "atom_sym": "H", "shielding": 24.6}]
+        dlg.peaks_metadata = [(7.20, 1.0, False, [0])]
+        dlg.selected_peak_indices = {0}
+        dlg.clear_atom_labels = MagicMock()
+        dlg.draw_custom_nmr_highlights_3d = MagicMock()
+        dlg.add_atom_label = MagicMock()
+        dlg.chk_label_shifts = checkbox
+        return dlg
+
+    def test_unchecked_hides_shift(self):
+        chk = MagicMock()
+        chk.isChecked.return_value = False
+        dlg = self._dialog(chk)
+        dlg.update_selected_labels(is_external_sync=True)
+        self.assertIsNone(dlg.add_atom_label.call_args[0][2])
+
+    def test_missing_checkbox_defaults_to_hidden(self):
+        dlg = self._dialog(None)
+        dlg.update_selected_labels(is_external_sync=True)
+        self.assertIsNone(dlg.add_atom_label.call_args[0][2])
+
+    def test_checked_shows_shift(self):
+        chk = MagicMock()
+        chk.isChecked.return_value = True
+        dlg = self._dialog(chk)
+        dlg.update_selected_labels(is_external_sync=True)
+        self.assertEqual(dlg.add_atom_label.call_args[0][2], "δ 7.20")
+
+    def test_toggle_refreshes_labels_without_clearing_3d_selection(self):
+        dlg = self._dialog(MagicMock())
+        dlg.update_selected_labels = MagicMock()
+        dlg.on_label_shifts_toggled()
+        dlg.update_selected_labels.assert_called_once_with(is_external_sync=True)
+
+    def test_toggle_with_no_selection_is_noop(self):
+        dlg = self._dialog(MagicMock())
+        dlg.selected_peak_indices = set()
+        dlg.update_selected_labels = MagicMock()
+        dlg.on_label_shifts_toggled()
+        dlg.update_selected_labels.assert_not_called()

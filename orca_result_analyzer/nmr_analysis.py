@@ -809,6 +809,15 @@ class NMRDialog(QDialog):
         self.chk_show_all_labels.stateChanged.connect(self.toggle_all_labels)
         spec_settings.addWidget(self.chk_show_all_labels)
 
+        self.chk_label_shifts = QCheckBox("Show shift values")
+        self.chk_label_shifts.setChecked(False)  # default: hide (labels stay compact)
+        self.chk_label_shifts.setToolTip(
+            "Add the chemical shift to 3D atom labels "
+            "(merged atoms show original → merged value)"
+        )
+        self.chk_label_shifts.stateChanged.connect(self.on_label_shifts_toggled)
+        spec_settings.addWidget(self.chk_label_shifts)
+
         # Add button to clear selection
         btn_clear_selection = QPushButton("Clear Selection")
         btn_clear_selection.setFixedWidth(120)
@@ -2095,16 +2104,19 @@ class NMRDialog(QDialog):
                     )
                     if atom_item:
                         atom_sym = atom_item.get("atom_sym", "?")
-                        # Per-atom original shift; for merged peaks show both
-                        # the atom's own value and the merged (averaged) one.
-                        own_delta = getattr(self, "delta_ref", 0.0) + (
-                            getattr(self, "sigma_ref", 0.0)
-                            - atom_item.get("shielding", 0.0)
-                        )
-                        if is_merged:
-                            shift_text = f"δ {own_delta:.2f} → {peak_shift:.2f}"
-                        else:
-                            shift_text = f"δ {own_delta:.2f}"
+                        shift_text = None
+                        if self._shift_labels_enabled():
+                            # Per-atom original shift; for merged peaks show
+                            # both the atom's own value and the merged
+                            # (averaged) one.
+                            own_delta = getattr(self, "delta_ref", 0.0) + (
+                                getattr(self, "sigma_ref", 0.0)
+                                - atom_item.get("shielding", 0.0)
+                            )
+                            if is_merged:
+                                shift_text = f"δ {own_delta:.2f} → {peak_shift:.2f}"
+                            else:
+                                shift_text = f"δ {own_delta:.2f}"
                         self.add_atom_label(atom_idx, atom_sym, shift_text)
 
         # 3. Synchronize with Main Window
@@ -2139,6 +2151,26 @@ class NMRDialog(QDialog):
             v3d = getattr(self.parent_dlg.mw, "view_3d_manager", None)
             if v3d and hasattr(v3d, "plotter"):
                 v3d.plotter.render()
+
+    def _shift_labels_enabled(self):
+        """Whether 3D labels should include chemical shift values.
+
+        Uses an explicit isinstance-free truthiness contract: the checkbox may
+        be absent on test fakes, in which case shifts stay hidden (the
+        default).
+        """
+        chk = getattr(self, "chk_label_shifts", None)
+        try:
+            return bool(chk is not None and chk.isChecked())
+        except Exception:
+            return False
+
+    def on_label_shifts_toggled(self):
+        """Re-render the current selection's labels with/without shifts."""
+        # is_external_sync=True: only refresh labels, never clear the 3D
+        # selection the user may have made in the viewer.
+        if self.selected_peak_indices:
+            self.update_selected_labels(is_external_sync=True)
 
     def add_atom_label(self, atom_idx, atom_sym, shift_text=None):
         """Add a single atom label to 3D viewer.
