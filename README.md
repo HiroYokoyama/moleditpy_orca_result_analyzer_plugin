@@ -79,8 +79,8 @@ Advanced NMR chemical shielding validation and visualization.
 - **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards (TMS, CDCl3, DMSO-d6, etc.).
 - **Multiplet Simulation**: Realistic J-coupling splitting patterns and first-order multiplicity calculations with adjustable Lorentzian line-widths.
 - **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
-- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks with persistent storage.
-- **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa).
+- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks. Merges are saved explicitly via the **Save Merges** button (you are prompted to save or discard unsaved merges when closing the dialog).
+- **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels show the chemical shift; merged atoms show both their original and merged values (δ orig → merged).
 
 ![NMR](img/nmr.png)
 
@@ -104,7 +104,7 @@ Comprehensive bonding and orbital analysis:
 - **Copyable Tables**: Support selecting and copying data (via `Ctrl+C`) from analysis tables to external spreadsheet editors.
 - **Interactive Highlighting**: Highlight atoms in the 3D viewer (with VDW scaling) when selecting rows in the Properties or Bond Analysis tables.
 - **Keyboard Shortcuts**: `Ctrl+O` (Open File), `Shift+Ctrl+O` (Select from Directory), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
-- **Persistence**: Remembers your presets, NMR references, and merged peaks across sessions.
+- **Persistence**: Remembers your presets, NMR references, and explicitly saved merged peaks across sessions.
 
 ## Installation
 Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins/explorer/?q=ORCA+Result+Analyzer).  

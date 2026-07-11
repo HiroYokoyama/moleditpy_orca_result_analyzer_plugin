@@ -357,6 +357,9 @@ def _make_nmr_dialog():
     dlg._nmr_label_names = []
     dlg._last_synced_mw_selection = frozenset()
     dlg.peaks_metadata = None
+    # The Qt stub base auto-creates truthy MagicMocks for missing attributes,
+    # so the unsaved-merge flag must be set explicitly on fakes.
+    dlg._merged_dirty = False
 
     # Real recording timer
     timer = _RecordingTimer()
@@ -709,6 +712,7 @@ def _make_merge_dialog(data, metadata, selected):
     dlg.peaks_metadata = metadata
     dlg.selected_peak_indices = set(selected)
     dlg.merged_peaks = []
+    dlg._merged_dirty = False
     dlg.save_merged_peaks = MagicMock()
     dlg.clear_peak_selection = MagicMock()
     dlg.recalc = MagicMock()
@@ -738,7 +742,9 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
         _nmr_mod.QMessageBox.critical.assert_not_called()
         self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])
-        dlg.save_merged_peaks.assert_called_once()
+        # v3.9.1: merges are no longer auto-saved — only flagged dirty
+        dlg.save_merged_peaks.assert_not_called()
+        self.assertTrue(dlg._merged_dirty)
         dlg.recalc.assert_called_once()
 
     def test_truly_mixed_nuclei_still_rejected_with_readable_message(self):
@@ -769,3 +775,161 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
         _nmr_mod.QMessageBox.critical.assert_not_called()
         self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])
+
+
+# ---------------------------------------------------------------------------
+# v3.9.1: explicit merge saving (no auto-save) + shift values in 3D labels
+# ---------------------------------------------------------------------------
+
+
+class TestNMRMergeExplicitSave(unittest.TestCase):
+    def setUp(self):
+        self._orig_msgbox = _nmr_mod.QMessageBox
+        _nmr_mod.QMessageBox = MagicMock()
+
+    def tearDown(self):
+        _nmr_mod.QMessageBox = self._orig_msgbox
+
+    def _dirty_dialog(self):
+        data = [
+            {"atom_idx": 0, "atom_sym": "H", "shielding": 30.0},
+            {"atom_idx": 1, "atom_sym": "H", "shielding": 31.0},
+        ]
+        metadata = [(0, 0, 0, [0]), (0, 0, 0, [1])]
+        dlg = _make_merge_dialog(data, metadata, {0, 1})
+        dlg.merge_selected_peaks()
+        return dlg
+
+    def test_merge_marks_dirty_without_saving(self):
+        dlg = self._dirty_dialog()
+        self.assertTrue(dlg._merged_dirty)
+        dlg.save_merged_peaks.assert_not_called()
+
+    def test_unmerge_marks_dirty_without_saving(self):
+        dlg = _make_merge_dialog(
+            [{"atom_idx": 0, "atom_sym": "H", "shielding": 30.0}],
+            [(0, 0, True, [0, 1])],
+            {0},
+        )
+        dlg.merged_peaks = [{"indices": [0, 1]}]
+        dlg.unmerge_selected_peaks()
+        self.assertEqual(dlg.merged_peaks, [])
+        self.assertTrue(dlg._merged_dirty)
+        dlg.save_merged_peaks.assert_not_called()
+
+    def test_save_merges_clicked_saves_and_clears_dirty(self):
+        dlg = self._dirty_dialog()
+        dlg.btn_save_merge = MagicMock()
+        dlg.save_merges_clicked()
+        dlg.save_merged_peaks.assert_called_once()
+        self.assertFalse(dlg._merged_dirty)
+        dlg.btn_save_merge.setEnabled.assert_called_with(False)
+
+    def test_merge_enables_save_button(self):
+        data = [
+            {"atom_idx": 0, "atom_sym": "H", "shielding": 30.0},
+            {"atom_idx": 1, "atom_sym": "H", "shielding": 31.0},
+        ]
+        dlg = _make_merge_dialog(data, [(0, 0, 0, [0]), (0, 0, 0, [1])], {0, 1})
+        dlg.btn_save_merge = MagicMock()
+        dlg.merge_selected_peaks()
+        dlg.btn_save_merge.setEnabled.assert_called_with(True)
+
+
+class TestNMRCloseEventSavePrompt(unittest.TestCase):
+    def setUp(self):
+        self._orig_msgbox = _nmr_mod.QMessageBox
+        self.msgbox = MagicMock()
+        # Distinct sentinels so Save/Discard comparisons behave
+        self.msgbox.StandardButton.Save = 4
+        self.msgbox.StandardButton.Discard = 8
+        _nmr_mod.QMessageBox = self.msgbox
+
+    def tearDown(self):
+        _nmr_mod.QMessageBox = self._orig_msgbox
+
+    def _closing_dialog(self, dirty):
+        dlg = _make_nmr_dialog()
+        dlg._merged_dirty = dirty
+        dlg.merged_peaks = [{"indices": [0, 1]}]
+        dlg.save_merged_peaks = MagicMock()
+        dlg.save_settings = MagicMock()
+        dlg.clear_atom_labels = MagicMock()
+        return dlg
+
+    def test_dirty_close_save_choice_saves(self):
+        dlg = self._closing_dialog(dirty=True)
+        self.msgbox.question.return_value = 4
+        dlg.closeEvent(MagicMock())
+        self.msgbox.question.assert_called_once()
+        dlg.save_merged_peaks.assert_called_once()
+        self.assertFalse(dlg._merged_dirty)
+
+    def test_dirty_close_discard_choice_does_not_save(self):
+        dlg = self._closing_dialog(dirty=True)
+        self.msgbox.question.return_value = 8
+        dlg.closeEvent(MagicMock())
+        dlg.save_merged_peaks.assert_not_called()
+
+    def test_clean_close_never_prompts(self):
+        dlg = self._closing_dialog(dirty=False)
+        dlg.closeEvent(MagicMock())
+        self.msgbox.question.assert_not_called()
+        dlg.save_merged_peaks.assert_not_called()
+
+
+class TestNMRShiftLabels(unittest.TestCase):
+    """3D atom labels must show the chemical shift; merged peaks show both
+    the atom's original value and the merged (averaged) value."""
+
+    def _label_recording_dialog(self):
+        dlg = _make_nmr_dialog()
+        dlg.delta_ref = 0.0
+        dlg.sigma_ref = 31.8  # TMS-like: delta = sigma_ref - shielding
+        dlg.data = [
+            {"atom_idx": 0, "atom_sym": "H", "shielding": 24.6},  # δ 7.20
+            {"atom_idx": 1, "atom_sym": "H", "shielding": 24.4},  # δ 7.40
+        ]
+        dlg.clear_atom_labels = MagicMock()
+        dlg.draw_custom_nmr_highlights_3d = MagicMock()
+        dlg.add_atom_label = MagicMock()
+        return dlg
+
+    def test_individual_peak_label_has_own_shift(self):
+        dlg = self._label_recording_dialog()
+        dlg.peaks_metadata = [(7.20, 1.0, False, [0])]
+        dlg.selected_peak_indices = {0}
+        dlg.update_selected_labels(is_external_sync=True)
+        args = dlg.add_atom_label.call_args[0]
+        self.assertEqual(args[0], 0)
+        self.assertEqual(args[2], "δ 7.20")
+
+    def test_merged_peak_label_shows_original_and_merged(self):
+        dlg = self._label_recording_dialog()
+        dlg.peaks_metadata = [(7.30, 2.0, True, [0, 1])]  # merged average
+        dlg.selected_peak_indices = {0}
+        dlg.update_selected_labels(is_external_sync=True)
+        texts = [c[0][2] for c in dlg.add_atom_label.call_args_list]
+        self.assertEqual(texts, ["δ 7.20 → 7.30", "δ 7.40 → 7.30"])
+
+    def test_add_atom_label_appends_shift_line(self):
+        dlg = _make_nmr_dialog()
+        v3d = MagicMock()
+        v3d.atom_positions_3d = [[0.0, 0.0, 0.0]]
+        dlg.parent_dlg.mw.view_3d_manager = v3d
+        dlg._nmr_label_names = []
+        dlg._atom_labels = []
+        dlg.add_atom_label(0, "H", "δ 7.26")
+        label_arg = v3d.plotter.add_point_labels.call_args[0][1]
+        self.assertEqual(label_arg, ["H0\nδ 7.26"])
+
+    def test_add_atom_label_without_shift_keeps_plain_text(self):
+        dlg = _make_nmr_dialog()
+        v3d = MagicMock()
+        v3d.atom_positions_3d = [[0.0, 0.0, 0.0]]
+        dlg.parent_dlg.mw.view_3d_manager = v3d
+        dlg._nmr_label_names = []
+        dlg._atom_labels = []
+        dlg.add_atom_label(0, "H")
+        label_arg = v3d.plotter.add_point_labels.call_args[0][1]
+        self.assertEqual(label_arg, ["H0"])

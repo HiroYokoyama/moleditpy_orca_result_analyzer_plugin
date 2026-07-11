@@ -232,6 +232,9 @@ class NMRDialog(QDialog):
         # Track atom labels in 3D viewer
         self._atom_labels = []
 
+        # Unsaved merge changes (merges are saved explicitly, never auto-saved)
+        self._merged_dirty = False
+
         # Track selected peaks for highlighting
         self.selected_peak_indices = set()
         self.highlight_artists = []
@@ -513,16 +516,17 @@ class NMRDialog(QDialog):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        # 5. 新しいグループの追加と保存
+        # 5. 新しいグループの追加（保存は Save Merges ボタン / クローズ時の確認で）
         new_merged_peaks.append({"indices": selected_indices})
         self.merged_peaks = new_merged_peaks
-        self.save_merged_peaks()
+        self._mark_merges_dirty()
 
         # 6. UIのクリーンアップ
         self.clear_peak_selection()
         if self.parent_dlg and self.parent_dlg.context:
             self.parent_dlg.context.show_status_message(
-                f"Merged {len(selected_indices)} atoms into one peak.", 5000
+                f"Merged {len(selected_indices)} atoms into one peak (not saved yet).",
+                5000,
             )
 
         self.recalc()
@@ -553,9 +557,26 @@ class NMRDialog(QDialog):
         for group in groups_to_remove:
             self.merged_peaks.remove(group)
 
-        self.save_merged_peaks()
+        self._mark_merges_dirty()
         self.clear_peak_selection()
         self.recalc()
+
+    def _mark_merges_dirty(self):
+        """Flag in-memory merge changes as unsaved and enable the save button."""
+        self._merged_dirty = True
+        btn = getattr(self, "btn_save_merge", None)
+        if btn:
+            btn.setEnabled(True)
+
+    def save_merges_clicked(self):
+        """Persist merged peak groups to disk (explicit user action)."""
+        self.save_merged_peaks()
+        self._merged_dirty = False
+        btn = getattr(self, "btn_save_merge", None)
+        if btn:
+            btn.setEnabled(False)
+        if self.parent_dlg and self.parent_dlg.context:
+            self.parent_dlg.context.show_status_message("Merged peaks saved.", 3000)
 
     def save_merged_peaks(self):
         """Save merged peaks to JSON file"""
@@ -810,6 +831,16 @@ class NMRDialog(QDialog):
         btn_unmerge.setToolTip("Separate merged peaks back to individuals")
         btn_unmerge.clicked.connect(self.unmerge_selected_peaks)
         spec_settings.addWidget(btn_unmerge)
+
+        self.btn_save_merge = QPushButton("Save Merges")
+        self.btn_save_merge.setFixedWidth(120)
+        self.btn_save_merge.setAutoDefault(False)
+        self.btn_save_merge.setToolTip(
+            "Persist merged peak groups to disk (merges are no longer auto-saved)"
+        )
+        self.btn_save_merge.setEnabled(False)  # enabled once there are unsaved changes
+        self.btn_save_merge.clicked.connect(self.save_merges_clicked)
+        spec_settings.addWidget(self.btn_save_merge)
 
         # new line for Real Spectrum controls
         real_spec_layout = QHBoxLayout()
@@ -2052,7 +2083,7 @@ class NMRDialog(QDialog):
         for peak_idx in sorted(self.selected_peak_indices):
             if peak_idx < len(self.peaks_metadata):
                 # Get metadata for this peak (shift, intensity, is_merged, atom_indices)
-                _, _, is_merged, atom_indices = self.peaks_metadata[peak_idx]
+                peak_shift, _, is_merged, atom_indices = self.peaks_metadata[peak_idx]
 
                 # Add label for each atom in this peak (handles both merged and individual)
                 for atom_idx in atom_indices:
@@ -2064,7 +2095,17 @@ class NMRDialog(QDialog):
                     )
                     if atom_item:
                         atom_sym = atom_item.get("atom_sym", "?")
-                        self.add_atom_label(atom_idx, atom_sym)
+                        # Per-atom original shift; for merged peaks show both
+                        # the atom's own value and the merged (averaged) one.
+                        own_delta = getattr(self, "delta_ref", 0.0) + (
+                            getattr(self, "sigma_ref", 0.0)
+                            - atom_item.get("shielding", 0.0)
+                        )
+                        if is_merged:
+                            shift_text = f"δ {own_delta:.2f} → {peak_shift:.2f}"
+                        else:
+                            shift_text = f"δ {own_delta:.2f}"
+                        self.add_atom_label(atom_idx, atom_sym, shift_text)
 
         # 3. Synchronize with Main Window
         if hasattr(self.parent_dlg, "mw"):
@@ -2099,8 +2140,12 @@ class NMRDialog(QDialog):
             if v3d and hasattr(v3d, "plotter"):
                 v3d.plotter.render()
 
-    def add_atom_label(self, atom_idx, atom_sym):
-        """Add a single atom label to 3D viewer"""
+    def add_atom_label(self, atom_idx, atom_sym, shift_text=None):
+        """Add a single atom label to 3D viewer.
+
+        shift_text: optional second label line with the chemical shift
+        (e.g. "δ 7.26" or, for merged peaks, "δ 7.10 → 7.26").
+        """
         # Check if parent has plotter
         v3d = (
             getattr(self.parent_dlg.mw, "view_3d_manager", None)
@@ -2123,10 +2168,14 @@ class NMRDialog(QDialog):
         try:
             label_pos = [pos[0], pos[1], pos[2] + 0.4]  # Offset above atom
 
+            label_text = f"{atom_sym}{atom_idx}"
+            if shift_text:
+                label_text += f"\n{shift_text}"
+
             label_name = f"nmr_label_{atom_idx}"
             actor = v3d.plotter.add_point_labels(
                 [label_pos],
-                [f"{atom_sym}{atom_idx}"],
+                [label_text],
                 font_size=12,
                 text_color="cyan",
                 point_size=0,
@@ -2596,6 +2645,19 @@ class NMRDialog(QDialog):
         """Clean up labels and stop polling timer when dialog closes"""
         # Stop the polling timer first so it cannot fire on a dead widget
         self.sel_timer.stop()
+
+        # Merges are never auto-saved: ask the user to save or discard.
+        if getattr(self, "_merged_dirty", False):
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Merged Peaks",
+                "Merged peak changes have not been saved.\nSave them now?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
+            )
+            if reply == QMessageBox.StandardButton.Save:
+                self.save_merged_peaks()
+            self._merged_dirty = False
+
         self.save_settings()
         self.clear_atom_labels()
         super().closeEvent(event)
