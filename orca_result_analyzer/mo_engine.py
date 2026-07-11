@@ -527,7 +527,9 @@ class CalcWorker(QThread):
                     mo_display_id = str(int(self.mo_idx) + 1)
             except Exception:
                 # Fallback to original string
-                logging.debug("MO display id formatting failed; using raw value", exc_info=True)
+                logging.debug(
+                    "MO display id formatting failed; using raw value", exc_info=True
+                )
 
             CubeWriter.write(
                 self.output_path,
