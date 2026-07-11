@@ -266,7 +266,7 @@ class TestCalcWorkerGridGuard(unittest.TestCase):
     """v3.9.1: n_points < 2 used to divide span by zero — numpy silently
     produced inf grid vectors and a corrupt cube file was written."""
 
-    def _make_worker(self, n_points):
+    def _make_worker(self, n_points, output_path=None):
         worker = _mod.CalcWorker(
             engine=MagicMock(),
             mo_idx=0,
@@ -275,7 +275,9 @@ class TestCalcWorkerGridGuard(unittest.TestCase):
             atoms_sym=["H"],
             atoms_coords=[[0.0, 0.0, 0.0]],
             mo_coeffs=[1.0],
-            output_path=os.path.join("nonexistent_dir", "x.cube"),
+            # Guard tests never reach the writer; the success-path test
+            # passes a real temp path instead.
+            output_path=output_path or os.path.join("unused_dir", "x.cube"),
         )
         worker.finished_sig = MagicMock()
         worker.progress_sig = MagicMock()
@@ -296,9 +298,14 @@ class TestCalcWorkerGridGuard(unittest.TestCase):
         self.assertFalse(success)
 
     def test_two_points_passes_the_guard(self):
-        worker = self._make_worker(n_points=2)
-        worker.engine.evaluate_mo_on_grid.return_value = np.zeros(8)
-        worker.run()
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            worker = self._make_worker(
+                n_points=2, output_path=os.path.join(tmp, "x.cube")
+            )
+            worker.engine.evaluate_mo_on_grid.return_value = np.zeros(8)
+            worker.run()
         success, _ = worker.finished_sig.emit.call_args[0]
         # Guard passed: either full success (cube written) or a failure from a
         # later stage — but never the grid-resolution message.
