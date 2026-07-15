@@ -669,10 +669,15 @@ class OrcaResultAnalyzerDialog(QDialog):
             atom_positions = getattr(v3d, "atom_positions_3d", None)
             if atom_positions is None or len(atom_positions) == 0:
                 return None
-            vtk_y = widget.height() - y
+            # Scale Qt logical px → VTK physical px for HiDPI/Retina (macOS
+            # devicePixelRatio 2); without it the pick lands toward the bottom-
+            # left and you must click up-and-right. No-op on Windows/Linux.
+            ratio = widget.devicePixelRatioF()
+            px = x * ratio
+            vtk_y = (widget.height() - y) * ratio
             picker = vtk.vtkCellPicker()
             picker.SetTolerance(0.005)
-            picker.Pick(x, vtk_y, 0, plotter.renderer)
+            picker.Pick(px, vtk_y, 0, plotter.renderer)
             if picker.GetActor() is not atom_actor:
                 return None
             pick_pos = picker.GetPickPosition()
