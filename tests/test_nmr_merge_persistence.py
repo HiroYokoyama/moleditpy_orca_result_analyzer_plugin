@@ -176,6 +176,17 @@ class TestMergeGuards(unittest.TestCase):
         self.assertEqual(dlg.merged_peaks, [{"indices": [5, 6]}])
 
 
+class TestEscGoesThroughClose(unittest.TestCase):
+    def test_reject_routes_to_close(self):
+        """Esc (QDialog.reject) must trigger closeEvent — otherwise the
+        unsaved-merge prompt is skipped and sel_timer polls a hidden
+        dialog forever."""
+        dlg = _make_nmr_dialog()
+        dlg.close = MagicMock()
+        NMRDialog.reject(dlg)
+        dlg.close.assert_called_once()
+
+
 class TestSelectionRemap(unittest.TestCase):
     def test_selection_follows_atoms_across_rebuild(self):
         dlg = _make_nmr_dialog()

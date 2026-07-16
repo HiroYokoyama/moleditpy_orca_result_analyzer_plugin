@@ -663,7 +663,6 @@ class NMRDialog(QDialog):
                 logging.warning("silenced: %s", _e)
 
         # Extract custom references only (non-default)
-        # Extract custom references only (non-default)
         default_standards = {
             "1H": {
                 "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
@@ -2734,6 +2733,12 @@ class NMRDialog(QDialog):
             logging.warning("[nmr_analysis.py:reset_selection] silenced: %s", _e)
         self._last_synced_mw_selection = frozenset()
         self.sel_timer.start(200)
+
+    def reject(self):
+        """Esc hides a QDialog without closeEvent — route it through
+        close() so the unsaved-merge prompt fires and sel_timer stops
+        instead of polling a hidden dialog forever."""
+        self.close()
 
     def closeEvent(self, event):
         """Clean up labels and stop polling timer when dialog closes"""
