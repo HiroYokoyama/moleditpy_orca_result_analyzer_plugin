@@ -1315,6 +1315,10 @@ class FrequencyDialog(QDialog):
         self.vector_res = val
         self.update_view()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         if self.chk_manual_displ.isChecked():
             self.is_playing = False

@@ -1086,6 +1086,10 @@ class ForceViewerDialog(QDialog):
         self.actors = []
         mw.plotter.render()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         """Clean up when dialog closes"""
         self.clear_vectors()

@@ -762,6 +762,10 @@ class OrcaResultAnalyzerDialog(QDialog):
                         logging.warning("silenced: %s", _e)
                 setattr(self, attr, None)
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         """Ensure all sub-dialogs close when the main analyzer window is closed."""
         self._disable_plotter_picking()

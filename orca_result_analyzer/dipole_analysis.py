@@ -169,6 +169,10 @@ class DipoleDialog(QDialog):
         self.arrow_res = val
         self.update_view()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         if self.arrow_actor:
             try:

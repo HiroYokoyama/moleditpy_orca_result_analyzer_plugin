@@ -57,6 +57,10 @@ class ThermalTableDialog(QDialog):
         self.update_table()
         self.load_settings()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         self.save_settings()
         super().closeEvent(event)

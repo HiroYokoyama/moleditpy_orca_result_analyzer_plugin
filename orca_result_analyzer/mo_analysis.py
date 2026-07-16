@@ -1046,6 +1046,10 @@ class MODialog(QDialog):
             mw.plotter.render()
             self.last_cube_path = path
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         """Clean up 3D actors when closing"""
         # Clean up tracked sub-dialogs

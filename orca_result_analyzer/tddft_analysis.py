@@ -490,6 +490,10 @@ class TDDFTDialog(QDialog):
 
     # ── Existing methods (unchanged logic, dialog removed) ──────────────────
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         self.save_settings()
         super().closeEvent(event)

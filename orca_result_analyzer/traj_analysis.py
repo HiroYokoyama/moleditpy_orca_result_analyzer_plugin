@@ -1240,6 +1240,10 @@ class TrajectoryResultDialog(QDialog):
             if was_playing:
                 self.toggle_play()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         """Stop animation, push final structure with full bond orders, then clean up."""
         if getattr(self, "timer", None) is not None and self.timer.isActive():

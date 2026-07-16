@@ -382,6 +382,10 @@ class BondAnalysisDialog(QDialog):
                         lines.append(f"  {h['atom_sym']} {h['atom_idx']}:  {h['raw']}")
         QMessageBox.information(self, f"NBO #{o['index']} detail", "\n".join(lines))
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         self._clear_highlight()
         super().closeEvent(event)

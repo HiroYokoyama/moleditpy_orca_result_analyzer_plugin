@@ -109,6 +109,10 @@ class SCFTraceDialog(QDialog):
 
         self.update_plot()
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         try:
             plt.close(self.figure)

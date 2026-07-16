@@ -727,6 +727,10 @@ class ChargeDialog(QDialog):
         finally:
             self._csv_exporting = False
 
+    def reject(self):
+        # Esc must run closeEvent cleanup (QDialog.reject only hides)
+        self.close()
+
     def closeEvent(self, event):
         """Clean up labels and scalar bar on close"""
         # Remove scalar bar
