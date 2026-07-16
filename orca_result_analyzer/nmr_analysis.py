@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import json
@@ -287,17 +288,7 @@ class NMRDialog(QDialog):
 
         # Settings file
         self.file_path = file_path
-        if file_path:
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
-            file_dir = os.path.dirname(file_path)
-            self.merged_peaks_file = os.path.join(
-                file_dir, f"{base_name}-nmr_peak_info.json"
-            )
-        else:
-            # Fallback if no file path provided
-            self.merged_peaks_file = os.path.join(
-                os.path.dirname(__file__), "nmr_merged_peaks.json"
-            )
+        self.merged_peaks_file = self._merged_peaks_path(file_path, data)
 
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
 
@@ -320,6 +311,32 @@ class NMRDialog(QDialog):
         # Custom 3D highlight actors and names
         self._nmr_sphere_actors = []
         self._nmr_label_names = []  # Explicitly track label names for removal
+
+    @staticmethod
+    def _merged_peaks_path(file_path, data):
+        """Path of the merged-peaks JSON for this result.
+
+        Without a file path the old code used one shared fallback file, so
+        merges saved for one molecule silently applied to (and were
+        overwritten by) every other pathless result. Key the fallback by a
+        fingerprint of the shielding data instead.
+        """
+        if file_path:
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            return os.path.join(
+                os.path.dirname(file_path), f"{base_name}-nmr_peak_info.json"
+            )
+        payload = json.dumps(
+            [
+                [d.get("atom_idx"), d.get("atom_sym"), d.get("shielding")]
+                for d in (data or [])
+            ],
+            sort_keys=True,
+        )
+        fingerprint = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+        return os.path.join(
+            os.path.dirname(__file__), f"nmr_merged_peaks-{fingerprint}.json"
+        )
 
     def _check_external_selection(self):
         """Poll main window for 3D selection changes"""

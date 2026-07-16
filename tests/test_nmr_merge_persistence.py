@@ -176,6 +176,34 @@ class TestMergeGuards(unittest.TestCase):
         self.assertEqual(dlg.merged_peaks, [{"indices": [5, 6]}])
 
 
+class TestMergedPeaksPathKeying(unittest.TestCase):
+    """Pathless results must not share one merged-peaks file."""
+
+    _DATA_A = [{"atom_idx": 0, "atom_sym": "H", "shielding": 30.0}]
+    _DATA_B = [{"atom_idx": 0, "atom_sym": "C", "shielding": 180.0}]
+
+    def test_file_path_gives_sibling_json(self):
+        path = NMRDialog._merged_peaks_path(
+            os.path.join("some", "dir", "job.out"), self._DATA_A
+        )
+        self.assertEqual(path, os.path.join("some", "dir", "job-nmr_peak_info.json"))
+
+    def test_pathless_results_get_distinct_files(self):
+        path_a = NMRDialog._merged_peaks_path(None, self._DATA_A)
+        path_b = NMRDialog._merged_peaks_path(None, self._DATA_B)
+        self.assertNotEqual(path_a, path_b)
+
+    def test_pathless_same_data_is_stable(self):
+        self.assertEqual(
+            NMRDialog._merged_peaks_path(None, self._DATA_A),
+            NMRDialog._merged_peaks_path(None, list(self._DATA_A)),
+        )
+
+    def test_pathless_empty_data_does_not_crash(self):
+        path = NMRDialog._merged_peaks_path(None, None)
+        self.assertTrue(os.path.basename(path).startswith("nmr_merged_peaks-"))
+
+
 class TestEscGoesThroughClose(unittest.TestCase):
     def test_reject_routes_to_close(self):
         """Esc (QDialog.reject) must trigger closeEvent — otherwise the
