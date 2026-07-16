@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 import pyvista as pv
 import numpy as np
-from .utils import get_default_export_path
+from .utils import get_default_export_path, save_json_atomic
 
 try:
     import nmrsim
@@ -412,6 +412,24 @@ class NMRDialog(QDialog):
                 new_selection.add(peak_idx)
         return new_selection
 
+    def _remap_selection_to_new_peaks(self, old_metadata):
+        """Re-derive selected_peak_indices after peaks_metadata is rebuilt.
+
+        The selection stores positions into peaks_metadata; a rebuild
+        (nucleus filter, reference change, merge/unmerge) reorders that
+        list, so the same numbers would silently point at different peaks
+        — and a later Merge/Unmerge would then destroy the wrong groups.
+        """
+        if not self.selected_peak_indices:
+            return
+        selected_atoms = set()
+        for idx in self.selected_peak_indices:
+            if isinstance(idx, int) and 0 <= idx < len(old_metadata):
+                selected_atoms.update(old_metadata[idx][3])
+        self.selected_peak_indices = self._calculate_peak_selection_from_atoms(
+            selected_atoms
+        )
+
     def select_peaks_by_atom_indices(self, atom_indices):
         """Deprecated/Legacy: Now uses _check_external_selection logic directly"""
         # Kept for potential internal calls, but redirected to robust logic
@@ -497,6 +515,18 @@ class NMRDialog(QDialog):
         # 3. 重複排除とソート
         selected_indices = sorted(list(set(selected_indices)))
 
+        # Stale peak metadata can resolve the selection to zero atoms;
+        # merging then would store an empty group (and a stale selection
+        # must never reach the conflict-replace step below).
+        if not selected_indices:
+            QMessageBox.warning(
+                self,
+                "Invalid Selection",
+                "Could not resolve the selected peaks to atoms. "
+                "Please re-select the peaks and try again.",
+            )
+            return
+
         # 4. 既存のマージグループとの競合チェック
         new_merged_peaks = []
         conflict_found = False
@@ -536,10 +566,11 @@ class NMRDialog(QDialog):
         if not self.selected_peak_indices:
             return
 
+        metadata = getattr(self, "peaks_metadata", None) or []
         groups_to_remove = []
         for peak_idx in self.selected_peak_indices:
-            if peak_idx < len(self.peaks_metadata):
-                _, _, is_merged, atom_indices = self.peaks_metadata[peak_idx]
+            if peak_idx < len(metadata):
+                _, _, is_merged, atom_indices = metadata[peak_idx]
                 if is_merged:
                     # Find which group in self.merged_peaks contains these indices
                     # Since groups are unique per atom, we can just match any index
@@ -581,22 +612,44 @@ class NMRDialog(QDialog):
     def save_merged_peaks(self):
         """Save merged peaks to JSON file"""
         try:
-            with open(self.merged_peaks_file, "w", encoding="utf-8") as f:
-                json.dump(self.merged_peaks, f, indent=2)
+            save_json_atomic(self.merged_peaks_file, self.merged_peaks)
         except Exception as e:
             logging.warning("Error saving merged peaks: %s", e)
 
     def load_merged_peaks(self):
         """Load merged peaks from JSON file"""
-        if os.path.exists(self.merged_peaks_file):
+        self.merged_peaks = []
+        if not os.path.exists(self.merged_peaks_file):
+            return
+        try:
+            with open(self.merged_peaks_file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception as e:
+            logging.warning("Error loading merged peaks: %s", e)
+            # Move the unreadable file aside instead of leaving it in the
+            # save path: the next save would otherwise silently replace
+            # every previously saved merge with the empty list.
             try:
-                with open(self.merged_peaks_file, "r", encoding="utf-8") as f:
-                    self.merged_peaks = json.load(f)
-            except Exception as e:
-                logging.warning("Error loading merged peaks: %s", e)
-                self.merged_peaks = []
-        else:
-            self.merged_peaks = []
+                os.replace(
+                    self.merged_peaks_file, self.merged_peaks_file + ".corrupt"
+                )
+            except OSError:
+                pass
+            return
+        if not isinstance(raw, list):
+            logging.warning(
+                "Ignoring merged peaks file with unexpected structure: %s",
+                self.merged_peaks_file,
+            )
+            return
+        for group in raw:
+            indices = group.get("indices") if isinstance(group, dict) else None
+            if (
+                isinstance(indices, list)
+                and indices
+                and all(isinstance(i, int) and not isinstance(i, bool) for i in indices)
+            ):
+                self.merged_peaks.append(group)
 
     def save_settings(self):
         """Save NMR settings to JSON"""
@@ -667,8 +720,7 @@ class NMRDialog(QDialog):
         all_settings["nmr_settings"] = current_nmr_settings
 
         try:
-            with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            save_json_atomic(self.settings_file, all_settings)
         except Exception as e:
             logging.warning("Error saving NMR settings: %s", e)
 
@@ -1575,7 +1627,9 @@ class NMRDialog(QDialog):
             return
 
         # 共通ロジックからピークを取得
+        old_metadata = getattr(self, "peaks_metadata", None) or []
         self.peaks_metadata = self._get_current_peaks()
+        self._remap_selection_to_new_peaks(old_metadata)
 
         if not self.peaks_metadata:
             ax.text(
@@ -2280,7 +2334,9 @@ class NMRDialog(QDialog):
             return
 
         # 2. クラス変数にも保存（クリック判定やハイライト用）
+        old_metadata = getattr(self, "peaks_metadata", None) or []
         self.peaks_metadata = peaks_to_simulate
+        self._remap_selection_to_new_peaks(old_metadata)
         self.current_shifts = [p[0] for p in peaks_to_simulate]
 
         # 3. 核種シンボルの定義

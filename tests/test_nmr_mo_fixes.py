@@ -296,6 +296,16 @@ def _install_nmr_stubs():
     _utils_mod.get_default_export_path = MagicMock(return_value="")
     _utils_mod.clear_atom_color_overrides = MagicMock()
 
+    def _save_json_atomic(path, data, indent=2):
+        import json as _json
+
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            _json.dump(data, f, indent=indent)
+        os.replace(tmp, path)
+
+    _utils_mod.save_json_atomic = _save_json_atomic
+
     _custom_ref = types.ModuleType("orca_result_analyzer.nmr_custom_ref_dialog")
     _custom_ref.CustomReferenceDialog = MagicMock
 
