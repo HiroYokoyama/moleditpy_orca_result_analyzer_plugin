@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
 import json
-from .utils import get_default_export_path
+from .utils import get_default_export_path, save_json_atomic
 import logging
 
 try:
@@ -903,8 +903,7 @@ class MODialog(QDialog):
         all_settings["mo_settings"] = mo_settings
 
         try:
-            with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            save_json_atomic(self.settings_file, all_settings)
         except Exception as e:
             logging.warning("Error saving settings: %s", e)
 

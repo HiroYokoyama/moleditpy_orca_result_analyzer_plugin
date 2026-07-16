@@ -28,7 +28,7 @@ except ImportError:
         from spectrum_widget import SpectrumWidget
     except Exception:
         SpectrumWidget = None
-from .utils import get_default_export_path
+from .utils import get_default_export_path, save_json_atomic
 import datetime
 import logging
 
@@ -584,8 +584,7 @@ class TDDFTDialog(QDialog):
 
         try:
             os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-            with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            save_json_atomic(self.settings_file, all_settings)
 
             if self.parent() and self.parent().context:
                 self.parent().context.show_status_message("TDDFT settings saved.", 3000)

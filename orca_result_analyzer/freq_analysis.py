@@ -31,7 +31,7 @@ import os
 import json
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
-from .utils import get_default_export_path
+from .utils import get_default_export_path, save_json_atomic
 import logging
 
 try:
@@ -1423,7 +1423,6 @@ class FrequencyDialog(QDialog):
         all_settings["freq_settings"] = freq_settings
 
         try:
-            with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            save_json_atomic(self.settings_file, all_settings)
         except Exception as e:
             logging.warning("Error saving freq settings: %s", e)

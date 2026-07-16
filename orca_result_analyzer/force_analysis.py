@@ -1134,7 +1134,8 @@ class ForceViewerDialog(QDialog):
         all_settings["force_settings"] = force_settings
 
         try:
-            with open(self.settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            from .utils import save_json_atomic
+
+            save_json_atomic(self.settings_file, all_settings)
         except Exception as e:
             logging.warning("Error saving force settings: %s", e)

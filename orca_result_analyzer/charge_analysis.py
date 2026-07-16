@@ -26,7 +26,7 @@ from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
-from .utils import get_default_export_path
+from .utils import get_default_export_path, save_json_atomic
 import logging
 
 
@@ -298,8 +298,7 @@ class ChargeDialog(QDialog):
         all_settings["charge_settings"] = charge_data
 
         try:
-            with open(settings_file, "w", encoding="utf-8") as f:
-                json.dump(all_settings, f, indent=2)
+            save_json_atomic(settings_file, all_settings)
         except Exception as e:
             logging.warning("Error saving settings: %s", e)
 
