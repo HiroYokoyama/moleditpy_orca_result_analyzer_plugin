@@ -161,15 +161,20 @@ class _SpinBox(_StatefulBase):
 
 
 class _ComboBox(_StatefulBase):
+    _NO_DATA = object()
+
     def __init__(self, *a, **k):
         self._items = []
+        self._data = []
         self._idx = -1
+        self._editable = False
         self.currentIndexChanged = _Signal()
         self.currentTextChanged = _Signal()
         self.activated = _Signal()
 
-    def addItem(self, text, *a):
+    def addItem(self, text, data=_NO_DATA):
         self._items.append(text)
+        self._data.append(None if data is self._NO_DATA else data)
         if self._idx < 0:
             self._idx = 0
 
@@ -177,8 +182,21 @@ class _ComboBox(_StatefulBase):
         for t in texts:
             self.addItem(t)
 
+    def itemData(self, i):
+        return self._data[i] if 0 <= i < len(self._data) else None
+
+    def currentData(self):
+        return self.itemData(self._idx)
+
+    def setEditable(self, v):
+        self._editable = bool(v)
+
+    def isEditable(self):
+        return self._editable
+
     def clear(self):
         self._items = []
+        self._data = []
         self._idx = -1
 
     def count(self):
@@ -196,9 +214,14 @@ class _ComboBox(_StatefulBase):
     def setCurrentText(self, text):
         if text in self._items:
             self._idx = self._items.index(text)
+            self._free_text = None
+        elif self._editable:
+            # An editable combo accepts text that is not in its item list.
+            self._free_text = text
 
     def currentText(self):
-        return self.itemText(self._idx)
+        free = getattr(self, "_free_text", None)
+        return free if free is not None else self.itemText(self._idx)
 
     def findText(self, text):
         return self._items.index(text) if text in self._items else -1
@@ -636,16 +659,26 @@ def _real_tree(root, wanted):
 
 
 def _pyvista_module():
+    """Real pyvista if usable, else a MagicMock that answers any mesh factory.
+
+    Other test modules leave a partial pyvista stub (PolyData/Sphere only) in
+    sys.modules. A plain ``import pyvista`` would just hand that stub back, so
+    geometry the source actually builds — pv.Arrow for the dipole vector —
+    would be missing. Fall through to a MagicMock in that case rather than
+    returning a module that is real but incomplete.
+    """
     needed = ("Arrow", "Box", "Sphere", "Line", "PolyData")
     pv = sys.modules.get("pyvista")
-    if pv is not None and all(hasattr(pv, n) for n in needed):
+    if _looks_real(pv, needed):
         return pv
-    try:
-        import pyvista as real  # noqa: F401
 
-        return real
-    except Exception:
-        return MagicMock()
+    # A stub is installed. Do NOT import the real pyvista here: mesh factories
+    # such as pv.Arrow() resolve pyvista's own module globals through
+    # sys.modules at call time, and by then the harness has restored the stub
+    # for its owner — the real library would fail on its internals. A MagicMock
+    # answers any factory and is all the source needs, since the meshes are
+    # handed straight to a mocked plotter.
+    return MagicMock()
 
 
 class qt_available:
