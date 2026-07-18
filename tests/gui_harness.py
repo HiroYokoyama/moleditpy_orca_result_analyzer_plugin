@@ -336,6 +336,78 @@ class _LineEdit(_StatefulBase):
         return self._text
 
 
+class _TableItem(_StatefulBase):
+    """QTableWidgetItem stand-in that stores its text."""
+
+    def __init__(self, text="", *a, **k):
+        self._text = "" if text is None else str(text)
+        self._data = {}
+
+    def text(self):
+        return self._text
+
+    def setText(self, t):
+        self._text = "" if t is None else str(t)
+
+    def setData(self, role, value):
+        self._data[role] = value
+
+    def data(self, role):
+        return self._data.get(role)
+
+
+class _TableWidget(_StatefulBase):
+    """QTableWidget stand-in with real row/column counts and cell storage.
+
+    Also serves as a base class (bond_analysis subclasses it), and the counts
+    must be real numbers: column-width weighting compares them against ints.
+    """
+
+    def __init__(self, rows=0, cols=0, *a, **k):
+        self._rows = rows if isinstance(rows, int) else 0
+        self._cols = cols if isinstance(cols, int) else 0
+        self._cells = {}
+        self._headers = []
+        self._widths = {}
+        self.itemSelectionChanged = _Signal()
+        self.cellDoubleClicked = _Signal()
+        self.itemChanged = _Signal()
+
+    def setRowCount(self, n):
+        self._rows = n
+        self._cells = {k: v for k, v in self._cells.items() if k[0] < n}
+
+    def rowCount(self):
+        return self._rows
+
+    def setColumnCount(self, n):
+        self._cols = n
+
+    def columnCount(self):
+        return self._cols
+
+    def setHorizontalHeaderLabels(self, labels):
+        self._headers = list(labels)
+        self._cols = max(self._cols, len(self._headers))
+
+    def horizontalHeaderItem(self, c):
+        return _TableItem(self._headers[c]) if 0 <= c < len(self._headers) else None
+
+    def setItem(self, r, c, item):
+        self._cells[(r, c)] = item
+        self._rows = max(self._rows, r + 1)
+        self._cols = max(self._cols, c + 1)
+
+    def item(self, r, c):
+        return self._cells.get((r, c))
+
+    def setColumnWidth(self, c, w):
+        self._widths[c] = w
+
+    def columnWidth(self, c):
+        return self._widths.get(c, 100)
+
+
 class _TreeItem(_StatefulBase):
     """QTreeWidgetItem stand-in that stores its column text and children."""
 
@@ -562,6 +634,9 @@ def _stateful_widgets():
         "QSlider": _Slider,
         "QPushButton": _Button,
         "QToolButton": _Button,
+        # Listed in _QTW_BASES too (bond_analysis subclasses QTableWidget);
+        # extras are applied after the bases, so the stateful version wins.
+        "QTableWidget": _TableWidget,
         "QTreeWidget": _TreeWidget,
         "QTreeWidgetItem": _TreeItem,
         "QTreeWidgetItemIterator": _TreeIterator,
