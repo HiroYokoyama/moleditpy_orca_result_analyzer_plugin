@@ -422,6 +422,63 @@ class _LineEdit(_StatefulBase):
         return self._text
 
 
+class _ListItem(_StatefulBase):
+    """QListWidgetItem stand-in storing its text and per-role data."""
+
+    def __init__(self, text="", *a, **k):
+        self._text = "" if text is None else str(text)
+        self._data = {}
+
+    def text(self):
+        return self._text
+
+    def setText(self, t):
+        self._text = "" if t is None else str(t)
+
+    def setData(self, role, value):
+        self._data[role] = value
+
+    def data(self, role):
+        return self._data.get(role)
+
+
+class _ListWidget(_StatefulBase):
+    """QListWidget stand-in with a real item list and current row."""
+
+    def __init__(self, *a, **k):
+        self._items = []
+        self._current = -1
+        self.itemDoubleClicked = _Signal()
+        self.itemSelectionChanged = _Signal()
+        self.currentRowChanged = _Signal()
+
+    def addItem(self, item):
+        self._items.append(item if not isinstance(item, str) else _ListItem(item))
+
+    def addItems(self, texts):
+        for t in texts:
+            self.addItem(t)
+
+    def clear(self):
+        self._items = []
+        self._current = -1
+
+    def count(self):
+        return len(self._items)
+
+    def item(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def setCurrentRow(self, i):
+        self._current = i
+
+    def currentRow(self):
+        return self._current
+
+    def currentItem(self):
+        return self.item(self._current)
+
+
 class _TableItem(_StatefulBase):
     """QTableWidgetItem stand-in that stores its text."""
 
@@ -726,6 +783,8 @@ def _stateful_widgets():
         # extras are applied after the bases, so the stateful version wins.
         "QTableWidget": _TableWidget,
         "QTableWidgetItem": _TableItem,
+        "QListWidget": _ListWidget,
+        "QListWidgetItem": _ListItem,
         "QTreeWidget": _TreeWidget,
         "QTreeWidgetItem": _TreeItem,
         "QTreeWidgetItemIterator": _TreeIterator,
