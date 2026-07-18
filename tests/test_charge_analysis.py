@@ -98,6 +98,16 @@ class TestGradientBar(unittest.TestCase):
 
 
 class TestChargeDialog(unittest.TestCase):
+    def setUp(self):
+        # charge_analysis derives its settings path from the module directory
+        # on every save, so an unredirected run writes a settings.json into the
+        # package source tree. Point the module at a temp dir instead.
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        saved = _C.__file__
+        _C.__file__ = os.path.join(self._tmp.name, "charge_analysis.py")
+        self.addCleanup(lambda: setattr(_C, "__file__", saved))
+
     def _dialog(self, charges=None, coords=None, n=3):
         host = _make_host(coords if coords is not None else COORDS, n)
         dlg = ChargeDialog(host, charges if charges is not None else _charges())
