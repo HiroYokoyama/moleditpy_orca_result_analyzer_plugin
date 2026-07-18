@@ -1449,7 +1449,10 @@ class NMRDialog(QDialog):
         key = self.get_nucleus_key(nucleus)
         # Try key, then generic element (e.g. "Pt" if "195Pt" not in defaults), then fallback
 
-        element_only = re.sub(r"[^A-Z]", "", key)
+        # Keep both cases: stripping lowercase would reduce a two-letter symbol
+        # to its first letter, so "195Pt" became "P" and platinum silently
+        # inherited phosphorus's window.
+        element_only = re.sub(r"[^A-Za-z]", "", key)
 
         range_vals = defaults.get(key, defaults.get(element_only, (500, -500)))
 
