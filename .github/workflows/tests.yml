@@ -37,6 +37,8 @@ jobs:
             https://github.com/HiroYokoyama/python_molecular_editor.git \
             ../python_molecular_editor || true
 
+      # Single run: plain output and coverage in one pass. Coverage is
+      # reported, not enforced — the build fails on test failures only.
       - name: Run tests with coverage
         env:
           CI_MAIN_APP_SRC: ${{ github.workspace }}/../python_molecular_editor/moleditpy/src
