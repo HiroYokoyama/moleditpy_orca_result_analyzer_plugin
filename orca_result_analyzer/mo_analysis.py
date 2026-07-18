@@ -1086,7 +1086,9 @@ class MODialog(QDialog):
         try:
             with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["ID", "Occupation", "Energy (eV)", "Energy (Eh)"])
+                writer.writerow(
+                    ["MO", "Label", "Occupation", "Energy (eV)", "Energy (Eh)"]
+                )
 
                 # Iterate tree items to respect current sort/display?
                 # Using the data list is safer and complete.
@@ -1097,8 +1099,10 @@ class MODialog(QDialog):
                 it = QTreeWidgetItemIterator(self.tree)
                 while it.value():
                     item = it.value()
-                    # ID, Occ, eV, Eh
-                    row = [item.text(0), item.text(1), item.text(2), item.text(3)]
+                    # Must cover every tree column (MO, Label, Occ, eV, Eh):
+                    # stopping at text(3) shifted each value one header to the
+                    # left and dropped the Hartree energy entirely.
+                    row = [item.text(c) for c in range(5)]
                     writer.writerow(row)
                     it += 1
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")

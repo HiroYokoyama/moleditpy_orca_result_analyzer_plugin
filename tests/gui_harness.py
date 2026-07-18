@@ -228,6 +228,40 @@ class _CheckBox(_StatefulBase):
         return 2 if self._checked else 0
 
 
+class _Button(_StatefulBase):
+    """QPushButton stand-in with a real stylesheet.
+
+    Some dialogs encode state in the stylesheet and read it back (MODialog
+    stores the lobe colours there and parses them out in get_color_hex), so a
+    MagicMock that forgets what it was told silently defeats that round-trip.
+    """
+
+    def __init__(self, *a, **k):
+        self._text = a[0] if a and isinstance(a[0], str) else ""
+        self._style = ""
+        self._enabled = True
+        self.clicked = _Signal()
+        self.toggled = _Signal()
+
+    def setStyleSheet(self, s):
+        self._style = "" if s is None else str(s)
+
+    def styleSheet(self):
+        return self._style
+
+    def setText(self, t):
+        self._text = "" if t is None else str(t)
+
+    def text(self):
+        return self._text
+
+    def setEnabled(self, v):
+        self._enabled = bool(v)
+
+    def isEnabled(self):
+        return self._enabled
+
+
 class _Slider(_StatefulBase):
     """Stateful QSlider. Also serves as a base class — ResetSlider subclasses it."""
 
@@ -277,6 +311,152 @@ class _LineEdit(_StatefulBase):
 
     def text(self):
         return self._text
+
+
+class _TreeItem(_StatefulBase):
+    """QTreeWidgetItem stand-in that stores its column text and children."""
+
+    def __init__(self, texts=None, *a, **k):
+        if isinstance(texts, (list, tuple)):
+            self._texts = [("" if t is None else str(t)) for t in texts]
+        else:
+            self._texts = []
+        self._children = []
+        self._parent = None
+        self._data = {}
+        self._selected = False
+        self.foregrounds = {}
+        self.backgrounds = {}
+
+    def text(self, col):
+        return self._texts[col] if 0 <= col < len(self._texts) else ""
+
+    def setText(self, col, value):
+        while len(self._texts) <= col:
+            self._texts.append("")
+        self._texts[col] = "" if value is None else str(value)
+
+    def setForeground(self, col, brush):
+        self.foregrounds[col] = brush
+
+    def setBackground(self, col, brush):
+        self.backgrounds[col] = brush
+
+    def setData(self, col, role, value):
+        self._data[(col, role)] = value
+
+    def data(self, col, role):
+        return self._data.get((col, role))
+
+    def addChild(self, child):
+        child._parent = self
+        self._children.append(child)
+
+    def childCount(self):
+        return len(self._children)
+
+    def child(self, i):
+        return self._children[i] if 0 <= i < len(self._children) else None
+
+    def parent(self):
+        return self._parent
+
+    def setSelected(self, v):
+        self._selected = bool(v)
+
+    def isSelected(self):
+        return self._selected
+
+
+class _TreeWidget(_StatefulBase):
+    """QTreeWidget stand-in backed by a real item list."""
+
+    def __init__(self, *a, **k):
+        self._top = []
+        self._current = None
+        self.itemSelectionChanged = _Signal()
+        self.currentItemChanged = _Signal()
+        self.itemDoubleClicked = _Signal()
+
+    def clear(self):
+        self._top = []
+        self._current = None
+
+    def addTopLevelItem(self, item):
+        self._top.append(item)
+
+    def addTopLevelItems(self, items):
+        self._top.extend(items)
+
+    def topLevelItemCount(self):
+        return len(self._top)
+
+    def topLevelItem(self, i):
+        return self._top[i] if 0 <= i < len(self._top) else None
+
+    def indexOfTopLevelItem(self, item):
+        return self._top.index(item) if item in self._top else -1
+
+    def invisibleRootItem(self):
+        root = _TreeItem()
+        root._children = self._top
+        return root
+
+    def setCurrentItem(self, item):
+        self._current = item
+
+    def currentItem(self):
+        return self._current
+
+    def selectedItems(self):
+        return [i for i in self._flatten() if i.isSelected()]
+
+    def _flatten(self):
+        out = []
+
+        def walk(items):
+            for it in items:
+                out.append(it)
+                walk(it._children)
+
+        walk(self._top)
+        return out
+
+
+class _TreeIterator:
+    """QTreeWidgetItemIterator stand-in.
+
+    The source walks trees with the standard Qt idiom::
+
+        it = QTreeWidgetItemIterator(tree)
+        while it.value():
+            ...
+            it += 1
+
+    A MagicMock ``value()`` is always truthy, so that loop never terminates.
+    Returning None past the last item keeps it finite, as real Qt does.
+    """
+
+    def __init__(self, tree, *a, **k):
+        if isinstance(tree, _TreeWidget):
+            self._items = tree._flatten()
+        elif isinstance(tree, _TreeItem):
+            self._items = [tree] + tree._children
+        else:
+            self._items = []
+        self._pos = 0
+
+    def value(self):
+        return self._items[self._pos] if self._pos < len(self._items) else None
+
+    def __iadd__(self, n):
+        self._pos += n
+        return self
+
+    def __next__(self):
+        item = self.value()
+        self._pos += 1
+        return item
 
 
 class _LayoutItem:
@@ -357,6 +537,11 @@ def _stateful_widgets():
         # Listed in _QTW_BASES too (ResetSlider subclasses it); the extras are
         # applied after the bases, so this stateful version wins.
         "QSlider": _Slider,
+        "QPushButton": _Button,
+        "QToolButton": _Button,
+        "QTreeWidget": _TreeWidget,
+        "QTreeWidgetItem": _TreeItem,
+        "QTreeWidgetItemIterator": _TreeIterator,
     }
 
 
