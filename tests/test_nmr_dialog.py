@@ -113,6 +113,13 @@ class _NMRCase(unittest.TestCase):
         self._saved_item = N.QTableWidgetItem
         N.QTableWidgetItem = _FakeItem
 
+        # recalc() also redraws the spectrum, and figure.tight_layout() pulls in
+        # a matplotlib renderer (Agg -> Pillow). These tests are about the table
+        # and the shift arithmetic, so keep them off the rendering stack.
+        self._plot_patch = patch.object(self.dlg, "plot_spectrum")
+        self.plot_spectrum = self._plot_patch.start()
+        self.addCleanup(self._plot_patch.stop)
+
     def tearDown(self):
         N.QTableWidgetItem = self._saved_item
         self._tmp.cleanup()
