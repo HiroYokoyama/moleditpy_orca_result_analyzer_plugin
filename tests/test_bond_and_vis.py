@@ -48,9 +48,26 @@ def _bond_data():
                 "atoms": "O  1   H  2",
                 "occupancy": 1.99852,
                 "energy": -0.73211,
+                # Shaped like parser.parse_nbo_hybrids output.
                 "hybrids": [
-                    {"atom_sym": "O", "s_pct": 30.1, "p_pct": 69.8, "d_pct": 0.1},
-                    {"atom_sym": "H", "s_pct": 99.9, "p_pct": 0.1, "d_pct": 0.0},
+                    {
+                        "atom_sym": "O",
+                        "atom_idx": 0,
+                        "s_pct": 30.1,
+                        "p_pct": 69.8,
+                        "d_pct": 0.1,
+                        "label": "sp2.32",
+                        "raw": "",
+                    },
+                    {
+                        "atom_sym": "H",
+                        "atom_idx": 1,
+                        "s_pct": 99.9,
+                        "p_pct": 0.1,
+                        "d_pct": 0.0,
+                        "label": "s",
+                        "raw": "",
+                    },
                 ],
                 "atom_indices": [0, 1],
             },
@@ -255,6 +272,100 @@ class TestHighlighting(_BondCase):
 
 
 # ---------------------------------------------------------------------------
+# NBO detail popup and clipboard copy
+# ---------------------------------------------------------------------------
+
+
+class TestNboDetail(_BondCase):
+    def _detail(self, row=0):
+        with patch.object(B.QMessageBox, "information") as info:
+            self.dlg._show_nbo_detail(row)
+        return info
+
+    def test_the_header_names_the_orbital(self):
+        text = self._detail().call_args.args[2]
+        self.assertIn("NBO #1:", text)
+        self.assertIn("BD", text)
+
+    def test_the_occupancy_and_energy_are_shown(self):
+        text = self._detail().call_args.args[2]
+        self.assertIn("1.99852", text)
+        self.assertIn("-0.73211", text)
+
+    def test_each_hybrid_is_broken_down_by_shell(self):
+        text = self._detail().call_args.args[2]
+        self.assertIn("s 30.10%", text)
+        self.assertIn("p 69.80%", text)
+
+    def test_the_raw_orca_text_is_included_when_present(self):
+        self.dlg._nbo[0]["hybrids"][0]["raw"] = "s( 30.10%)p 2.32( 69.80%)"
+        text = self._detail().call_args.args[2]
+        self.assertIn("Raw (from ORCA output)", text)
+        self.assertIn("s( 30.10%)", text)
+
+    def test_a_weight_is_shown_when_present(self):
+        self.dlg._nbo[0]["hybrids"][0]["weight_pct"] = 61.25
+        text = self._detail().call_args.args[2]
+        self.assertIn("weight 61.25%", text)
+
+    def test_an_orbital_without_hybrids_still_reports(self):
+        self.dlg._nbo[0]["hybrids"] = []
+        text = self._detail().call_args.args[2]
+        self.assertIn("NBO #1:", text)
+        self.assertNotIn("Hybridization", text)
+
+    def test_an_out_of_range_row_shows_nothing(self):
+        with patch.object(B.QMessageBox, "information") as info:
+            self.dlg._show_nbo_detail(99)
+        info.assert_not_called()
+
+
+class TestCopySelection(unittest.TestCase):
+    def _table(self, cells):
+        """cells: {(row, col): text} -> a table reporting them as selected."""
+        table = B._CopyableTable()
+        items = []
+        for (row, col), text in sorted(cells.items()):
+            item = MagicMock()
+            item.row.return_value = row
+            item.column.return_value = col
+            item.text.return_value = text
+            items.append(item)
+        table.selectedItems = lambda: items
+        return table
+
+    def _copied(self, table):
+        clipboard = MagicMock()
+        with patch.object(B.QApplication, "clipboard", return_value=clipboard):
+            table._copy_selection()
+        if not clipboard.setText.call_args_list:
+            return None
+        return clipboard.setText.call_args.args[0]
+
+    def test_a_single_cell_is_copied(self):
+        self.assertEqual(self._copied(self._table({(0, 0): "O"})), "O")
+
+    def test_a_row_is_copied_as_tab_separated_text(self):
+        table = self._table({(0, 0): "O", (0, 1): "H", (0, 2): "0.9123"})
+        self.assertEqual(self._copied(table), "O\tH\t0.9123")
+
+    def test_several_rows_are_copied_as_lines(self):
+        table = self._table(
+            {(0, 0): "O", (0, 1): "H", (1, 0): "O", (1, 1): "H2"}
+        )
+        self.assertEqual(self._copied(table), "O\tH\nO\tH2")
+
+    def test_columns_are_ordered_regardless_of_selection_order(self):
+        table = self._table({(0, 2): "third", (0, 0): "first", (0, 1): "second"})
+        self.assertEqual(self._copied(table), "first\tsecond\tthird")
+
+    def test_an_empty_selection_copies_nothing(self):
+        table = B._CopyableTable()
+        table.selectedItems = lambda: []
+        self.assertIsNone(self._copied(table))
+
+
+# ---------------------------------------------------------------------------
 # Table selection -> highlight
 # ---------------------------------------------------------------------------
 
@@ -414,6 +525,69 @@ class TestGridBuilding(_VisCase):
             pv.StructuredGrid.return_value = grid
             self.vis._build_grid(meta)
         self.assertEqual(len(store["values"]), 8)
+
+    def _grid(self, positive_points=10, negative_points=10):
+        """A loaded grid whose contours report the given point counts."""
+        grid = MagicMock()
+
+        def contour(levels, scalars=None):
+            surface = MagicMock()
+            surface.n_points = positive_points if levels[0] > 0 else negative_points
+            return surface
+
+        grid.contour.side_effect = contour
+        self.vis.current_grid = grid
+        return grid
+
+    def test_both_lobes_are_drawn(self):
+        self._grid()
+        self.vis.show_iso(0.02)
+        names = [c.kwargs["name"] for c in self.mw.plotter.add_mesh.call_args_list]
+        self.assertEqual(names, ["mo_iso_p", "mo_iso_n"])
+
+    def test_the_lobes_are_contoured_at_opposite_signs(self):
+        grid = self._grid()
+        self.vis.show_iso(0.03)
+        levels = [c.args[0][0] for c in grid.contour.call_args_list]
+        self.assertEqual(levels, [0.03, -0.03])
+
+    def test_the_lobe_colours_are_applied(self):
+        self._grid()
+        self.vis.show_iso(0.02, color_p="#ff0000", color_n="#0000ff")
+        colours = [c.kwargs["color"] for c in self.mw.plotter.add_mesh.call_args_list]
+        self.assertEqual(colours, ["#ff0000", "#0000ff"])
+
+    def test_the_appearance_settings_are_applied(self):
+        self._grid()
+        self.vis.show_iso(0.02, opacity=0.35, style="wireframe", smooth_shading=False)
+        kwargs = self.mw.plotter.add_mesh.call_args_list[0].kwargs
+        self.assertAlmostEqual(kwargs["opacity"], 0.35)
+        self.assertEqual(kwargs["style"], "wireframe")
+        self.assertFalse(kwargs["smooth_shading"])
+
+    def test_an_empty_lobe_is_not_drawn(self):
+        self._grid(negative_points=0)
+        self.vis.show_iso(0.02)
+        names = [c.kwargs["name"] for c in self.mw.plotter.add_mesh.call_args_list]
+        self.assertEqual(names, ["mo_iso_p"])
+
+    def test_previous_isosurfaces_are_cleared_first(self):
+        self._grid()
+        self.vis.show_iso(0.02)
+        self.mw.plotter.remove_actor.assert_any_call("mo_iso_p")
+        self.mw.plotter.remove_actor.assert_any_call("mo_iso_n")
+
+    def test_nothing_is_drawn_without_a_loaded_grid(self):
+        self.vis.current_grid = None
+        self.vis.show_iso(0.02)
+        self.mw.plotter.add_mesh.assert_not_called()
+
+    def test_a_contouring_failure_is_tolerated(self):
+        grid = MagicMock()
+        grid.contour.side_effect = RuntimeError("bad scalars")
+        self.vis.current_grid = grid
+        self.vis.show_iso(0.02)  # must not raise
+        self.mw.plotter.add_mesh.assert_not_called()
 
     def test_clearing_removes_both_isosurface_actors(self):
         self.vis.clear()

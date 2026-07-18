@@ -17,7 +17,7 @@ import types
 import tempfile
 import importlib.util
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 _SRC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -476,6 +476,63 @@ class TestDocumentResetHandler(unittest.TestCase):
         handler()
 
         self.assertEqual(fixed_mw.view_3d_manager._plugin_color_overrides, {})
+
+
+class TestReadOrcaFile(unittest.TestCase):
+    """_read_orca_file tries several encodings before giving up."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = self._tmp.name
+        self.addCleanup(self._tmp.cleanup)
+        self.parent = MagicMock()
+
+    def _write(self, name, text, encoding="utf-8"):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding=encoding) as fh:
+            fh.write(text)
+        return path
+
+    def test_a_utf8_file_is_read(self):
+        path = self._write("utf8.out", "ORCA TERMINATED NORMALLY\n")
+        self.assertIn("TERMINATED", _init_mod._read_orca_file(path, self.parent))
+
+    def test_a_utf16_file_is_read(self):
+        path = self._write("utf16.out", "ORCA TERMINATED NORMALLY\n", encoding="utf-16")
+        self.assertIn("TERMINATED", _init_mod._read_orca_file(path, self.parent))
+
+    def test_a_latin1_file_is_read(self):
+        path = self._write("latin1.out", "Angström\n", encoding="latin-1")
+        self.assertIsNotNone(_init_mod._read_orca_file(path, self.parent))
+
+    def test_undecodable_bytes_fall_back_to_replacement(self):
+        path = os.path.join(self.tmp, "binary.out")
+        with open(path, "wb") as fh:
+            fh.write(b"ORCA\x00\xff\xfe\xfd rubbish\n")
+        self.assertIsNotNone(_init_mod._read_orca_file(path, self.parent))
+
+    def _read_expecting_error(self, path):
+        """Read *path* with a known-good QMessageBox, returning (result, box).
+
+        Other test modules install their own PyQt6 stubs process-wide, so pin
+        the message box rather than relying on whichever one is currently
+        bound; the error branch calls QMessageBox.critical.
+        """
+        box = MagicMock()
+        with patch.object(_init_mod, "QMessageBox", box):
+            result = _init_mod._read_orca_file(path, self.parent)
+        return result, box
+
+    def test_a_missing_file_reports_an_error(self):
+        missing = os.path.join(self.tmp, "nope.out")
+        result, box = self._read_expecting_error(missing)
+        self.assertIsNone(result)
+        box.critical.assert_called_once()
+
+    def test_a_directory_reports_an_error(self):
+        result, box = self._read_expecting_error(self.tmp)
+        self.assertIsNone(result)
+        box.critical.assert_called_once()
 
 
 if __name__ == "__main__":
