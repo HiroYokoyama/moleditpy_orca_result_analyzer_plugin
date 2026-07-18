@@ -33,6 +33,56 @@ We maintain high code quality standards. Before submitting a Pull Request (PR), 
 * Core logic and utility modules should have automated unit tests.
 * Maintain high test coverage for any new features.
 
+**Running the suite**
+
+```bash
+python run_tests.py                  # whole suite, exactly as CI runs it
+python run_tests.py -k parser        # any pytest arguments are forwarded
+python run_tests.py tests/test_parser.py -v
+```
+
+Use `run_tests.py` rather than calling `pytest` directly. It disables
+third-party plugin autoload so local runs match CI: CI installs no Qt binding,
+and an installed `pytest-qt` would otherwise import a real PyQt6 during
+collection, defeating the stubs the tests rely on.
+
+**Coverage**
+
+The target is to keep coverage **above 80%**. CI reports it on every run but
+does not fail the build on it — use the number as a guide, not a gate. To check
+locally:
+
+```bash
+python run_tests.py -p pytest_cov --cov=orca_result_analyzer --cov-report=term-missing
+```
+
+`-p pytest_cov` is required because plugin autoload is off.
+
+Treat the figure with some care: much of this codebase is Qt dialogs, and a
+constructor running without raising counts as covered. The parsing, the
+chemical-shift and peak arithmetic, the exporters and the settings round-trips
+are where the tests actually pin behaviour.
+
+**Writing tests for dialogs**
+
+The plugin needs Qt and a 3D viewer at import time, neither of which exists in
+CI. `tests/gui_harness.py` solves this: `load_isolated("module_name")` loads one
+source module against subclassable Qt stand-ins that keep real state (spin
+boxes, combos, trees, tables remember what you set), then restores the shared
+`sys.modules` so other test modules are unaffected. See `tests/test_nmr_dialog.py`
+for a representative example.
+
+Two things to watch out for:
+
+* **Dialogs that persist settings** derive the path from their own module
+  directory, sometimes recomputing it inside each method. Point the loaded
+  module's `__file__` at a temp dir, or the suite will write a `settings.json`
+  into the package source tree.
+* **The widget stubs are permissive** — an unknown attribute returns a
+  MagicMock rather than raising. A typo in a method name will therefore pass
+  silently instead of failing. Assert on observable state, not just that a call
+  happened.
+
 ### B. Error Handling — No Hiding, No Crashing
 * Stability policy: **never hide errors, never crash.**
 * Wrap UI slots, event handlers, or callbacks in `try/except` block, log the traceback, and show a status message or dialog to the user.
