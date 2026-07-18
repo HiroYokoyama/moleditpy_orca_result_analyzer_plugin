@@ -346,16 +346,10 @@ class _Button(_StatefulBase):
 
     def __init__(self, *a, **k):
         self._text = a[0] if a and isinstance(a[0], str) else ""
-        self._style = ""
-        self._enabled = True
+        self._checkable = False
+        self._checked = False
         self.clicked = _Signal()
         self.toggled = _Signal()
-
-    def setStyleSheet(self, s):
-        self._style = "" if s is None else str(s)
-
-    def styleSheet(self):
-        return self._style
 
     def setText(self, t):
         self._text = "" if t is None else str(t)
@@ -363,11 +357,18 @@ class _Button(_StatefulBase):
     def text(self):
         return self._text
 
-    def setEnabled(self, v):
-        self._enabled = bool(v)
+    # Toggle buttons drive show/hide state and are read back via isChecked().
+    def setCheckable(self, v):
+        self._checkable = bool(v)
 
-    def isEnabled(self):
-        return self._enabled
+    def isCheckable(self):
+        return self._checkable
+
+    def setChecked(self, v):
+        self._checked = bool(v)
+
+    def isChecked(self):
+        return self._checked
 
 
 class _Slider(_StatefulBase):
