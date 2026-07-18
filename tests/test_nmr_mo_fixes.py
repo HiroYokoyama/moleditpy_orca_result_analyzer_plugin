@@ -298,8 +298,15 @@ def _install_nmr_stubs():
         _mpl_tick.MaxNLocator = MagicMock
 
     # The Qt-agg backend always stays stubbed: importing the real one needs a
-    # live Qt binding, which CI deliberately does not install.
-    _mpl_back = types.ModuleType("matplotlib.backends")
+    # live Qt binding, which CI deliberately does not install. The *parent*
+    # backends package must stay real when it can, though — matplotlib imports
+    # backend_agg through it on demand (figure.tight_layout resolves a renderer
+    # that way), and a bare stub has no __path__ for that import to traverse.
+    try:
+        from matplotlib import backends as _mpl_back  # noqa: F401
+    except ImportError:
+        _mpl_back = types.ModuleType("matplotlib.backends")
+
     _mpl_back_qt = types.ModuleType("matplotlib.backends.backend_qtagg")
     _mpl_back_qt.FigureCanvasQTAgg = _Base
     _mpl_back_qt.NavigationToolbar2QT = MagicMock

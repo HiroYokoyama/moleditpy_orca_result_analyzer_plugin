@@ -545,6 +545,7 @@ _SWAP_KEYS = [
     "matplotlib",
     "matplotlib.figure",
     "matplotlib.ticker",
+    "matplotlib.backends",
 ]
 
 
@@ -558,8 +559,6 @@ def load_isolated(modname):
         "PyQt6.QtCore": _fresh_module("PyQt6.QtCore", _QTC_BASES, _make_widget),
         "PyQt6.QtGui": _fresh_module("PyQt6.QtGui", [], _make_widget,
                                      extra={"QColor": QColorStub}),
-        "matplotlib.backends.backend_qtagg": _fresh_module(
-            "matplotlib.backends.backend_qtagg", _BACKEND_BASES, _make_widget),
         "pyvista": _pyvista_module(),
     }
     swapped.update(_real_tree("numpy", {"numpy": ("linspace", "exp", "zeros_like")}))
@@ -570,8 +569,16 @@ def load_isolated(modname):
                 "matplotlib": ("use",),
                 "matplotlib.figure": ("Figure",),
                 "matplotlib.ticker": ("MaxNLocator",),
+                # Real backends package: figure.tight_layout() resolves a
+                # renderer through it, which a bare stub cannot provide.
+                "matplotlib.backends": ("__name__",),
             },
         )
+    )
+    # ... but the Qt-agg backend stays stubbed — importing the real one needs a
+    # live Qt binding. Applied last so it wins over the real backends tree.
+    swapped["matplotlib.backends.backend_qtagg"] = _fresh_module(
+        "matplotlib.backends.backend_qtagg", _BACKEND_BASES, _make_widget
     )
     saved = {k: sys.modules.get(k, _SENTINEL) for k in _SWAP_KEYS}
     for k, v in swapped.items():
