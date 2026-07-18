@@ -10,10 +10,10 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
-import gui_harness  # noqa: F401,E402  (installs Qt stubs on import)
+import gui_harness  # noqa: E402
 
-from orca_result_analyzer.energy_analysis import EnergyComponentsDialog  # noqa: E402
-from orca_result_analyzer.property_analysis import PropertiesDialog  # noqa: E402
+EnergyComponentsDialog = gui_harness.load_isolated("energy_analysis").EnergyComponentsDialog
+PropertiesDialog = gui_harness.load_isolated("property_analysis").PropertiesDialog
 
 
 class TestEnergyComponentsDialog(unittest.TestCase):

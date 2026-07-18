@@ -13,71 +13,15 @@ import sys
 import csv
 import types
 import tempfile
-import importlib.util
 import unittest
 from unittest.mock import MagicMock
 
+sys.path.insert(0, os.path.dirname(__file__))
+import gui_harness  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Stub PyQt6 + the matplotlib Qt backend before importing scf_analysis
-# ---------------------------------------------------------------------------
-
-
-def _install_stubs():
-    for name in ["PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui"]:
-        sys.modules.setdefault(name, types.ModuleType(name))
-
-    class _Base:
-        def __init__(self, *a, **k):
-            pass
-
-        def __getattr__(self, n):
-            return MagicMock()
-
-    qtw = sys.modules["PyQt6.QtWidgets"]
-    for cls in [
-        "QDialog",
-        "QVBoxLayout",
-        "QHBoxLayout",
-        "QPushButton",
-        "QLabel",
-        "QComboBox",
-        "QGroupBox",
-        "QFileDialog",
-    ]:
-        setattr(qtw, cls, type(cls, (_Base,), {}))
-
-    # matplotlib's qtagg backend needs a real Qt binding; stub it out.
-    sys.modules["matplotlib.backends.backend_qtagg"] = MagicMock()
-
-
-_install_stubs()
-
-_PKG_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer")
-)
-
-# Load under a throwaway package so `from .utils import get_default_export_path`
-# resolves to the real utils without executing the Qt-heavy package __init__.
-_PKG = "_scf_test_pkg"
-if _PKG not in sys.modules:
-    _pkg = types.ModuleType(_PKG)
-    _pkg.__path__ = [_PKG_DIR]
-    sys.modules[_PKG] = _pkg
-if f"{_PKG}.utils" not in sys.modules:
-    _uspec = importlib.util.spec_from_file_location(
-        f"{_PKG}.utils", os.path.join(_PKG_DIR, "utils.py")
-    )
-    _umod = importlib.util.module_from_spec(_uspec)
-    _uspec.loader.exec_module(_umod)
-    sys.modules[f"{_PKG}.utils"] = _umod
-
-_spec = importlib.util.spec_from_file_location(
-    f"{_PKG}.scf_analysis", os.path.join(_PKG_DIR, "scf_analysis.py")
-)
-S = importlib.util.module_from_spec(_spec)
-S.__package__ = _PKG
-_spec.loader.exec_module(S)
+# Load scf_analysis in isolation (Qt / matplotlib-backend stubs swapped in then
+# restored, leaving the shared stubs other test modules rely on untouched).
+S = gui_harness.load_isolated("scf_analysis")
 
 
 # ---------------------------------------------------------------------------

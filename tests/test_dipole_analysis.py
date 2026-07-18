@@ -15,71 +15,25 @@ import sys
 import json
 import types
 import tempfile
-import importlib.util
 import unittest
 from unittest.mock import MagicMock
 
-import numpy as np
+sys.path.insert(0, os.path.dirname(__file__))
+import gui_harness  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
-# Stub PyQt6 before importing dipole_analysis (numpy/pyvista are real)
-# ---------------------------------------------------------------------------
+def _assert_close(testcase, actual, expected, tol=1e-6):
+    """Element-wise closeness without numpy.testing (another test module can
+    corrupt the shared numpy, which would make np.testing.* raise)."""
+    actual = [float(x) for x in actual]
+    expected = [float(x) for x in expected]
+    testcase.assertEqual(len(actual), len(expected))
+    for a, e in zip(actual, expected):
+        testcase.assertAlmostEqual(a, e, delta=tol)
 
-
-def _install_stubs():
-    for name in ["PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui"]:
-        sys.modules.setdefault(name, types.ModuleType(name))
-
-    class _Base:
-        def __init__(self, *a, **k):
-            pass
-
-        def __getattr__(self, n):
-            return MagicMock()
-
-    qtw = sys.modules["PyQt6.QtWidgets"]
-    for cls in [
-        "QDialog",
-        "QVBoxLayout",
-        "QHBoxLayout",
-        "QLabel",
-        "QPushButton",
-        "QCheckBox",
-        "QDoubleSpinBox",
-        "QColorDialog",
-        "QSpinBox",
-        "QGroupBox",
-    ]:
-        setattr(qtw, cls, type(cls, (_Base,), {}))
-    sys.modules["PyQt6.QtGui"].QColor = MagicMock()
-
-
-_install_stubs()
-
-_PKG_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer")
-)
-
-_PKG = "_dipole_test_pkg"
-if _PKG not in sys.modules:
-    _pkg = types.ModuleType(_PKG)
-    _pkg.__path__ = [_PKG_DIR]
-    sys.modules[_PKG] = _pkg
-if f"{_PKG}.utils" not in sys.modules:
-    _uspec = importlib.util.spec_from_file_location(
-        f"{_PKG}.utils", os.path.join(_PKG_DIR, "utils.py")
-    )
-    _umod = importlib.util.module_from_spec(_uspec)
-    _uspec.loader.exec_module(_umod)
-    sys.modules[f"{_PKG}.utils"] = _umod
-
-_spec = importlib.util.spec_from_file_location(
-    f"{_PKG}.dipole_analysis", os.path.join(_PKG_DIR, "dipole_analysis.py")
-)
-D = importlib.util.module_from_spec(_spec)
-D.__package__ = _PKG
-_spec.loader.exec_module(D)
+# Load dipole_analysis in isolation (own copy of the Qt/pyvista stubs, restored
+# afterwards so the shared stubs other test modules rely on stay untouched).
+D = gui_harness.load_isolated("dipole_analysis")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +110,10 @@ def _bare_dialog(dipole_data, coords, show=True, reverse=False, scale=2.0, res=2
 
 class TestUpdateView(unittest.TestCase):
     def setUp(self):
-        self._saved_arrow = D.pv.Arrow
+        # Another test module may have pinned a minimal pyvista stub (without
+        # Arrow) into sys.modules before dipole_analysis was imported; guard.
+        self._had_arrow = hasattr(D.pv, "Arrow")
+        self._saved_arrow = getattr(D.pv, "Arrow", None)
         self.arrow_calls = []
 
         def _fake_arrow(*a, **k):
@@ -166,7 +123,13 @@ class TestUpdateView(unittest.TestCase):
         D.pv.Arrow = _fake_arrow
 
     def tearDown(self):
-        D.pv.Arrow = self._saved_arrow
+        if self._had_arrow:
+            D.pv.Arrow = self._saved_arrow
+        else:
+            try:
+                del D.pv.Arrow
+            except Exception:
+                pass
 
     def test_arrow_placed_at_center_of_mass(self):
         dlg = _bare_dialog(
@@ -174,15 +137,15 @@ class TestUpdateView(unittest.TestCase):
         )
         dlg.update_view()
         self.assertEqual(len(self.arrow_calls), 1)
-        np.testing.assert_allclose(self.arrow_calls[0]["start"], [1.0, 0.0, 0.0])
+        _assert_close(self, self.arrow_calls[0]["start"], [1.0, 0.0, 0.0])
 
     def test_reverse_flips_direction(self):
         fwd = _bare_dialog({"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=False)
         fwd.update_view()
         rev = _bare_dialog({"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=True)
         rev.update_view()
-        np.testing.assert_allclose(self.arrow_calls[0]["direction"], [0, 0, 1])
-        np.testing.assert_allclose(self.arrow_calls[1]["direction"], [0, 0, -1])
+        _assert_close(self, self.arrow_calls[0]["direction"], [0, 0, 1])
+        _assert_close(self, self.arrow_calls[1]["direction"], [0, 0, -1])
 
     def test_scale_sets_arrow_length(self):
         dlg = _bare_dialog({"vector": [0.0, 0.0, 4.0]}, coords=[[0, 0, 0]], scale=2.0)
@@ -199,7 +162,7 @@ class TestUpdateView(unittest.TestCase):
     def test_no_coords_uses_origin(self):
         dlg = _bare_dialog({"vector": [1.0, 0.0, 0.0]}, coords=[])
         dlg.update_view()
-        np.testing.assert_allclose(self.arrow_calls[0]["start"], [0.0, 0.0, 0.0])
+        _assert_close(self, self.arrow_calls[0]["start"], [0.0, 0.0, 0.0])
 
     def test_show_adds_actor_to_plotter(self):
         dlg = _bare_dialog({"vector": [1.0, 0.0, 0.0]}, coords=[[0, 0, 0]], show=True)

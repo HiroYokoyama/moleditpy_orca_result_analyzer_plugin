@@ -12,16 +12,12 @@ import os
 import sys
 import csv
 import json
-import types
 import tempfile
-import importlib.util
 import unittest
 from unittest.mock import MagicMock
 
-
-# ---------------------------------------------------------------------------
-# Stub PyQt6 before importing thermal_analysis
-# ---------------------------------------------------------------------------
+sys.path.insert(0, os.path.dirname(__file__))
+import gui_harness  # noqa: E402
 
 
 class _FakeItem:
@@ -34,71 +30,11 @@ class _FakeItem:
         return self._text
 
 
-def _install_stubs():
-    for name in ["PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui"]:
-        sys.modules.setdefault(name, types.ModuleType(name))
-
-    class _Base:
-        def __init__(self, *a, **k):
-            pass
-
-        def __getattr__(self, n):
-            return MagicMock()
-
-    qtw = sys.modules["PyQt6.QtWidgets"]
-    for cls in [
-        "QDialog",
-        "QVBoxLayout",
-        "QTableWidget",
-        "QHeaderView",
-        "QPushButton",
-        "QCheckBox",
-        "QAbstractItemView",
-        "QFileDialog",
-    ]:
-        setattr(qtw, cls, type(cls, (_Base,), {}))
-    qtw.QTableWidgetItem = _FakeItem
-    qtw.QApplication = MagicMock()
-
-
-_install_stubs()
-
-_PKG_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer")
-)
-
-
-# Load thermal_analysis under a throwaway package so the lazy
-# `from .utils import save_json_atomic` in save_settings resolves to the real
-# utils module WITHOUT executing orca_result_analyzer/__init__ (which imports
-# the full Qt GUI, unavailable under these stubs) and without shadowing the
-# real package for other test files in the suite.
-_PKG = "_thermal_test_pkg"
-
-
-def _preload():
-    if _PKG not in sys.modules:
-        pkg = types.ModuleType(_PKG)
-        pkg.__path__ = [_PKG_DIR]
-        sys.modules[_PKG] = pkg
-    if f"{_PKG}.utils" not in sys.modules:
-        uspec = importlib.util.spec_from_file_location(
-            f"{_PKG}.utils", os.path.join(_PKG_DIR, "utils.py")
-        )
-        umod = importlib.util.module_from_spec(uspec)
-        uspec.loader.exec_module(umod)
-        sys.modules[f"{_PKG}.utils"] = umod
-
-
-_preload()
-
-_SRC = os.path.join(_PKG_DIR, "thermal_analysis.py")
-_spec = importlib.util.spec_from_file_location(f"{_PKG}.thermal_analysis", _SRC)
-T = importlib.util.module_from_spec(_spec)
-T.__package__ = _PKG
-_spec.loader.exec_module(T)
-# Ensure the module's QTableWidgetItem is our capturing fake (in case another
-# test module replaced the shared PyQt6 stub after import).
+# Load thermal_analysis in isolation (Qt stubs swapped in then restored, leaving
+# the shared stubs other test modules rely on untouched).
+T = gui_harness.load_isolated("thermal_analysis")
+# The update_table / copy_table logic asserts on cell text, so give the loaded
+# module a QTableWidgetItem that actually stores it.
 T.QTableWidgetItem = _FakeItem
 
 
