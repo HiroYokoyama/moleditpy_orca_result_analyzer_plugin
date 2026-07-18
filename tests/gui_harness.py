@@ -724,6 +724,7 @@ def _stateful_widgets():
         # Listed in _QTW_BASES too (bond_analysis subclasses QTableWidget);
         # extras are applied after the bases, so the stateful version wins.
         "QTableWidget": _TableWidget,
+        "QTableWidgetItem": _TableItem,
         "QTreeWidget": _TreeWidget,
         "QTreeWidgetItem": _TreeItem,
         "QTreeWidgetItemIterator": _TreeIterator,
