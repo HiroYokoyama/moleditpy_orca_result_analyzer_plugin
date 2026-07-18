@@ -122,12 +122,49 @@ class _Signal:
 
 
 class _StatefulBase(metaclass=_PermissiveMeta):
-    """Base for the stateful widgets: unknown attributes stay permissive."""
+    """Base for the stateful widgets: unknown attributes stay permissive.
+
+    Properties every widget round-trips (tooltip, stylesheet, enabled and
+    visible state) live here rather than on individual stubs — the source reads
+    them back to decide what it rendered, so a MagicMock that forgets loses the
+    assertion. Values are stashed in __dict__ so subclasses need no __init__
+    cooperation.
+    """
 
     def __getattr__(self, attr):
         if attr.startswith("_") or attr in ABSENT_ATTRS:
             raise AttributeError(attr)
         return MagicMock()
+
+    def setToolTip(self, text):
+        self.__dict__["_tooltip"] = "" if text is None else str(text)
+
+    def toolTip(self):
+        return self.__dict__.get("_tooltip", "")
+
+    def setStyleSheet(self, sheet):
+        self.__dict__["_stylesheet"] = "" if sheet is None else str(sheet)
+
+    def styleSheet(self):
+        return self.__dict__.get("_stylesheet", "")
+
+    def setEnabled(self, value):
+        self.__dict__["_enabled"] = bool(value)
+
+    def isEnabled(self):
+        return self.__dict__.get("_enabled", True)
+
+    def setVisible(self, value):
+        self.__dict__["_visible"] = bool(value)
+
+    def isVisible(self):
+        return self.__dict__.get("_visible", True)
+
+    def show(self):
+        self.setVisible(True)
+
+    def hide(self):
+        self.setVisible(False)
 
 
 class _SpinBox(_StatefulBase):
@@ -249,6 +286,54 @@ class _CheckBox(_StatefulBase):
 
     def checkState(self):
         return 2 if self._checked else 0
+
+
+class _FontMetrics:
+    """Just enough QFontMetrics for elision: one character per pixel."""
+
+    def elidedText(self, text, mode, width, *a):
+        text = "" if text is None else str(text)
+        try:
+            width = int(width)
+        except (TypeError, ValueError):
+            return text
+        if width <= 0 or len(text) <= width:
+            return text
+        keep = max(1, width - 1)
+        head = keep // 2
+        tail = keep - head
+        return text[:head] + "…" + (text[-tail:] if tail else "")
+
+    def horizontalAdvance(self, text):
+        return len(str(text))
+
+    def __getattr__(self, name):
+        return MagicMock()
+
+
+class _Label(_StatefulBase):
+    """QLabel stand-in. Also a base class — ElidedLabel subclasses it and calls
+    ``super().setText()``, which the plain stub never defines."""
+
+    def __init__(self, text="", *a, **k):
+        self._text = text if isinstance(text, str) else ""
+        self._width = 200
+
+    def setText(self, t):
+        self._text = "" if t is None else str(t)
+
+    def text(self):
+        return self._text
+
+    def fontMetrics(self):
+        return _FontMetrics()
+
+    def width(self):
+        return self._width
+
+    def setFixedWidth(self, w):
+        if isinstance(w, int):
+            self._width = w
 
 
 class _Button(_StatefulBase):
@@ -632,6 +717,8 @@ def _stateful_widgets():
         # Listed in _QTW_BASES too (ResetSlider subclasses it); the extras are
         # applied after the bases, so this stateful version wins.
         "QSlider": _Slider,
+        # QLabel is in _QTW_BASES too (ElidedLabel subclasses it).
+        "QLabel": _Label,
         "QPushButton": _Button,
         "QToolButton": _Button,
         # Listed in _QTW_BASES too (bond_analysis subclasses QTableWidget);

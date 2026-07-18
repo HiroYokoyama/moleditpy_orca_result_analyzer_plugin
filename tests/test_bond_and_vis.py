@@ -165,10 +165,35 @@ class TestBondDialog(_BondCase):
         self.assertEqual(dlg._coords(), [])
 
     def test_the_halo_scales_with_the_element(self):
-        atoms = ["O", "H", "H"]
-        self.assertGreater(
-            self.dlg._halo_radius(0, atoms), self.dlg._halo_radius(1, atoms)
-        )
+        # Pin the radius source: RDKit is optional, and without it _vdw()
+        # returns the same fallback for every element, so a bare O-vs-H
+        # comparison would tie on a machine that lacks it.
+        table = MagicMock()
+        table.GetRvdw.side_effect = lambda sym: {"O": 1.52, "H": 1.20}[sym]
+        with patch.object(B, "_PERIODIC_TABLE", table):
+            atoms = ["O", "H", "H"]
+            self.assertGreater(
+                self.dlg._halo_radius(0, atoms), self.dlg._halo_radius(1, atoms)
+            )
+
+    def test_the_halo_is_a_fraction_of_the_vdw_radius(self):
+        table = MagicMock()
+        table.GetRvdw.return_value = 1.52
+        with patch.object(B, "_PERIODIC_TABLE", table):
+            self.assertAlmostEqual(
+                self.dlg._halo_radius(0, ["O"]), 1.52 * B._VDW_FRACTION
+            )
+
+    def test_a_radius_lookup_failure_falls_back(self):
+        table = MagicMock()
+        table.GetRvdw.side_effect = RuntimeError("unknown element")
+        with patch.object(B, "_PERIODIC_TABLE", table):
+            self.assertAlmostEqual(B._vdw("Xx"), 1.70)
+
+    def test_without_rdkit_every_element_uses_the_default(self):
+        with patch.object(B, "_PERIODIC_TABLE", None):
+            self.assertAlmostEqual(B._vdw("O"), 1.70)
+            self.assertAlmostEqual(B._vdw("H"), 1.70)
 
     def test_an_out_of_range_atom_gets_a_default_halo(self):
         self.assertGreater(self.dlg._halo_radius(99, ["O"]), 0)
