@@ -23,8 +23,10 @@ run time while the shared stubs the other tests depend on are left untouched.
 """
 
 import os
+import re
 import sys
 import types
+import importlib
 import importlib.util
 from unittest.mock import MagicMock
 
@@ -226,6 +228,43 @@ class _CheckBox(_StatefulBase):
         return 2 if self._checked else 0
 
 
+class _Slider(_StatefulBase):
+    """Stateful QSlider. Also serves as a base class — ResetSlider subclasses it."""
+
+    def __init__(self, *a, **k):
+        self._value = 0
+        self._min, self._max = -100, 100
+        self.valueChanged = _Signal()
+        self.sliderReleased = _Signal()
+        self.sliderMoved = _Signal()
+
+    def setRange(self, lo, hi):
+        self._min, self._max = lo, hi
+        self._value = min(max(self._value, lo), hi)
+
+    def setMinimum(self, lo):
+        self._min = lo
+
+    def setMaximum(self, hi):
+        self._max = hi
+
+    def minimum(self):
+        return self._min
+
+    def maximum(self):
+        return self._max
+
+    def setValue(self, v):
+        self._value = min(max(v, self._min), self._max)
+
+    def value(self):
+        return self._value
+
+    # Subclasses override these Qt event hooks; keep them harmless.
+    def mouseDoubleClickEvent(self, event):
+        return None
+
+
 class _LineEdit(_StatefulBase):
     def __init__(self, *a, **k):
         self._text = a[0] if a and isinstance(a[0], str) else ""
@@ -315,6 +354,9 @@ def _stateful_widgets():
         "QCheckBox": _CheckBox,
         "QRadioButton": _CheckBox,
         "QLineEdit": _LineEdit,
+        # Listed in _QTW_BASES too (ResetSlider subclasses it); the extras are
+        # applied after the bases, so this stateful version wins.
+        "QSlider": _Slider,
     }
 
 
@@ -421,6 +463,73 @@ def _pyvista_module():
         return MagicMock()
 
 
+class qt_available:
+    """Context manager making ``PyQt6.QtWidgets`` importable *at call time*.
+
+    ``load_isolated`` restores sys.modules once a module is imported, but some
+    methods import Qt lazily inside the function body (e.g.
+    ``from PyQt6.QtWidgets import QInputDialog`` in save_custom_preset). Wrap
+    such calls in this to install a stub package for the duration, optionally
+    overriding individual names::
+
+        with gui_harness.qt_available(QInputDialog=fake):
+            dialog.save_custom_preset()
+    """
+
+    _KEYS = ("PyQt6", "PyQt6.QtWidgets", "PyQt6.QtCore", "PyQt6.QtGui")
+
+    def __init__(self, **overrides):
+        self._overrides = overrides
+
+    def __enter__(self):
+        self._saved = {k: sys.modules.get(k, _SENTINEL) for k in self._KEYS}
+
+        pkg = types.ModuleType("PyQt6")
+        pkg.__path__ = []
+        widgets = _fresh_module(
+            "PyQt6.QtWidgets", _QTW_BASES, _make_widget, extra=_stateful_widgets()
+        )
+        core = _fresh_module("PyQt6.QtCore", _QTC_BASES, _make_widget)
+        gui = _fresh_module("PyQt6.QtGui", [], _make_widget,
+                            extra={"QColor": QColorStub})
+        for name, value in self._overrides.items():
+            setattr(widgets, name, value)
+        pkg.QtWidgets, pkg.QtCore, pkg.QtGui = widgets, core, gui
+
+        sys.modules.update(
+            {
+                "PyQt6": pkg,
+                "PyQt6.QtWidgets": widgets,
+                "PyQt6.QtCore": core,
+                "PyQt6.QtGui": gui,
+            }
+        )
+        return widgets
+
+    def __exit__(self, *exc):
+        for k, v in self._saved.items():
+            if v is _SENTINEL:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+        return False
+
+
+def _plugin_version():
+    """PLUGIN_VERSION read straight from the package source.
+
+    Parsed rather than imported so we don't execute the real __init__, which
+    would drag in the whole plugin (and a live Qt).
+    """
+    init_py = os.path.join(_PKG_DIR, "__init__.py")
+    try:
+        with open(init_py, encoding="utf-8") as fh:
+            m = re.search(r"""PLUGIN_VERSION\s*=\s*['"](.+?)['"]""", fh.read())
+        return m.group(1) if m else "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
 _load_counter = [0]
 
 # sys.modules keys we swap for the duration of an isolated load.
@@ -472,6 +581,10 @@ def load_isolated(modname):
     pkg_name = f"_ora_iso_{_load_counter[0]}"
     pkg = types.ModuleType(pkg_name)
     pkg.__path__ = [_PKG_DIR]
+    # Some modules do `from . import PLUGIN_VERSION`. The throwaway package
+    # deliberately never executes the real __init__ (it pulls in the whole
+    # plugin), so mirror the package-level constants it exposes.
+    pkg.PLUGIN_VERSION = _plugin_version()
     sys.modules[pkg_name] = pkg
     try:
         spec = importlib.util.spec_from_file_location(
