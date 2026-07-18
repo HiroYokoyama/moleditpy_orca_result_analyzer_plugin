@@ -240,8 +240,74 @@ class _LineEdit(_StatefulBase):
         return self._text
 
 
+class _LayoutItem:
+    def __init__(self, widget=None, layout=None):
+        self._w, self._l = widget, layout
+
+    def widget(self):
+        return self._w
+
+    def layout(self):
+        return self._l
+
+
+class _Layout(_StatefulBase):
+    """Stateful layout stub.
+
+    Dialogs rebuild dynamic panels with the standard Qt idiom::
+
+        while layout.count():
+            layout.takeAt(0)
+
+    A MagicMock ``count()`` is always truthy, so that loop never terminates.
+    Tracking the child list keeps it finite, exactly as real Qt does.
+    """
+
+    def __init__(self, *a, **k):
+        self._items = []
+
+    def addWidget(self, w, *a, **k):
+        self._items.append(_LayoutItem(widget=w))
+
+    def addLayout(self, lay, *a, **k):
+        self._items.append(_LayoutItem(layout=lay))
+
+    def insertWidget(self, i, w, *a, **k):
+        self._items.insert(i, _LayoutItem(widget=w))
+
+    # Stretches and spacers occupy a slot in Qt too, so they must be counted.
+    def addStretch(self, *a, **k):
+        self._items.append(_LayoutItem())
+
+    def addSpacing(self, *a, **k):
+        self._items.append(_LayoutItem())
+
+    def addItem(self, *a, **k):
+        self._items.append(_LayoutItem())
+
+    def addRow(self, *a, **k):
+        self._items.append(_LayoutItem(widget=a[-1] if a else None))
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def removeWidget(self, w):
+        self._items = [it for it in self._items if it.widget() is not w]
+
+
 def _stateful_widgets():
     return {
+        "QVBoxLayout": _Layout,
+        "QHBoxLayout": _Layout,
+        "QGridLayout": _Layout,
+        "QFormLayout": _Layout,
+        "QStackedLayout": _Layout,
         "QSpinBox": _SpinBox,
         "QDoubleSpinBox": _SpinBox,
         "QComboBox": _ComboBox,
@@ -282,6 +348,66 @@ def _fresh_module(name, bases, base_factory, extra=None):
     return mod
 
 
+_real_cache = {}
+
+
+def _is_stub(obj):
+    """True if *obj* is a MagicMock (instance or class), i.e. not the real thing."""
+    if isinstance(obj, MagicMock):
+        return True
+    return isinstance(obj, type) and issubclass(obj, MagicMock)
+
+
+def _looks_real(mod, required):
+    """True if *mod* exposes every name in *required* as a non-stub object."""
+    if mod is None or isinstance(mod, MagicMock):
+        return False
+    for attr in required:
+        if not hasattr(mod, attr) or _is_stub(getattr(mod, attr)):
+            return False
+    return True
+
+
+def _real_tree(root, wanted):
+    """Genuine ``root`` package and submodules, bypassing any test stub.
+
+    Several test modules install permanent fakes for numpy/matplotlib into the
+    shared ``sys.modules`` — a numpy whose only attribute is ``array``, a
+    ``matplotlib.figure`` whose ``Figure`` is a MagicMock. Modules loaded here
+    do real numerical work and real plotting, so they need the true packages.
+
+    *wanted* maps module name -> attributes that must be present and not stubs.
+    If anything installed fails that check, the whole ``root`` subtree is lifted
+    out of ``sys.modules``, the real packages are imported from disk, and the
+    stubs are put back for whichever test module owns them.
+    """
+    if all(_looks_real(_real_cache.get(n), a) for n, a in wanted.items()):
+        return {n: _real_cache[n] for n in wanted}
+
+    if all(_looks_real(sys.modules.get(n), a) for n, a in wanted.items()):
+        for n in wanted:
+            _real_cache[n] = sys.modules[n]
+        return {n: _real_cache[n] for n in wanted}
+
+    stub_backup = {
+        k: v
+        for k, v in sys.modules.items()
+        if k == root or k.startswith(root + ".")
+    }
+    for k in stub_backup:
+        del sys.modules[k]
+    try:
+        importlib.invalidate_caches()
+        for name in wanted:
+            try:
+                _real_cache[name] = importlib.import_module(name)
+            except Exception:
+                _real_cache[name] = stub_backup.get(name) or MagicMock()
+    finally:
+        sys.modules.update(stub_backup)
+    return {n: _real_cache[n] for n in wanted}
+
+
 def _pyvista_module():
     needed = ("Arrow", "Box", "Sphere", "Line", "PolyData")
     pv = sys.modules.get("pyvista")
@@ -304,6 +430,12 @@ _SWAP_KEYS = [
     "PyQt6.QtGui",
     "matplotlib.backends.backend_qtagg",
     "pyvista",
+    # Other test modules leave permanent numpy/matplotlib fakes behind; the
+    # modules loaded here need the genuine articles to do real numerics.
+    "numpy",
+    "matplotlib",
+    "matplotlib.figure",
+    "matplotlib.ticker",
 ]
 
 
@@ -321,6 +453,17 @@ def load_isolated(modname):
             "matplotlib.backends.backend_qtagg", _BACKEND_BASES, _make_widget),
         "pyvista": _pyvista_module(),
     }
+    swapped.update(_real_tree("numpy", {"numpy": ("linspace", "exp", "zeros_like")}))
+    swapped.update(
+        _real_tree(
+            "matplotlib",
+            {
+                "matplotlib": ("use",),
+                "matplotlib.figure": ("Figure",),
+                "matplotlib.ticker": ("MaxNLocator",),
+            },
+        )
+    )
     saved = {k: sys.modules.get(k, _SENTINEL) for k in _SWAP_KEYS}
     for k, v in swapped.items():
         sys.modules[k] = v
