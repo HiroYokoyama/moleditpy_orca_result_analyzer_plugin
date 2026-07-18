@@ -51,6 +51,18 @@ def _noop(self, *a, **k):
     return None
 
 
+# Attribute names the widget stubs must report as genuinely absent.
+#
+# Real Qt widgets raise AttributeError for a name that was never assigned, and
+# the source relies on that: several modules lazily initialise state with
+# ``getattr(self, "x", None) is None`` guards. The permissive ``__getattr__``
+# below would hand those guards a MagicMock and the initialisation would be
+# skipped, so names registered here raise AttributeError instead.
+ABSENT_ATTRS = {
+    "scaling_factor",
+}
+
+
 def _make_widget(name):
     ns = {m: _noop for m in _NOOP_METHODS}
 
@@ -64,13 +76,180 @@ def _make_widget(name):
         pass
 
     def __getattr__(self, attr):
-        if attr.startswith("_"):
+        if attr.startswith("_") or attr in ABSENT_ATTRS:
             raise AttributeError(attr)
         return MagicMock()
 
     ns["__init__"] = __init__
     ns["__getattr__"] = __getattr__
     return _PermissiveMeta(name, (object,), ns)
+
+
+# ---------------------------------------------------------------------------
+# Stateful input widgets.
+#
+# The plain stubs above answer every call with a fresh MagicMock, so a dialog
+# that reads back what it wrote (``spin.setValue(3.0)`` then ``spin.value()``)
+# gets a MagicMock and any arithmetic on it explodes. These stand-ins keep real
+# state for the accessors the source actually round-trips, while still
+# tolerating arbitrary cosmetic calls (setFixedWidth, setSuffix, ...).
+#
+# Signals record their connections but do NOT fire on programmatic setters:
+# widgets are wired up mid-``__init__``, so auto-emitting would run slots
+# against half-built dialogs. Tests invoke the slot directly, or call
+# ``signal.emit(...)`` when they want the wiring exercised.
+# ---------------------------------------------------------------------------
+
+
+class _Signal:
+    def __init__(self):
+        self._slots = []
+
+    def connect(self, slot):
+        self._slots.append(slot)
+
+    def disconnect(self, slot=None):
+        if slot is None:
+            self._slots.clear()
+        elif slot in self._slots:
+            self._slots.remove(slot)
+
+    def emit(self, *a):
+        for slot in list(self._slots):
+            slot(*a)
+
+
+class _StatefulBase(metaclass=_PermissiveMeta):
+    """Base for the stateful widgets: unknown attributes stay permissive."""
+
+    def __getattr__(self, attr):
+        if attr.startswith("_") or attr in ABSENT_ATTRS:
+            raise AttributeError(attr)
+        return MagicMock()
+
+
+class _SpinBox(_StatefulBase):
+    def __init__(self, *a, **k):
+        self._value = 0
+        self._min, self._max = -1e18, 1e18
+        self.valueChanged = _Signal()
+        self.editingFinished = _Signal()
+
+    def setRange(self, lo, hi):
+        self._min, self._max = lo, hi
+        self._value = min(max(self._value, lo), hi)
+
+    def setMinimum(self, lo):
+        self._min = lo
+
+    def setMaximum(self, hi):
+        self._max = hi
+
+    def minimum(self):
+        return self._min
+
+    def maximum(self):
+        return self._max
+
+    def setValue(self, v):
+        self._value = min(max(v, self._min), self._max)
+
+    def value(self):
+        return self._value
+
+
+class _ComboBox(_StatefulBase):
+    def __init__(self, *a, **k):
+        self._items = []
+        self._idx = -1
+        self.currentIndexChanged = _Signal()
+        self.currentTextChanged = _Signal()
+        self.activated = _Signal()
+
+    def addItem(self, text, *a):
+        self._items.append(text)
+        if self._idx < 0:
+            self._idx = 0
+
+    def addItems(self, texts):
+        for t in texts:
+            self.addItem(t)
+
+    def clear(self):
+        self._items = []
+        self._idx = -1
+
+    def count(self):
+        return len(self._items)
+
+    def itemText(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else ""
+
+    def setCurrentIndex(self, i):
+        self._idx = i
+
+    def currentIndex(self):
+        return self._idx
+
+    def setCurrentText(self, text):
+        if text in self._items:
+            self._idx = self._items.index(text)
+
+    def currentText(self):
+        return self.itemText(self._idx)
+
+    def findText(self, text):
+        return self._items.index(text) if text in self._items else -1
+
+
+class _CheckBox(_StatefulBase):
+    def __init__(self, *a, **k):
+        self._checked = False
+        self._text = a[0] if a and isinstance(a[0], str) else ""
+        self.toggled = _Signal()
+        self.stateChanged = _Signal()
+        self.clicked = _Signal()
+
+    def setChecked(self, v):
+        self._checked = bool(v)
+
+    def isChecked(self):
+        return self._checked
+
+    def setText(self, t):
+        self._text = t
+
+    def text(self):
+        return self._text
+
+    def checkState(self):
+        return 2 if self._checked else 0
+
+
+class _LineEdit(_StatefulBase):
+    def __init__(self, *a, **k):
+        self._text = a[0] if a and isinstance(a[0], str) else ""
+        self.textChanged = _Signal()
+        self.editingFinished = _Signal()
+        self.returnPressed = _Signal()
+
+    def setText(self, t):
+        self._text = "" if t is None else str(t)
+
+    def text(self):
+        return self._text
+
+
+def _stateful_widgets():
+    return {
+        "QSpinBox": _SpinBox,
+        "QDoubleSpinBox": _SpinBox,
+        "QComboBox": _ComboBox,
+        "QFontComboBox": _ComboBox,
+        "QCheckBox": _CheckBox,
+        "QRadioButton": _CheckBox,
+        "QLineEdit": _LineEdit,
+    }
 
 
 # Widget base classes subclassed anywhere in the source.
@@ -132,7 +311,9 @@ def load_isolated(modname):
     _ensure_module("PyQt6")
 
     swapped = {
-        "PyQt6.QtWidgets": _fresh_module("PyQt6.QtWidgets", _QTW_BASES, _make_widget),
+        "PyQt6.QtWidgets": _fresh_module(
+            "PyQt6.QtWidgets", _QTW_BASES, _make_widget, extra=_stateful_widgets()
+        ),
         "PyQt6.QtCore": _fresh_module("PyQt6.QtCore", _QTC_BASES, _make_widget),
         "PyQt6.QtGui": _fresh_module("PyQt6.QtGui", [], _make_widget,
                                      extra={"QColor": QColorStub}),
