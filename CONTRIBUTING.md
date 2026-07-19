@@ -70,7 +70,8 @@ CI. `tests/gui_harness.py` solves this: `load_isolated("module_name")` loads one
 source module against subclassable Qt stand-ins that keep real state (spin
 boxes, combos, trees, tables remember what you set), then restores the shared
 `sys.modules` so other test modules are unaffected. See `tests/test_nmr_dialog.py`
-for a representative example.
+for a representative example, and [tests/README.md](tests/README.md) for how the
+suite is organised and which sample ORCA files are available.
 
 Two things to watch out for:
 

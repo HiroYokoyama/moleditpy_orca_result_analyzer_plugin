@@ -124,9 +124,11 @@ disables third-party plugin autoload so local runs match CI.
 
 Tests run on Python 3.11–3.13 with no Qt binding installed; the dialogs are
 exercised headlessly through `tests/gui_harness.py`. CI reports coverage on
-every run, with a target of **above 80%**. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for how to write tests against the Qt
-harness.
+every run, with a target of **above 80%**.
+
+See [tests/README.md](tests/README.md) for how the suite is organised, the Qt
+harness, and the sample ORCA files it parses; [CONTRIBUTING.md](CONTRIBUTING.md)
+for the contribution workflow.
 
 ## License Note on Sample Output Files
 
