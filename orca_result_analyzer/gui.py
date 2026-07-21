@@ -767,10 +767,16 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.close()
 
     def closeEvent(self, event):
-        """Ensure all sub-dialogs close when the main analyzer window is closed."""
+        """Ensure all sub-dialogs close when the main analyzer window is closed.
+
+        Accept the event directly instead of calling super().closeEvent():
+        QDialog.closeEvent invokes reject(), and reject() is routed back
+        through close() (so Esc runs this cleanup), which would recurse and
+        leave the window visible. event.accept() closes without re-entering.
+        """
         self._disable_plotter_picking()
         self.close_all_sub_dialogs()
-        super().closeEvent(event)
+        event.accept()
 
     def show_about(self):
         """Show About dialog."""

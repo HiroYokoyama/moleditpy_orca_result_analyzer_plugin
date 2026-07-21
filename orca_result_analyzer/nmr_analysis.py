@@ -2779,7 +2779,9 @@ class NMRDialog(QDialog):
 
         self.save_settings()
         self.clear_atom_labels()
-        super().closeEvent(event)
+        # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
+        # which is routed back through close() and would recurse.
+        event.accept()
 
     def keyPressEvent(self, event):
         """Intercept Enter/Return keys to prevent dialog reset or closure"""

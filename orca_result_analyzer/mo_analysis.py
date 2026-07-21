@@ -1071,7 +1071,9 @@ class MODialog(QDialog):
             plotter.remove_actor("mo_iso_n")
             plotter.render()
 
-        super().closeEvent(event)
+        # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
+        # which is routed back through close() and would recurse.
+        event.accept()
 
     def export_csv(self):
         default_path = get_default_export_path(

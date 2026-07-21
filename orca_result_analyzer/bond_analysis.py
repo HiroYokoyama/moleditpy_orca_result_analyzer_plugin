@@ -388,4 +388,6 @@ class BondAnalysisDialog(QDialog):
 
     def closeEvent(self, event):
         self._clear_highlight()
-        super().closeEvent(event)
+        # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
+        # which is routed back through close() and would recurse.
+        event.accept()

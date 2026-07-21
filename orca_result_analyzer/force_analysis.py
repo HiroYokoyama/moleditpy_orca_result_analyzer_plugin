@@ -1100,9 +1100,9 @@ class ForceViewerDialog(QDialog):
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
             self.graph_dlg = None
-        close_evt = getattr(super(), "closeEvent", None)
-        if close_evt is not None:
-            close_evt(event)
+        # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
+        # which is routed back through close() and would recurse.
+        event.accept()
 
     def load_settings(self):
         if os.path.exists(self.settings_file):

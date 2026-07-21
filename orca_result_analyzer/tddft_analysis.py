@@ -496,7 +496,9 @@ class TDDFTDialog(QDialog):
 
     def closeEvent(self, event):
         self.save_settings()
-        super().closeEvent(event)
+        # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
+        # which is routed back through close() and would recurse.
+        event.accept()
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
