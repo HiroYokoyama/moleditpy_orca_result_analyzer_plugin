@@ -479,7 +479,7 @@ class FrequencyDialog(QDialog):
         self.spectrum_win = None
 
         self.setWindowTitle("Vibrational Frequencies")
-        self.resize(450, 650)
+        self.resize(570, 700)
 
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.init_ui()
