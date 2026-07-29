@@ -1250,7 +1250,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             try:
                 self.conv_graph_dlg.close()
             except Exception:
-                logging.debug("Closing previous convergence graph failed", exc_info=True)
+                logging.debug(
+                    "Closing previous convergence graph failed", exc_info=True
+                )
         self.conv_graph_dlg = ConvergenceGraphDialog(self, scan_steps, current_idx)
         self.conv_graph_dlg.show()
 

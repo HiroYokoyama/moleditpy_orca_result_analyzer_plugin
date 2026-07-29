@@ -2,6 +2,13 @@ import math
 import re
 import logging
 
+#: 1 atomic unit of electric dipole moment (e*a0) in Debye.
+AU_TO_DEBYE = 2.541746473
+
+#: Modes below this magnitude are translations/rotations or numerical noise,
+#: not genuine imaginary frequencies (cm^-1).
+IMAGINARY_FREQ_THRESHOLD = 10.0
+
 
 class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
@@ -958,7 +965,6 @@ class OrcaParser:
                 if len(vec_str) >= 3:
                     x, y, z = float(vec_str[0]), float(vec_str[1]), float(vec_str[2])
 
-                    mag = 0.0
                     mag_au = None
                     mag_debye = None
                     for k in range(idx + 1, min(idx + 7, len(self.lines))):
@@ -971,15 +977,36 @@ class OrcaParser:
                                 else:
                                     mag_au = val
                             except Exception:
-                                logging.debug("Unparseable dipole magnitude line: %r", lk, exc_info=True)
-                    if mag_debye is not None:
-                        mag = mag_debye
-                    elif mag_au is not None:
-                        mag = mag_au
-                    else:
-                        mag = math.sqrt(x * x + y * y + z * z)
+                                logging.debug(
+                                    "Unparseable dipole magnitude line: %r",
+                                    lk,
+                                    exc_info=True,
+                                )
+                    # ORCA prints the components in atomic units (e*a0) and
+                    # the magnitudes separately in both a.u. and Debye. Keep
+                    # them apart: reporting the a.u. vector as Debye put the
+                    # components and the magnitude on different scales.
+                    if mag_au is None:
+                        mag_au = math.sqrt(x * x + y * y + z * z)
+                    if mag_debye is None:
+                        mag_debye = mag_au * AU_TO_DEBYE
 
-                    self.data["dipoles"] = {"vector": (x, y, z), "magnitude": mag}
+                    # Prefer ORCA's own pair of magnitudes for the scale factor
+                    # so the vector stays consistent with what it printed.
+                    if mag_au > 1e-12:
+                        to_debye = mag_debye / mag_au
+                    else:
+                        to_debye = AU_TO_DEBYE
+
+                    self.data["dipoles"] = {
+                        "vector_au": (x, y, z),
+                        "vector_debye": (x * to_debye, y * to_debye, z * to_debye),
+                        "magnitude_au": mag_au,
+                        "magnitude_debye": mag_debye,
+                        # Back-compat aliases (Debye, matching the UI labels).
+                        "vector": (x * to_debye, y * to_debye, z * to_debye),
+                        "magnitude": mag_debye,
+                    }
                     self.data["dipole"] = self.data["dipoles"]
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
@@ -1074,7 +1101,11 @@ class OrcaParser:
                         try:
                             found[label] = (float(nums[-1]), dimensionless)
                         except ValueError:
-                            logging.debug("Unparseable energy component value in line: %r", line, exc_info=True)
+                            logging.debug(
+                                "Unparseable energy component value in line: %r",
+                                line,
+                                exc_info=True,
+                            )
         self.data["energy_components"] = [
             {"label": label, "value": found[label][0], "dimensionless": found[label][1]}
             for _sub, label, _dim in specs
@@ -2169,9 +2200,13 @@ class OrcaParser:
             if "gibbs" in t_data and "electronic_energy" in t_data:
                 t_data["gibbs_corr"] = t_data["gibbs"] - t_data["electronic_energy"]
 
-            # Count imaginary frequencies
+            # Count imaginary frequencies. Unprojected translations/rotations
+            # come through as small negative values; counting those reported a
+            # transition state for a perfectly good minimum.
             freqs = self.data.get("frequencies", [])
-            imaginary_count = sum(1 for f in freqs if f.get("freq", 0) < 0)
+            imaginary_count = sum(
+                1 for f in freqs if f.get("freq", 0) < -IMAGINARY_FREQ_THRESHOLD
+            )
             t_data["imaginary_freq_count"] = imaginary_count
 
             return
@@ -2187,6 +2222,24 @@ class OrcaParser:
                     break
                 except Exception as _e:
                     logging.warning("silenced: %s", _e)
+
+    def _find_intensity_column(self, section_start, wanted, default):
+        """Index of the first column in `wanted` within a spectrum header.
+
+        ORCA's IR/Raman tables carry a "Mode freq ..." header whose columns
+        move between versions. The header names the mode and frequency
+        columns too, so its token positions line up with the data rows.
+        Falls back to `default` when no header is recognized.
+        """
+        for i in range(section_start + 1, min(section_start + 6, len(self.lines))):
+            tokens = self.lines[i].split()
+            if not tokens or tokens[0].lower() != "mode":
+                continue
+            lowered = [t.lower().strip(":") for t in tokens]
+            for name in wanted:
+                if name in lowered:
+                    return lowered.index(name)
+        return default
 
     def parse_frequencies(self):
         self.data["frequencies"] = []
@@ -2247,6 +2300,12 @@ class OrcaParser:
                 ir_start = i
 
         if ir_start != -1:
+            # Locate the km/mol column from the header rather than assuming
+            # position 3: the layout differs between ORCA versions, and a
+            # mismatch used to be swallowed into ir=0.0, which is
+            # indistinguishable from a genuinely IR-inactive mode.
+            ir_col = self._find_intensity_column(ir_start, ("int", "t**2"), default=3)
+
             curr = ir_start + 5
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
@@ -2257,14 +2316,16 @@ class OrcaParser:
                         break  # End of block
 
                 parts = line.split()
-                if len(parts) > 3 and ":" in parts[0]:
+                if len(parts) > ir_col and ":" in parts[0]:
                     try:
                         idx = int(parts[0].replace(":", ""))
-                        inten = float(parts[3])
+                        inten = float(parts[ir_col])
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["ir"] = inten
-                    except Exception as _e:
-                        logging.warning("silenced: %s", _e)
+                    except ValueError:
+                        logging.debug(
+                            "IR row not parsed at column %d: %r", ir_col, line
+                        )
                 curr += 1
 
         # 3. Raman
@@ -2274,6 +2335,10 @@ class OrcaParser:
                 raman_start = i
 
         if raman_start != -1:
+            raman_col = self._find_intensity_column(
+                raman_start, ("activity",), default=2
+            )
+
             curr = raman_start + 5
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
@@ -2284,15 +2349,16 @@ class OrcaParser:
                         break
 
                 parts = line.split()
-                if len(parts) > 2 and ":" in parts[0]:
+                if len(parts) > raman_col and ":" in parts[0]:
                     try:
                         idx = int(parts[0].replace(":", ""))
-                        # Mode Freq Activity ...
-                        act = float(parts[2])
+                        act = float(parts[raman_col])
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["raman"] = act
-                    except Exception as _e:
-                        logging.warning("silenced: %s", _e)
+                    except ValueError:
+                        logging.debug(
+                            "Raman row not parsed at column %d: %r", raman_col, line
+                        )
                 curr += 1
 
         # 4. Normal Modes
@@ -2692,11 +2758,7 @@ class OrcaParser:
 
                     while idx < len(self.lines):
                         l_scf = self.lines[idx].strip()
-                        if (
-                            not l_scf
-                            or "SUCCESS" in l_scf
-                            or "Energy Check" in l_scf
-                        ):
+                        if not l_scf or "SUCCESS" in l_scf or "Energy Check" in l_scf:
                             if trace:
                                 break
                             idx += 1
@@ -2710,7 +2772,11 @@ class OrcaParser:
                                 trace.append({"iter": it_no, "energy": it_en})
                             except Exception:
                                 # ORCA prints '***' for overflow values; skip unparseable lines
-                                logging.debug("Skipping unparseable SCF iteration line: %r", l_scf, exc_info=True)
+                                logging.debug(
+                                    "Skipping unparseable SCF iteration line: %r",
+                                    l_scf,
+                                    exc_info=True,
+                                )
                         idx += 1
 
                     if trace:

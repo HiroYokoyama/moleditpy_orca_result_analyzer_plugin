@@ -279,8 +279,29 @@ class TestParseDipole(unittest.TestCase):
         import math
 
         p = _parse_method(_DIPOLE_NO_MAG_LINE, "parse_dipole")
-        expected = math.sqrt(0.0 + 0.0 + 1.85468**2)
-        self.assertAlmostEqual(p.data["dipole"]["magnitude"], expected, places=4)
+        # Components are atomic units; without a printed magnitude the a.u.
+        # norm is derived from them and converted for the Debye fields.
+        expected_au = math.sqrt(0.0 + 0.0 + 1.85468**2)
+        self.assertAlmostEqual(p.data["dipole"]["magnitude_au"], expected_au, places=4)
+        self.assertAlmostEqual(
+            p.data["dipole"]["magnitude"], expected_au * 2.541746473, places=4
+        )
+
+    def test_components_are_atomic_units_and_debye_is_derived(self):
+        """ORCA prints the vector in a.u. and the magnitude in Debye; the two
+        used to be shown side by side under one unit label."""
+        p = _parse_method(_DIPOLE_NO_MAG_LINE, "parse_dipole")
+        d = p.data["dipole"]
+        self.assertAlmostEqual(d["vector_au"][2], 1.85468, places=5)
+        self.assertAlmostEqual(d["vector_debye"][2], 1.85468 * 2.541746473, places=4)
+
+    def test_debye_vector_is_consistent_with_debye_magnitude(self):
+        import math
+
+        p = _parse_method(_DIPOLE_NO_MAG_LINE, "parse_dipole")
+        d = p.data["dipole"]
+        norm = math.sqrt(sum(c * c for c in d["vector_debye"]))
+        self.assertAlmostEqual(norm, d["magnitude_debye"], places=4)
 
     def test_no_dipole(self):
         p = _parse_method("  FINAL SINGLE POINT ENERGY   -76.0\n", "parse_dipole")
@@ -292,7 +313,7 @@ class TestParseDipole(unittest.TestCase):
             "Total Dipole Moment    :    0.00000   0.00000   1.23456\n"
         )
         p = _parse_method(content, "parse_dipole")
-        self.assertAlmostEqual(p.data["dipole"]["vector"][2], 1.23456, places=4)
+        self.assertAlmostEqual(p.data["dipole"]["vector_au"][2], 1.23456, places=4)
 
 
 # ---------------------------------------------------------------------------

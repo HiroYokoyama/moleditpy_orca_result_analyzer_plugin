@@ -109,7 +109,23 @@ class TestConstruction(_TDDFTCase):
         self.dlg.spin_sigma.setValue(3000.0)
         self.dlg.combo_sigma_unit.setCurrentIndex(0)
         self.dlg.update_spectrum_sigma()
-        self.assertAlmostEqual(self.dlg.spectrum.sigma, 3000.0 / 2.355)
+        self.assertAlmostEqual(self.dlg.spectrum.sigma, 3000.0 / T.FWHM_TO_SIGMA)
+
+    def test_the_rendered_band_actually_has_the_requested_fwhm(self):
+        """SpectrumWidget's lineshape is exp(-((x-x0)/sigma)^2), so the
+        conversion factor is 2*sqrt(ln2)=1.6651, not the Gaussian-distribution
+        2.355. Using the latter made every band sqrt(2) too narrow."""
+        import math
+
+        fwhm = 3000.0
+        self.dlg.spin_sigma.setValue(fwhm)
+        self.dlg.combo_sigma_unit.setCurrentIndex(0)
+        self.dlg.update_spectrum_sigma()
+
+        sigma = self.dlg.spectrum.sigma
+        # Half maximum of exp(-((x)/sigma)^2) is at x = sigma*sqrt(ln 2).
+        half_width = sigma * math.sqrt(math.log(2))
+        self.assertAlmostEqual(2 * half_width, fwhm, places=6)
 
     def test_no_excitations_still_constructs(self):
         dlg = T.TDDFTDialog(self.host, [])
@@ -253,7 +269,7 @@ class TestSigmaUnits(_TDDFTCase):
         self.dlg.spin_sigma.setValue(1.0)
         self.dlg.combo_sigma_unit.setCurrentIndex(1)  # eV
         self.dlg.update_spectrum_sigma()
-        self.assertAlmostEqual(self.dlg.spectrum.sigma, 8065.544 / 2.355)
+        self.assertAlmostEqual(self.dlg.spectrum.sigma, 8065.544 / T.FWHM_TO_SIGMA)
 
     def test_switching_to_ev_rescales_the_displayed_value(self):
         self.dlg.spin_sigma.setValue(8065.544)

@@ -56,6 +56,49 @@ from matplotlib.ticker import MaxNLocator
 from .nmr_custom_ref_dialog import CustomReferenceDialog
 from . import PLUGIN_VERSION
 
+# Built-in shielding references, shared by __init__ and save_settings (which
+# subtracts them to work out which entries the user added). They were once
+# duplicated verbatim in both places, so editing one silently reclassified a
+# built-in as a custom reference.
+#
+# Shifts are δ = δ_ref + (σ_ref − σ_sample), so for one nucleus every entry
+# must satisfy the same δ_ref + σ_ref: that sum IS the absolute shielding of
+# the δ=0 point, and the alternative reference compounds are just different
+# parameterizations of it. The values below are anchored on TMS (1H, 13C) and
+# CH3NO2 (15N) and made exactly consistent with it.
+#
+# These are absolute shieldings and therefore method-dependent. They are
+# reasonable for a common GIAO/DFT setup, but for quantitative work compute
+# the reference at the same level of theory as the sample and enter it
+# through "Custom".
+DEFAULT_REFERENCE_STANDARDS = {
+    "1H": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "TMS": {"delta_ref": 0.0, "sigma_ref": 31.80},
+        "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.54},
+        "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.30},
+    },
+    "13C": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "TMS": {"delta_ref": 0.0, "sigma_ref": 182.40},
+        "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.24},
+        "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.88},
+    },
+    "15N": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.80},
+        "NH3": {"delta_ref": -381.90, "sigma_ref": 246.10},
+    },
+    "31P": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.40},
+    },
+    "19F": {
+        "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
+        "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.50},
+    },
+}
+
 
 class NMRDialog(QDialog):
     """Enhanced NMR Chemical Shielding Dialog with Spectrum"""
@@ -243,39 +286,11 @@ class NMRDialog(QDialog):
 
         self.last_ref_name = None
 
-        # Reference standards database (delta = reference position, sigma = isotropic shielding)
-        # Chemical shift formula: δ_sample = δ_ref + (σ_ref - σ_sample)
+        # Reference standards (delta = reference position, sigma = isotropic
+        # shielding). Chemical shift: δ_sample = δ_ref + (σ_ref - σ_sample)
         self.reference_standards = {
-            "1H": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 31.8},
-                "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.5},
-                "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0},
-            },
-            "13C": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 182.4},
-                "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.2},
-                "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.9},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0},
-            },
-            "15N": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.8},
-                "NH3": {"delta_ref": -381.9, "sigma_ref": 244.4},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0},
-            },
-            "31P": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0},
-            },
-            "19F": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5},
-                "Custom": {"delta_ref": 0.0, "sigma_ref": 0.0},
-            },
+            nucleus: dict(refs, Custom={"delta_ref": 0.0, "sigma_ref": 0.0})
+            for nucleus, refs in DEFAULT_REFERENCE_STANDARDS.items()
         }
 
         # Current reference values
@@ -647,9 +662,7 @@ class NMRDialog(QDialog):
             # save path: the next save would otherwise silently replace
             # every previously saved merge with the empty list.
             try:
-                os.replace(
-                    self.merged_peaks_file, self.merged_peaks_file + ".corrupt"
-                )
+                os.replace(self.merged_peaks_file, self.merged_peaks_file + ".corrupt")
             except OSError:
                 pass
             return
@@ -680,33 +693,7 @@ class NMRDialog(QDialog):
                 logging.warning("silenced: %s", _e)
 
         # Extract custom references only (non-default)
-        default_standards = {
-            "1H": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 31.8},
-                "CDCl3": {"delta_ref": 7.26, "sigma_ref": 24.5},
-                "DMSO-d6": {"delta_ref": 2.50, "sigma_ref": 29.3},
-            },
-            "13C": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "TMS": {"delta_ref": 0.0, "sigma_ref": 182.4},
-                "CDCl3": {"delta_ref": 77.16, "sigma_ref": 105.2},
-                "DMSO-d6": {"delta_ref": 39.52, "sigma_ref": 142.9},
-            },
-            "15N": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "CH3NO2": {"delta_ref": 0.0, "sigma_ref": -135.8},
-                "NH3": {"delta_ref": -381.9, "sigma_ref": 244.4},
-            },
-            "31P": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "H3PO4 (85%)": {"delta_ref": 0.0, "sigma_ref": 328.4},
-            },
-            "19F": {
-                "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},
-                "CFCl3": {"delta_ref": 0.0, "sigma_ref": 188.5},
-            },
-        }
+        default_standards = DEFAULT_REFERENCE_STANDARDS
 
         custom_refs = {}
         for nucleus, refs in self.reference_standards.items():
@@ -812,6 +799,12 @@ class NMRDialog(QDialog):
         self.combo_ref.setMinimumWidth(250)
         self.combo_ref.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.combo_ref.setToolTip(
+            "Built-in σ_ref values are absolute shieldings and therefore depend "
+            "on the functional and basis set.\nFor quantitative shifts, compute "
+            "the reference at the same level of theory as this job and enter it "
+            "under “Custom”."
         )
         self.combo_ref.currentIndexChanged.connect(self.on_ref_change)
         ref_sel_row.addWidget(self.combo_ref)
@@ -2453,9 +2446,12 @@ class NMRDialog(QDialog):
 
                 for pid, j_list in partner_j_values.items():
                     n_partner = partner_multiplicity[pid]
-                    n_current = len(atom_indices)
-                    total_connections = n_current * n_partner
-                    avg_J = sum(j_list) / total_connections
+                    # Average over the couplings ORCA actually printed, not
+                    # over the theoretical pair count: it commonly reports a
+                    # subset (nucleus selection, symmetry-unique pairs), and
+                    # dividing by the full count scaled J down towards zero
+                    # and collapsed the multiplet.
+                    avg_J = sum(j_list) / len(j_list)
                     if avg_J > 0.1:
                         couplings_list.append((avg_J, n_partner))
 
