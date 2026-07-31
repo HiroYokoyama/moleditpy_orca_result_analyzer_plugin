@@ -53,8 +53,10 @@ DEFAULT_COLORS = [
 
 STYLES = ["Surface", "Wireframe", "Points"]
 
-# Slot defaults when the MO table has no selection to inherit.
-DEFAULT_TAGS = ["HOMO", "LUMO", "LUMO+1", "HOMO-1"]
+# What each slot opens on, in this order. Also what an unassigned slot shows,
+# so a slot that is merely switched off still names a useful orbital rather
+# than whichever one happens to sit at the top of the table.
+DEFAULT_TAGS = ["HOMO", "LUMO", "HOMO-1", "LUMO+1"]
 
 
 def contrast_text(hex_c):
@@ -261,20 +263,25 @@ class MOCompareDialog(QDialog):
         else:
             self.opened_from_selection = True
         positions = {key: i for i, (_l, key, _d, _t) in enumerate(self.orbitals)}
+        # A slot with nothing assigned still has to show something. Left alone
+        # its combo sits on row 0, the highest-numbered virtual orbital, which
+        # is never what someone wants to compare against.
+        defaults = self.default_keys()
 
         # One redraw at the end, not one per widget touched.
         self._suspend += 1
         try:
-            assigned = 0
-            for slot in self.slots:
-                key = keys[assigned] if assigned < len(keys) else None
-                pos = positions.get(key) if key is not None else None
-                if pos is None:
-                    slot.check_on.setChecked(False)
-                    continue
-                slot.combo_mo.setCurrentIndex(pos)
-                slot.check_on.setChecked(True)
-                assigned += 1
+            for i, slot in enumerate(self.slots):
+                key = keys[i] if i < len(keys) else None
+                shown = (
+                    key
+                    if key is not None
+                    else (defaults[i] if i < len(defaults) else None)
+                )
+                pos = positions.get(shown) if shown is not None else None
+                if pos is not None:
+                    slot.combo_mo.setCurrentIndex(pos)
+                slot.check_on.setChecked(key is not None and pos is not None)
         finally:
             self._suspend -= 1
 
@@ -349,6 +356,15 @@ class MOCompareDialog(QDialog):
         self.btn_update.clicked.connect(self.update_view)
         btns.addWidget(self.btn_update)
 
+        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh.setToolTip(
+            "Redraw the orbitals. Anything that rebuilds the 3D scene — "
+            "loading a structure, changing the display style — removes them, "
+            "and this puts them back."
+        )
+        self.btn_refresh.clicked.connect(self.refresh_view)
+        btns.addWidget(self.btn_refresh)
+
         self.btn_sync_iso = QPushButton("Sync Iso from Orbital 1")
         self.btn_sync_iso.setToolTip(
             "Copy Orbital 1's isovalue to the other slots, so the lobes are "
@@ -394,6 +410,20 @@ class MOCompareDialog(QDialog):
             self.update_view()
         else:
             self.render_all()
+
+    def refresh_view(self):
+        """Redraw the orbitals on demand.
+
+        Anything that rebuilds the host's scene drops the actors, and this
+        dialog gets no say in when that happens, so there has to be a way to
+        ask for them back without touching a setting. Runs even while redraws
+        are suspended — this is an explicit request, not a side effect.
+        """
+        suspended, self._suspend = self._suspend, 0
+        try:
+            self.render_all()
+        finally:
+            self._suspend = suspended
 
     def on_live_change(self, *_args):
         """A cheap setting changed: redraw straight away.

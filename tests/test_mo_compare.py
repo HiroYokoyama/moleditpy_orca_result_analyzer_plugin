@@ -490,17 +490,40 @@ class TestDefaultOrbitals(_CompareCase):
     """With nothing selected in the table, the slots open on the frontier."""
 
     def test_the_slots_are_filled_with_the_frontier_orbitals(self):
-        # HOMO=1, LUMO=2, LUMO+1=3, HOMO-1=0 for this fixture.
+        # HOMO=1, LUMO=2, HOMO-1=0, LUMO+1=3 for this fixture.
         self.assertEqual(
             self._shown(self._make_compare()),
-            [(0, "1"), (1, "2"), (2, "3"), (3, "0")],
+            [(0, "1"), (1, "2"), (2, "0"), (3, "3")],
         )
 
     def test_all_four_start_switched_on(self):
         self.assertTrue(all(s.is_on() for s in self._make_compare().slots))
 
-    def test_the_default_order_is_homo_lumo_lumo_plus_one_homo_minus_one(self):
-        self.assertEqual(CMP.DEFAULT_TAGS, ["HOMO", "LUMO", "LUMO+1", "HOMO-1"])
+    def test_the_default_order_is_homo_lumo_homo_minus_one_lumo_plus_one(self):
+        self.assertEqual(CMP.DEFAULT_TAGS, ["HOMO", "LUMO", "HOMO-1", "LUMO+1"])
+
+    def test_an_unassigned_slot_still_shows_a_frontier_orbital(self):
+        """With one row selected in the table only slot 1 is assigned; the
+        rest used to sit on row 0, the highest-numbered virtual orbital."""
+        self._select_rows("1")
+        cmp_dlg = self._make_compare()
+        picked = [s.selection()[1] for s in cmp_dlg.slots]
+        self.assertEqual(picked, ["1", "2", "0", "3"])
+
+    def test_those_unassigned_slots_stay_switched_off(self):
+        self._select_rows("1")
+        cmp_dlg = self._make_compare()
+        self.assertEqual(
+            [s.is_on() for s in cmp_dlg.slots], [True, False, False, False]
+        )
+
+    def test_no_slot_opens_on_the_top_row_by_accident(self):
+        """Row 0 is the highest virtual orbital -- never a useful default."""
+        self._select_rows("1")
+        cmp_dlg = self._make_compare()
+        top_row = cmp_dlg.orbitals[0][2]
+        self.assertEqual(top_row, "3")
+        self.assertNotEqual(cmp_dlg.slots[1].selection()[1], top_row)
 
     def test_absent_frontier_tags_leave_their_slots_off(self):
         """A two-orbital job has no LUMO+1 or HOMO-1 to show."""
@@ -869,6 +892,50 @@ class TestSlotColorPicking(_CompareCase):
         cmp_dlg = self._blank_compare()
         cmp_dlg.slots[0].btn_p.setStyleSheet("")
         self.assertEqual(cmp_dlg.slots[0].color("p"), "#ff0000")
+
+
+class TestRefreshButton(_CompareCase):
+    def test_it_redraws_the_orbitals(self):
+        self._write_cube("1")
+        cmp_dlg = self._blank_compare()
+        self._enable(cmp_dlg, 0, "1")
+        _FakeVisualizer.calls = []
+        cmp_dlg.refresh_view()
+        self.assertEqual(len(_FakeVisualizer.calls), 1)
+
+    def test_it_works_even_while_redraws_are_suspended(self):
+        """It is an explicit request, not a side effect of a setting."""
+        self._write_cube("1")
+        cmp_dlg = self._blank_compare()
+        self._enable(cmp_dlg, 0, "1")
+        _FakeVisualizer.calls = []
+        cmp_dlg._suspend += 1
+        try:
+            cmp_dlg.refresh_view()
+        finally:
+            cmp_dlg._suspend -= 1
+        self.assertEqual(len(_FakeVisualizer.calls), 1)
+
+    def test_it_leaves_the_suspend_count_as_it_found_it(self):
+        cmp_dlg = self._blank_compare()
+        cmp_dlg._suspend += 2
+        cmp_dlg.refresh_view()
+        self.assertEqual(cmp_dlg._suspend, 2)
+        cmp_dlg._suspend -= 2
+
+    def test_it_is_harmless_with_nothing_shown(self):
+        cmp_dlg = self._blank_compare()
+        _FakeVisualizer.calls = []
+        cmp_dlg.refresh_view()
+        self.assertEqual(_FakeVisualizer.calls, [])
+
+    def test_the_button_is_wired_to_it(self):
+        cmp_dlg = self._blank_compare()
+        self._write_cube("1")
+        self._enable(cmp_dlg, 0, "1")
+        _FakeVisualizer.calls = []
+        cmp_dlg.btn_refresh.clicked.emit()
+        self.assertEqual(len(_FakeVisualizer.calls), 1)
 
 
 class TestSyncIsovalue(_CompareCase):
