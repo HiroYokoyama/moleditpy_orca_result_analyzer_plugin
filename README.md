@@ -34,6 +34,8 @@ Real-time convergence visualization for SCF energy cycles.
 
 ![MO Analysis](img/mo.png)
 
+![Compare Molecular Orbitals](img/mo_compare.png)
+
 ### 3. Optimization / Scan
 Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
 - **Interactive Graph**: Plot Energy vs. Step. Click points to update the 3D structure.
