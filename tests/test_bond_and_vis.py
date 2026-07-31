@@ -350,9 +350,7 @@ class TestCopySelection(unittest.TestCase):
         self.assertEqual(self._copied(table), "O\tH\t0.9123")
 
     def test_several_rows_are_copied_as_lines(self):
-        table = self._table(
-            {(0, 0): "O", (0, 1): "H", (1, 0): "O", (1, 1): "H2"}
-        )
+        table = self._table({(0, 0): "O", (0, 1): "H", (1, 0): "O", (1, 1): "H2"})
         self.assertEqual(self._copied(table), "O\tH\nO\tH2")
 
     def test_columns_are_ordered_regardless_of_selection_order(self):
@@ -418,8 +416,12 @@ class TestSelection(_BondCase):
 # ---------------------------------------------------------------------------
 
 
-def _cube_text(n_atoms=2, dset_ids=None, dims=(2, 2, 2)):
+def _cube_text(n_atoms=2, dset_ids=None, dims=(2, 2, 2), angstrom=False):
     nx, ny, nz = dims
+    if angstrom:
+        # Gaussian cube convention: a negative voxel count on the NX line
+        # means the grid is already in Angstrom.
+        nx = -nx
     lines = [
         "Cube file",
         "Density",
@@ -432,7 +434,7 @@ def _cube_text(n_atoms=2, dset_ids=None, dims=(2, 2, 2)):
         lines.append(f"    1    1.000000    {float(i):.6f}    0.000000    0.000000")
     if dset_ids is not None:
         lines.append("    " + "    ".join(str(x) for x in dset_ids))
-    values = [f"{v:.5E}" for v in range(nx * ny * nz)]
+    values = [f"{v:.5E}" for v in range(abs(nx) * ny * nz)]
     for i in range(0, len(values), 6):
         lines.append(" " + " ".join(values[i : i + 6]))
     return "\n".join(lines) + "\n"
@@ -515,6 +517,26 @@ class TestGridBuilding(_VisCase):
             self.vis._build_grid(meta)
         # second grid point is one step along x: 0.1 Bohr in Angstrom
         self.assertAlmostEqual(grid.points[1][0], 0.1 * BOHR_TO_ANG, places=6)
+
+    def test_an_angstrom_cube_is_not_converted_again(self):
+        """A negative NX flags Angstrom units; converting anyway inflated the
+        whole isosurface by 1/0.529 = 1.89x."""
+        meta = self.vis._parse_cube(
+            self._write(_cube_text(dims=(2, 2, 2), angstrom=True))
+        )
+        self.assertTrue(meta["is_angstrom"])
+        grid = MagicMock()
+        with patch.object(V, "pv") as pv:
+            pv.StructuredGrid.return_value = grid
+            self.vis._build_grid(meta)
+        self.assertAlmostEqual(grid.points[1][0], 0.1, places=6)
+
+    def test_an_angstrom_cube_still_reports_positive_dims(self):
+        meta = self.vis._parse_cube(
+            self._write(_cube_text(dims=(2, 2, 2), angstrom=True))
+        )
+        self.assertEqual(meta["dims"], (2, 2, 2))
+        self.assertEqual(len(meta["data"]), 8)
 
     def test_every_voxel_reaches_the_grid(self):
         meta = self.vis._parse_cube(self._write(_cube_text(dims=(2, 2, 2))))

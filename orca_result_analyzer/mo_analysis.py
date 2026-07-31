@@ -349,14 +349,22 @@ class MODialog(QDialog):
                 s = "restricted"  # fallback using restricted logic for unknown strings if any
             spin_mos[s].append(mo)
 
+        # HOMO = the highest-indexed occupied orbital, not the occupied
+        # *count* - 1: fractional-occupation output (FOD, natural orbitals)
+        # leaves gaps, and counting labelled a mid-manifold orbital HOMO.
         spin_homo_idx = {}
         for s in spin_mos:
-            n_occ = 0
-            for mo in spin_mos[s]:
-                occ = mo.get("occ", mo.get("occupation", 0.0))
-                if occ > 0.1:
-                    n_occ += 1
-            spin_homo_idx[s] = n_occ - 1
+            occupied = []
+            for i, mo in enumerate(spin_mos[s]):
+                if mo.get("occ", mo.get("occupation", 0.0)) <= 0.1:
+                    continue
+                try:
+                    # "id" may arrive as the string dict key; the display path
+                    # below parses it the same way.
+                    occupied.append(int(mo.get("id", mo.get("index", i))))
+                except (TypeError, ValueError):
+                    occupied.append(i)
+            spin_homo_idx[s] = max(occupied) if occupied else -1
 
         # Display order: Reversed (High Energy Top)
         # We need to sort global list carefully if mixing spins?

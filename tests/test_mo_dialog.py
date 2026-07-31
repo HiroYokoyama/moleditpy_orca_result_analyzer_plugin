@@ -33,9 +33,7 @@ def _restricted():
     """
     return {
         str(i): {"id": i, "energy": e, "occ": occ, "spin": "restricted"}
-        for i, (e, occ) in enumerate(
-            [(-1.0, 2.0), (-0.5, 2.0), (0.2, 0.0), (0.6, 0.0)]
-        )
+        for i, (e, occ) in enumerate([(-1.0, 2.0), (-0.5, 2.0), (0.2, 0.0), (0.6, 0.0)])
     }
 
 
@@ -131,6 +129,24 @@ class TestOrbitalList(_MOCase):
     def test_higher_orbitals_are_numbered_above_lumo(self):
         self.assertIn("LUMO+1", self._labels())
 
+    def test_homo_is_the_highest_occupied_index_not_the_occupied_count(self):
+        """Fractional-occupancy output (FOD, natural orbitals) leaves gaps in
+        the occupied manifold; counting occupied orbitals and subtracting one
+        labelled a mid-manifold orbital HOMO."""
+        mos = {
+            str(i): {"id": i, "energy": e, "occ": occ, "spin": "restricted"}
+            for i, (e, occ) in enumerate(
+                [(-1.0, 2.0), (-0.5, 0.0), (0.2, 1.8), (0.6, 0.0)]
+            )
+        }
+        dlg = self._make(mos)
+        rows = [
+            tuple(dlg.tree.topLevelItem(i).text(c) for c in range(5))
+            for i in range(dlg.tree.topLevelItemCount())
+        ]
+        homo = next(r for r in rows if r[1] == "HOMO")
+        self.assertEqual(homo[0], "2")
+
     def test_occupancy_is_shown_to_two_decimals(self):
         rows = self._rows()
         homo = next(r for r in rows if r[1] == "HOMO")
@@ -149,9 +165,7 @@ class TestOrbitalList(_MOCase):
     def test_hartree_is_derived_when_only_electronvolts_are_given(self):
         mos = {"0": {"energy_ev": -13.6057, "occ": 2.0, "spin": "restricted"}}
         dlg = self._make(mos)
-        self.assertAlmostEqual(
-            float(dlg.tree.topLevelItem(0).text(4)), -0.5, places=4
-        )
+        self.assertAlmostEqual(float(dlg.tree.topLevelItem(0).text(4)), -0.5, places=4)
 
     def test_a_missing_energy_falls_back_to_zero(self):
         mos = {"0": {"occ": 2.0, "spin": "restricted"}}

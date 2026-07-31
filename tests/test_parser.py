@@ -538,6 +538,61 @@ class TestParseTddft(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# TestTddftSummaryTableUnits
+# ---------------------------------------------------------------------------
+
+# The arrow-less summary table (ORCA <= 5) has no eV column: its second
+# column is cm-1, labelled only in a continuation header line. Reading it as
+# eV reported a ~22000 eV excitation whenever the detailed STATE block was
+# missing. The unit is inferred from the wavelength column instead.
+
+_TDDFT_SHORT_TABLE_CM = """\
+ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
+State   Energy  Wavelength   fosc         T2        TX       TY       TZ
+        (cm-1)    (nm)                  (au**2)    (au)     (au)     (au)
+--------------------------------------------------------------------------
+   1   22421.7    446.0   0.012340000   0.05000   0.10000  0.00000  0.00000
+   2   35000.0    285.7   0.250000000   0.90000   0.30000  0.00000  0.00000
+"""
+
+_TDDFT_SHORT_TABLE_EV = """\
+ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS
+State   Energy  Wavelength   fosc         T2        TX       TY       TZ
+         (eV)     (nm)                  (au**2)    (au)     (au)     (au)
+--------------------------------------------------------------------------
+   1      2.780    446.0   0.012340000   0.05000   0.10000  0.00000  0.00000
+"""
+
+
+class TestTddftSummaryTableUnits(unittest.TestCase):
+    def test_a_wavenumber_column_is_not_read_as_electronvolts(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_CM, "parse_tddft")
+        self.assertAlmostEqual(p.data["tddft"][0]["energy_ev"], 2.780, places=2)
+
+    def test_the_wavenumber_column_lands_in_energy_cm(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_CM, "parse_tddft")
+        self.assertAlmostEqual(p.data["tddft"][0]["energy_cm"], 22421.7, places=1)
+
+    def test_the_wavelength_is_kept_verbatim(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_CM, "parse_tddft")
+        self.assertAlmostEqual(p.data["tddft"][0]["energy_nm"], 446.0, places=1)
+
+    def test_the_oscillator_strength_is_read(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_CM, "parse_tddft")
+        self.assertAlmostEqual(p.data["tddft"][0]["osc"], 0.01234, places=5)
+
+    def test_both_states_are_kept_and_sorted(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_CM, "parse_tddft")
+        evs = [s["energy_ev"] for s in p.data["tddft"]]
+        self.assertEqual(len(evs), 2)
+        self.assertEqual(evs, sorted(evs))
+
+    def test_an_electronvolt_column_is_still_read_as_electronvolts(self):
+        p = _parse_method(_TDDFT_SHORT_TABLE_EV, "parse_tddft")
+        self.assertAlmostEqual(p.data["tddft"][0]["energy_ev"], 2.780, places=2)
+
+
+# ---------------------------------------------------------------------------
 # TestParseTrajectory — Optimization Cycles
 # ---------------------------------------------------------------------------
 
@@ -929,9 +984,7 @@ _NBO_HYBRIDS_TWO_BLOCKS = """\
 
 class TestParseNboMultipleBlocks(unittest.TestCase):
     def test_perturbation_uses_last_block(self):
-        p = _parse_method(
-            _NBO_PERTURBATION_TWO_BLOCKS, "parse_nbo_perturbation"
-        )
+        p = _parse_method(_NBO_PERTURBATION_TWO_BLOCKS, "parse_nbo_perturbation")
         rows = p.data["nbo_perturbation"]
         self.assertEqual(len(rows), 1)
         self.assertIn("BD", rows[0]["donor"])

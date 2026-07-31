@@ -1501,7 +1501,10 @@ class OrcaParser:
                 if not line or "---" in line or "Mayer bond" in line:
                     break
                 parts = line.split()
-                if len(parts) >= 4:
+                # QA lives at parts[4], so a >= 4 guard let a short row through
+                # to an IndexError that the blanket handler below swallowed --
+                # the row just vanished from the table with no trace.
+                if len(parts) >= 5:
                     try:
                         idx = int(parts[0])
                         sym = parts[1]
@@ -2033,22 +2036,39 @@ class OrcaParser:
                         # パース失敗行はスキップ
                         logging.debug("Skipping unparseable TDDFT line", exc_info=True)
 
-                # --- パターンB: 矢印なしの短縮フォーマット ---
-                # 例: 1    2.78    446.0    0.001 ...
-                # idx:0     1        2        3
+                # --- Pattern B: short format, no arrow ---
+                #   State  Energy  Wavelength  Value ...
+                #   idx 0     1         2        3
+                # Column 1 is cm-1 in ORCA <= 5 but eV in some layouts, and
+                # both label it only in a second header line. Assuming eV put
+                # a ~22000 eV excitation in the table whenever the detailed
+                # STATE block was absent, so infer the unit from column 2 (nm),
+                # which both layouts agree on.
                 elif len(parts) >= 4 and parts[0].isdigit():
                     try:
                         s_id = int(parts[0])
                         entry = get_state(s_id)
 
-                        # 固定レイアウトと仮定 (State, eV, nm, Value) ※cm-1がない場合が多い
-                        # データ数に応じて推測
                         entry[data_key] = float(parts[3])
 
-                        if entry["energy_ev"] == 0:
-                            entry["energy_ev"] = float(parts[1])
+                        col1 = float(parts[1])
+                        nm = float(parts[2])
                         if entry["energy_nm"] == 0:
-                            entry["energy_nm"] = float(parts[2])
+                            entry["energy_nm"] = nm
+
+                        if nm > 0.1 and col1 > 0:
+                            as_cm = 1e7 / nm
+                            as_ev = 1239.84193 / nm
+                            col1_is_cm = abs(col1 - as_cm) < abs(col1 - as_ev)
+                            if col1_is_cm:
+                                if entry["energy_cm"] == 0:
+                                    entry["energy_cm"] = col1
+                                if entry["energy_ev"] == 0:
+                                    entry["energy_ev"] = as_ev
+                            elif entry["energy_ev"] == 0:
+                                entry["energy_ev"] = col1
+                        elif entry["energy_ev"] == 0:
+                            entry["energy_ev"] = col1
                     except Exception as _e:
                         logging.warning("silenced: %s", _e)
 
@@ -2228,14 +2248,20 @@ class OrcaParser:
 
         ORCA's IR/Raman tables carry a "Mode freq ..." header whose columns
         move between versions. The header names the mode and frequency
-        columns too, so its token positions line up with the data rows.
+        columns too, so its token positions line up with the data rows —
+        but only once inline unit tokens are dropped. The Raman header reads
+        "Mode freq (cm**-1) Activity Depolarization" while its rows carry no
+        unit column, so counting "(cm**-1)" put every lookup one place to the
+        right: Raman activity was read from the depolarization column, and
+        ORCA 4's "Mode freq (cm**-1) T**2 ..." IR header resolved to TX.
+
         Falls back to `default` when no header is recognized.
         """
         for i in range(section_start + 1, min(section_start + 6, len(self.lines))):
             tokens = self.lines[i].split()
             if not tokens or tokens[0].lower() != "mode":
                 continue
-            lowered = [t.lower().strip(":") for t in tokens]
+            lowered = [t.lower().strip(":") for t in tokens if not t.startswith("(")]
             for name in wanted:
                 if name in lowered:
                     return lowered.index(name)

@@ -286,5 +286,50 @@ class TestStickExport(unittest.TestCase):
         self.assertFalse(self.w.save_sticks_csv(os.path.join(blocker, "x.csv")))
 
 
+class TestCurveCsvKeepsNegativeIntensity(unittest.TestCase):
+    """A CD spectrum has negative bands; the export must not flatten them.
+
+    The denormal cleanup compared the signed value against a positive
+    threshold, so every negative point in the exported curve became 0.0 while
+    the on-screen plot stayed correct.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        # Two bands of opposite sign — a minimal bisignate CD couplet.
+        self.w = _widget(
+            [
+                {"energy_nm": 350.0, "rot": 40.0},
+                {"energy_nm": 300.0, "rot": -40.0},
+            ],
+            y_key="rot",
+        )
+        self.w.sigma = 10.0
+
+    def _export(self):
+        path = os.path.join(self.tmp, "cd.csv")
+        self.assertTrue(self.w.save_csv(path))
+        with open(path, encoding="utf-8") as fh:
+            rows = fh.read().splitlines()[1:]
+        return [float(r.split(",")[1]) for r in rows]
+
+    def test_negative_lobe_survives_the_export(self):
+        self.assertLess(min(self._export()), -1.0)
+
+    def test_positive_lobe_survives_the_export(self):
+        self.assertGreater(max(self._export()), 1.0)
+
+    def test_an_all_positive_curve_is_still_cleaned(self):
+        w = _widget([{"energy_nm": 350.0, "osc": 1.0}])
+        w.sigma = 10.0
+        w.x_range = (250.0, 450.0)  # reach out to wings below the threshold
+        path = os.path.join(self.tmp, "abs.csv")
+        self.assertTrue(w.save_csv(path))
+        with open(path, encoding="utf-8") as fh:
+            ys = [float(r.split(",")[1]) for r in fh.read().splitlines()[1:]]
+        self.assertGreaterEqual(min(ys), 0.0)
+        self.assertIn(0.0, ys)  # far wings still collapse to exact zero
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -204,9 +204,7 @@ class TestBasisSetEngine(unittest.TestCase):
         eng = BasisSetEngine([_s_shell(alpha=alpha)])
         pts = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]])
         vals = eng.evaluate_mo_on_grid(0, pts, np.array([1.0]))
-        self.assertAlmostEqual(
-            vals[1] / vals[0], math.exp(-alpha * 1.5**2), places=8
-        )
+        self.assertAlmostEqual(vals[1] / vals[0], math.exp(-alpha * 1.5**2), places=8)
 
     def test_p_shell_order_pz_px_py(self):
         eng = BasisSetEngine([{**_s_shell(), "type": 1}])
@@ -256,6 +254,115 @@ class TestBasisSetEngine(unittest.TestCase):
         self.assertAlmostEqual(
             n_p, (2 * alpha / math.pi) ** 0.75 * math.sqrt(4 * alpha), places=10
         )
+
+
+class TestSphericalShellNormalization(unittest.TestCase):
+    """d/f/g components must be unit normalized and have the right shape.
+
+    The hand-typed angular prefactors these replaced were wrong two ways:
+    the f-shell fed raw polynomial coefficients to components with different
+    Cartesian normalizations (putting the f(z^3) nodal cone at 29 deg instead
+    of 39.2), and the g-shell prefactors disagreed between components (g2 came
+    out ~2x the norm of g1), so g lobes had the wrong relative sizes.
+    """
+
+    @staticmethod
+    def _eng(shell_type):
+        return BasisSetEngine([{**_s_shell(alpha=1.0, coeff=1.0), "type": shell_type}])
+
+    def _component_norms(self, shell_type):
+        """<phi|phi> per component, on a spherical quadrature grid.
+
+        Gauss-Legendre in cos(theta), uniform in phi, and a fine trapezoid in
+        r — the Gaussian decays fast enough that a plain radial grid is well
+        inside the tolerance asserted below.
+        """
+        eng = self._eng(shell_type)
+        n_r, n_t, n_phi = 400, 80, 80
+        r = np.linspace(1e-6, 6.0, n_r)
+        ct, wt = np.polynomial.legendre.leggauss(n_t)
+        phi = np.linspace(0.0, 2 * np.pi, n_phi, endpoint=False)
+        dr = r[1] - r[0]
+        dphi = 2 * np.pi / n_phi
+
+        R, CT, PH = np.meshgrid(r, ct, phi, indexing="ij")
+        ST = np.sqrt(1.0 - CT**2)
+        pts = np.stack(
+            [
+                (R * ST * np.cos(PH)).ravel(),
+                (R * ST * np.sin(PH)).ravel(),
+                (R * CT).ravel(),
+            ],
+            axis=1,
+        )
+        weights = (R**2 * np.broadcast_to(wt[None, :, None], R.shape)).ravel()
+        weights = weights * dr * dphi
+
+        norms = []
+        for i in range(eng.n_basis):
+            c = np.zeros(eng.n_basis)
+            c[i] = 1.0
+            v = eng.evaluate_mo_on_grid(0, pts, c)
+            norms.append(float(np.sum(v * v * weights)))
+        return norms
+
+    def test_d_components_are_unit_normalized(self):
+        for n in self._component_norms(2):
+            self.assertAlmostEqual(n, 1.0, places=4)
+
+    def test_f_components_are_unit_normalized(self):
+        for n in self._component_norms(3):
+            self.assertAlmostEqual(n, 1.0, places=4)
+
+    def test_g_components_are_unit_normalized(self):
+        for n in self._component_norms(4):
+            self.assertAlmostEqual(n, 1.0, places=4)
+
+    def _first_node_deg(self, shell_type, component, lo=0.5, hi=89.5):
+        eng = self._eng(shell_type)
+        c = np.zeros(eng.n_basis)
+        c[component] = 1.0
+        thetas = np.linspace(lo, hi, 20000)
+        pts = np.stack(
+            [
+                np.sin(np.radians(thetas)),
+                np.zeros_like(thetas),
+                np.cos(np.radians(thetas)),
+            ],
+            axis=1,
+        )
+        v = eng.evaluate_mo_on_grid(0, pts, c)
+        crossings = thetas[:-1][np.sign(v[:-1]) != np.sign(v[1:])]
+        return list(crossings)
+
+    def test_f_z3_nodal_cone(self):
+        """f(z^3) changes sign at cos^2(theta) = 3/5."""
+        exact = math.degrees(math.acos(math.sqrt(0.6)))
+        nodes = self._first_node_deg(3, 0)
+        self.assertEqual(len(nodes), 1)
+        self.assertAlmostEqual(nodes[0], exact, places=1)
+
+    def test_g_z4_nodal_cones(self):
+        """g(z^4) has two cones, at cos^2(theta) = (3 +/- 2*sqrt(6/5))/7."""
+        exact = sorted(
+            math.degrees(math.acos(math.sqrt(x)))
+            for x in (
+                (3 + 2 * math.sqrt(1.2)) / 7,
+                (3 - 2 * math.sqrt(1.2)) / 7,
+            )
+        )
+        nodes = sorted(self._first_node_deg(4, 0))
+        self.assertEqual(len(nodes), 2)
+        for got, want in zip(nodes, exact):
+            self.assertAlmostEqual(got, want, places=1)
+
+    def test_f_xyz_is_sign_alternating_across_octants(self):
+        eng = self._eng(3)
+        c = np.zeros(eng.n_basis)
+        c[4] = 1.0  # f(-2) = xyz
+        pts = np.array([[0.7, 0.7, 0.7], [-0.7, 0.7, 0.7]])
+        v = eng.evaluate_mo_on_grid(0, pts, c)
+        self.assertAlmostEqual(v[0], -v[1], places=10)
 
 
 if __name__ == "__main__":

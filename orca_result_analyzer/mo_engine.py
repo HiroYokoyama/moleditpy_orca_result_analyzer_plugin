@@ -157,32 +157,10 @@ class BasisSetEngine:
             [(1.0, (1, 1, 0))],  # d(xy)
         ]
 
-        # Spherical F (7 components)
-        f0_n = 0.240654
-        f1_n = 0.281160
-        f2_n = 0.866025
-        f3_n = 0.369693
-        sph_f = [
-            [
-                (2.0 * f0_n, (0, 0, 3)),
-                (-3.0 * f0_n, (2, 0, 1)),
-                (-3.0 * f0_n, (0, 2, 1)),
-            ],  # z(5z2-3r2)
-            [
-                (4.0 * f1_n, (1, 0, 2)),
-                (-1.0 * f1_n, (3, 0, 0)),
-                (-1.0 * f1_n, (1, 2, 0)),
-            ],  # x(5z2-r2)
-            [
-                (4.0 * f1_n, (0, 1, 2)),
-                (-1.0 * f1_n, (2, 1, 0)),
-                (-1.0 * f1_n, (0, 3, 0)),
-            ],  # y(5z2-r2)
-            [(1.0 * f2_n, (2, 0, 1)), (-1.0 * f2_n, (0, 2, 1))],  # z(x2-y2)
-            [(1.0, (1, 1, 1))],  # xyz
-            [(1.0 * f3_n, (3, 0, 0)), (-3.0 * f3_n, (1, 2, 0))],  # x(x2-3y2)
-            [(3.0 * f3_n, (2, 1, 0)), (-1.0 * f3_n, (0, 3, 0))],  # y(3x2-y2)
-        ]
+        # F-shells are built dynamically below, alongside the G-shells: each
+        # Cartesian component carries its own primitive normalization, so a
+        # single scalar per component distorts any combination that mixes
+        # different (l,m,n) topologies. See _add_f_shell_defs.
 
         # Spherical G (9 components)
         # Using general formulas for real spherical harmonics in terms of Cartesians
@@ -214,11 +192,10 @@ class BasisSetEngine:
             0: cart_s,
             1: cart_p,
             2: sph_d,
-            3: sph_f,
-            # G-shells are added dynamically below
+            # F- and G-shells are added dynamically below
         }
 
-        # Extended factorials for G-shell normalization
+        # Extended factorials for F/G-shell normalization
         self.fact = {0: 1, 1: 1, 2: 2, 3: 6, 4: 24, 5: 120, 6: 720, 7: 5040, 8: 40320}
         self.fact2 = {
             0: 1,
@@ -232,46 +209,117 @@ class BasisSetEngine:
             8: 20922789888000,
         }  # (2n)! values
 
-        # Add G-shells dynamically with proper normalization
+        # Add F- and G-shells dynamically with proper normalization
+        self._add_f_shell_defs()
         self._add_g_shell_defs()
 
-    def _add_g_shell_defs(self):
-        """
-        Generate G-shell (L=4) definitions with correct normalization.
-        Weights are calculated as: w = C_poly * (N_sph_ang / N_cart_ang)
-        where:
-          - C_poly: Coefficient of the Cartesian term in the Real Spherical Harmonic polynomial.
-          - N_sph_ang: Angular normalization factor for the Spherical Harmonic Y_lm.
-          - N_cart_ang: Angular normalization part of the Cartesian Gaussian.
-        """
+    def _get_n_cart_part(self, l, m, n):  # noqa: E741
+        """Angular part of the Cartesian Gaussian normalization.
 
-        # 1. Cartesian Normalization "Parts" (Angular contribution)
-        # N_cart includes a factorial part: sqrt( (2l-1)!! (2m-1)!! (2n-1)!! / ... )
-        # Here derived from standard Gaussian normalization formulas.
-        def get_n_cart_part(l, m, n):  # noqa: E741
-            return np.sqrt(
-                (self.fact[l] * self.fact[m] * self.fact[n])
-                / (self.fact2[l] * self.fact2[m] * self.fact2[n])
+        N_cart includes a factorial part: sqrt( (2l-1)!! (2m-1)!! (2n-1)!! / ... )
+        Here derived from standard Gaussian normalization formulas.
+        """
+        return np.sqrt(
+            (self.fact[l] * self.fact[m] * self.fact[n])
+            / (self.fact2[l] * self.fact2[m] * self.fact2[n])
+        )
+
+    @staticmethod
+    def _odd_double_factorial(k):
+        """(k-1)!! for even k — the 1-D Gaussian moment integral factor."""
+        result = 1.0
+        while k > 1:
+            result *= k - 1
+            k -= 2
+        return result
+
+    def _angular_overlap(self, a, b):
+        """Overlap of two normalized Cartesian Gaussians in the same shell.
+
+        Scaled so a single component overlaps itself as 1.0. The radial part
+        is identical for every component of a shell, so it cancels and the
+        result is independent of the exponent.
+        """
+        moment = 1.0
+        for ka, kb in zip(a, b):
+            k = ka + kb
+            if k % 2:
+                return 0.0  # odd power integrates to zero over all space
+            moment *= self._odd_double_factorial(k)
+        total_l = sum(a)
+        return (
+            (2.0**total_l)
+            * moment
+            * self._get_n_cart_part(*a)
+            * self._get_n_cart_part(*b)
+        )
+
+    def _build_sph_defs(self, polys):
+        """Convert real-solid-harmonic polynomials into component weights.
+
+        Two corrections the old hard-coded tables got wrong:
+
+        1. Each component is evaluated as N_cart(l,m,n) * x^l y^m z^n, and
+           N_cart differs between topologies (N(0,0,3) is N(2,0,1)/sqrt(5)).
+           Feeding the raw polynomial coefficient straight through squashes
+           any component that mixes topologies — it put the f(z^3) nodal cone
+           at 29 degrees instead of 39.2.
+
+        2. The overall scale per component was a hand-typed textbook
+           prefactor. Those were a uniform 8.2x too large across the f-shell
+           and inconsistent *between* g components (g2 came out 2x the norm of
+           g1), so a g orbital's lobes had the wrong relative sizes.
+
+        Normalizing each component against the exact angular overlap fixes
+        both at once and matches the s/p/d shells, which are already unit
+        normalized.
+        """
+        defs = []
+        for poly in polys:
+            # Weight on the normalized-Cartesian basis: divide out N_cart.
+            weights = [
+                (c_poly / self._get_n_cart_part(*lmn), lmn) for c_poly, lmn in poly
+            ]
+            norm_sq = sum(
+                wa * wb * self._angular_overlap(a, b)
+                for wa, a in weights
+                for wb, b in weights
             )
+            scale = 1.0 / np.sqrt(norm_sq) if norm_sq > 0 else 1.0
+            defs.append([(w * scale, lmn) for w, lmn in weights])
+        return defs
 
-        # 2. Spherical Harmonic Normalization Factors (Angular)
-        # Standard normalization for Real Spherical Harmonics.
-        pi_term = 1.0 / np.sqrt(np.pi)
-        sq5 = np.sqrt(5)
-        sq35 = np.sqrt(35)
+    def _add_f_shell_defs(self):
+        """Generate F-shell (L=3) definitions, in ORCA's m order 0,+1,-1,...
 
-        # Factors relative to 1/sqrt(pi)
-        n_sph = {
-            0: (3.0 / 2.0) * pi_term,
-            1: (3.0 / 8.0) * sq5 * pi_term,
-            -1: (3.0 / 8.0) * sq5 * pi_term,
-            2: (3.0 / 4.0) * np.sqrt(5.0 / 2.0) * pi_term,
-            -2: (3.0 / 4.0) * np.sqrt(5.0 / 2.0) * pi_term,
-            3: (3.0 / 8.0) * sq35 * pi_term,
-            -3: (3.0 / 8.0) * sq35 * pi_term,
-            4: (3.0 / 16.0) * sq35 * pi_term,
-            -4: (3.0 / 16.0) * sq35 * pi_term,
-        }
+        Polynomials are the real solid harmonics r^3 * Y_3m written out in
+        Cartesian monomials; _build_sph_defs supplies the normalization.
+        """
+        f_polys = [
+            # f0: z(5z^2 - 3r^2) = 2z^3 - 3x^2 z - 3y^2 z
+            [(2.0, (0, 0, 3)), (-3.0, (2, 0, 1)), (-3.0, (0, 2, 1))],
+            # f1: x(5z^2 - r^2) = 4xz^2 - x^3 - xy^2
+            [(4.0, (1, 0, 2)), (-1.0, (3, 0, 0)), (-1.0, (1, 2, 0))],
+            # f-1: y(5z^2 - r^2) = 4yz^2 - x^2 y - y^3
+            [(4.0, (0, 1, 2)), (-1.0, (2, 1, 0)), (-1.0, (0, 3, 0))],
+            # f2: z(x^2 - y^2)
+            [(1.0, (2, 0, 1)), (-1.0, (0, 2, 1))],
+            # f-2: xyz
+            [(1.0, (1, 1, 1))],
+            # f3: x(x^2 - 3y^2)
+            [(1.0, (3, 0, 0)), (-3.0, (1, 2, 0))],
+            # f-3: y(3x^2 - y^2)
+            [(3.0, (2, 1, 0)), (-1.0, (0, 3, 0))],
+        ]
+
+        self.basis_definitions[3] = self._build_sph_defs(f_polys)
+
+    def _add_g_shell_defs(self):
+        """Generate G-shell (L=4) definitions, in ORCA's m order 0,+1,-1,...
+
+        Polynomials are the real solid harmonics r^4 * Y_4m written out in
+        Cartesian monomials; _build_sph_defs supplies the normalization.
+        """
 
         # Polynomial Definitions (Raw Coefficients of x^l y^m z^n terms)
         # These define the shape of the orbital in terms of Cartesian products.
@@ -303,24 +351,7 @@ class BasisSetEngine:
             [(4.0, (3, 1, 0)), (-4.0, (1, 3, 0))],
         ]
 
-        m_vals = [0, 1, -1, 2, -2, 3, -3, 4, -4]
-
-        sph_g_defs = []
-        for i, poly in enumerate(g_polys):
-            m = m_vals[i]
-            SphNorm = n_sph[m]
-
-            comp_list = []
-            for c_poly, (l, k, j) in poly:  # noqa: E741
-                # Correct weight combines the polynomial coefficient with the
-                # ratio of Spherical vs Cartesian angular normalization.
-                n_cart_topo = get_n_cart_part(l, k, j)
-                weight = c_poly * (SphNorm / n_cart_topo)
-                comp_list.append((weight, (l, k, j)))
-
-            sph_g_defs.append(comp_list)
-
-        self.basis_definitions[4] = sph_g_defs
+        self.basis_definitions[4] = self._build_sph_defs(g_polys)
 
     def _precompute_shells(self):
         """Prepare shell data for fast evaluation"""

@@ -26,7 +26,6 @@ class DipoleDialog(QDialog):
         self.parent_dlg = parent_dlg
         self.dipole_data = dipole_data
         self.arrow_actor = None
-        self.arrow_actor = None
         self.arrow_color = "cyan"
         self.arrow_res = 20
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
@@ -196,7 +195,6 @@ class DipoleDialog(QDialog):
                 self.parent_dlg.mw.plotter.render()
             except Exception as _e:
                 logging.warning("silenced: %s", _e)
-        # Clean up reference in parent
         # Clean up reference in parent
         if hasattr(self.parent_dlg, "dipole_dlg"):
             self.parent_dlg.dipole_dlg = None

@@ -404,9 +404,7 @@ def _real_utils_module():
     of the real implementation. Tests that need the real dict-clearing
     behavior swap this module in for the duration of the test.
     """
-    path = os.path.normpath(
-        os.path.join(_SRC_DIR, "orca_result_analyzer", "utils.py")
-    )
+    path = os.path.normpath(os.path.join(_SRC_DIR, "orca_result_analyzer", "utils.py"))
     spec = importlib.util.spec_from_file_location("orca_result_analyzer.utils", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -443,7 +441,9 @@ class TestDocumentResetHandler(unittest.TestCase):
         try:
             handler()
         except Exception as exc:
-            self.fail(f"document reset handler should not raise without a window: {exc}")
+            self.fail(
+                f"document reset handler should not raise without a window: {exc}"
+            )
 
     def test_handler_survives_window_close_exception(self):
         fake_win = MagicMock()
@@ -533,6 +533,71 @@ class TestReadOrcaFile(unittest.TestCase):
         result, box = self._read_expecting_error(self.tmp)
         self.assertIsNone(result)
         box.critical.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestOpenAnalyzerEmptyReuseBranch
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAnalyzerEmptyReuseBranch(unittest.TestCase):
+    """_open_orca_analyzer_empty() re-shows a registered window instead of
+    rebuilding it, so a closed window MUST have left the registry — otherwise
+    the stale dialog comes back with its plotter picking already torn down.
+
+    The real dialog class is swapped out here; only the branch matters.
+    """
+
+    def setUp(self):
+        self.ctx = StubContext()
+        self.built = []
+
+        def _factory(mw, parser, path, context):
+            win = MagicMock()
+            self.built.append(win)
+            return win
+
+        gui_stub = types.ModuleType("orca_result_analyzer.gui")
+        gui_stub.OrcaResultAnalyzerDialog = _factory
+        utils_stub = types.ModuleType("orca_result_analyzer.utils")
+        utils_stub.clear_atom_color_overrides = MagicMock()
+
+        self._saved = {
+            k: sys.modules.get(k)
+            for k in ("orca_result_analyzer.gui", "orca_result_analyzer.utils")
+        }
+        sys.modules["orca_result_analyzer.gui"] = gui_stub
+        sys.modules["orca_result_analyzer.utils"] = utils_stub
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+    def test_a_first_open_builds_and_registers_a_window(self):
+        _init_mod._open_orca_analyzer_empty(self.ctx)
+        self.assertEqual(len(self.built), 1)
+        self.assertIs(self.ctx.get_window("analyzer"), self.built[0])
+
+    def test_a_registered_window_is_reused_not_rebuilt(self):
+        _init_mod._open_orca_analyzer_empty(self.ctx)
+        _init_mod._open_orca_analyzer_empty(self.ctx)
+        self.assertEqual(len(self.built), 1)
+        self.built[0].show.assert_called()
+
+    def test_a_deregistered_window_is_rebuilt(self):
+        """What closing must enable: the next open gets a live dialog."""
+        _init_mod._open_orca_analyzer_empty(self.ctx)
+        first = self.built[0]
+
+        # gui.closeEvent does exactly this.
+        self.ctx.register_window("analyzer", None)
+
+        _init_mod._open_orca_analyzer_empty(self.ctx)
+        self.assertEqual(len(self.built), 2)
+        self.assertIsNot(self.ctx.get_window("analyzer"), first)
 
 
 if __name__ == "__main__":

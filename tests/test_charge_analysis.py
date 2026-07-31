@@ -75,12 +75,33 @@ def _charges():
             },
         ],
         "NBO": [
-            {"atom_idx": 0, "atom_sym": "O", "charge": -0.5, "core": 2.0,
-             "valence": 6.4, "rydberg": 0.1, "total": 8.5},
-            {"atom_idx": 1, "atom_sym": "H", "charge": 0.25, "core": 0.0,
-             "valence": 0.74, "rydberg": 0.01, "total": 0.75},
-            {"atom_idx": 2, "atom_sym": "H", "charge": 0.25, "core": 0.0,
-             "valence": 0.74, "rydberg": 0.01, "total": 0.75},
+            {
+                "atom_idx": 0,
+                "atom_sym": "O",
+                "charge": -0.5,
+                "core": 2.0,
+                "valence": 6.4,
+                "rydberg": 0.1,
+                "total": 8.5,
+            },
+            {
+                "atom_idx": 1,
+                "atom_sym": "H",
+                "charge": 0.25,
+                "core": 0.0,
+                "valence": 0.74,
+                "rydberg": 0.01,
+                "total": 0.75,
+            },
+            {
+                "atom_idx": 2,
+                "atom_sym": "H",
+                "charge": 0.25,
+                "core": 0.0,
+                "valence": 0.74,
+                "rydberg": 0.01,
+                "total": 0.75,
+            },
         ],
     }
 
@@ -148,9 +169,7 @@ class TestChargeDialog(unittest.TestCase):
         dlg, host = self._dialog()
         dlg.on_scheme_change("Red(-) - Blue(+)")
         dlg.apply_colors()
-        self.assertEqual(
-            len(host.mw.view_3d_manager._plugin_color_overrides), 3
-        )
+        self.assertEqual(len(host.mw.view_3d_manager._plugin_color_overrides), 3)
 
     def test_apply_colors_all_zero_charges(self):
         charges = {"Z": [{"atom_idx": 0, "atom_sym": "C", "charge": 0.0}]}
@@ -232,6 +251,51 @@ class TestChargeDialog(unittest.TestCase):
         dlg.close = MagicMock()
         dlg.reject()
         dlg.close.assert_called_once()
+
+    # -- columns are unioned over all rows, not taken from row 0 -------------
+    # ORCA omits trailing columns for some atoms; keying off the first row
+    # dropped the property from both the table and the export entirely.
+
+    @staticmethod
+    def _ragged():
+        return {
+            "Hirshfeld": [
+                {"atom_idx": 0, "atom_sym": "C", "charge": -0.1},
+                {"atom_idx": 1, "atom_sym": "H", "charge": 0.05, "spin": 0.42},
+                {"atom_idx": 2, "atom_sym": "H", "charge": 0.05},
+            ]
+        }
+
+    def test_a_column_missing_from_the_first_row_still_gets_a_header(self):
+        dlg, _ = self._dialog(charges=self._ragged())
+        headers = [
+            dlg.table.horizontalHeaderItem(c).text()
+            for c in range(dlg.table.columnCount())
+        ]
+        self.assertIn("Spin", headers)
+
+    def test_the_late_column_carries_its_value(self):
+        dlg, _ = self._dialog(charges=self._ragged())
+        headers = [
+            dlg.table.horizontalHeaderItem(c).text()
+            for c in range(dlg.table.columnCount())
+        ]
+        col = headers.index("Spin")
+        self.assertEqual(dlg.table.item(1, col).text(), "0.4200")
+        self.assertEqual(dlg.table.item(0, col).text(), "")
+
+    def test_the_export_header_also_unions_the_columns(self):
+        dlg, _ = self._dialog(charges=self._ragged())
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "ragged.csv")
+            saved = _patch_savedialog(out)
+            try:
+                dlg.export_csv()
+            finally:
+                saved()
+            with open(out, encoding="utf-8") as f:
+                head = f.readline()
+        self.assertIn("spin", head.lower())
 
 
 # ---------------------------------------------------------------------------

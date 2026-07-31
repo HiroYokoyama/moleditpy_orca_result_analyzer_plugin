@@ -773,9 +773,19 @@ class OrcaResultAnalyzerDialog(QDialog):
         QDialog.closeEvent invokes reject(), and reject() is routed back
         through close() (so Esc runs this cleanup), which would recurse and
         leave the window visible. event.accept() closes without re-entering.
+
+        Deregistering is part of the cleanup: picking is installed once in
+        __init__, so a window left in the registry gets re-shown by the
+        Extensions menu with its plotter event filter already removed, and
+        atom clicks stay dead for the rest of the session.
         """
         self._disable_plotter_picking()
         self.close_all_sub_dialogs()
+        if self.context is not None:
+            try:
+                self.context.register_window("analyzer", None)
+            except Exception as exc:  # noqa: BLE001
+                logging.warning("Could not deregister analyzer window: %s", exc)
         event.accept()
 
     def show_about(self):

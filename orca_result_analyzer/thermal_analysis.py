@@ -21,7 +21,6 @@ class ThermalTableDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Thermochemistry")
         self.resize(550, 460)
-        self.resize(550, 460)
         self.data = data
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
 

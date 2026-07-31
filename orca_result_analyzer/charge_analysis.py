@@ -410,8 +410,6 @@ class ChargeDialog(QDialog):
             self.table.setRowCount(0)
             return
 
-        # Determine all available keys from first item
-        first_item = data[0]
         # Always "atom_idx", "atom_sym", "charge"
         # Others might be "spin", "valency", "bonded_valency", "free_valency", "population"
 
@@ -435,11 +433,14 @@ class ChargeDialog(QDialog):
             "lumo_loewdin": "LUMO(L)",
         }
 
-        # Collect other keys present in the data
+        # Collect other keys present in the data. Union over every row, not
+        # just the first: ORCA omits trailing columns for some atoms, and
+        # keying off row 0 alone dropped whole properties from the table.
         other_keys = []
-        for k in first_item.keys():
-            if k not in keys:
-                other_keys.append(k)
+        for item in data:
+            for k in item.keys():
+                if k not in keys and k not in other_keys:
+                    other_keys.append(k)
 
         # Sort or prioritize
         # Make sure standard Mayer order if present: VA, BVA, FA
@@ -662,13 +663,20 @@ class ChargeDialog(QDialog):
             if not data:
                 return
 
-            # Determine headers dynamically
-            first_item = data[0]
+            # Determine headers dynamically, unioned over every row — ORCA
+            # omits trailing columns for some atoms, and keying off row 0
+            # alone dropped whole properties from the export.
+            all_keys = []
+            for item in data:
+                for k in item.keys():
+                    if k not in all_keys:
+                        all_keys.append(k)
+
             # Priorities: atom_idx, atom_sym, charge
             prio = ["atom_idx", "atom_sym", "charge"]
 
-            headers = [k for k in prio if k in first_item]
-            other_keys = [k for k in first_item.keys() if k not in prio]
+            headers = [k for k in prio if k in all_keys]
+            other_keys = [k for k in all_keys if k not in prio]
 
             # Sorting logic for common extra fields
             def sort_key(k):

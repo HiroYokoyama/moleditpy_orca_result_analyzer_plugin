@@ -310,6 +310,96 @@ class TestParseFrequenciesIR(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# TestSpectrumColumnsRealHeaders
+# ---------------------------------------------------------------------------
+
+# The headers above are simplified. Real ORCA writes the frequency unit as an
+# inline "(cm**-1)" token in the Raman header (and in the ORCA 4 IR header),
+# which has no counterpart column in the data rows. Counting it shifted every
+# lookup one place right: Raman activity was read from the depolarization
+# column, and the ORCA 4 IR intensity from TX.
+
+_REAL_FREQ_HEADER = """\
+-----------------------
+VIBRATIONAL FREQUENCIES
+-----------------------
+
+   0:         0.00 cm**-1
+   1:         0.00 cm**-1
+   2:         0.00 cm**-1
+   3:         0.00 cm**-1
+   4:         0.00 cm**-1
+   5:         0.00 cm**-1
+   6:      1623.45 cm**-1
+   7:      3652.84 cm**-1
+"""
+
+_REAL_ORCA5_SPECTRA = (
+    _REAL_FREQ_HEADER
+    + """
+-----------
+IR SPECTRUM
+-----------
+
+ Mode   freq       eps      Int      T**2         TX        TY        TZ
+        cm**-1   L/(mol*cm) km/mol    a.u.
+----------------------------------------------------------------------------
+    6:   1623.45   1.9999   66.66   0.002999   (-0.05  0.01  0.00)
+    7:   3652.84   0.5000   11.11   0.000500   ( 0.02  0.00  0.00)
+
+--------------
+RAMAN SPECTRUM
+--------------
+
+ Mode    freq (cm**-1)   Activity   Depolarization
+-------------------------------------------------
+    6:      1623.45       45.678       0.750
+    7:      3652.84       12.345       0.111
+"""
+)
+
+_REAL_ORCA4_IR = (
+    _REAL_FREQ_HEADER
+    + """
+-----------
+IR SPECTRUM
+-----------
+
+ Mode    freq (cm**-1)   T**2         TX         TY         TZ
+                          (KM/Mole)   (a.u.)     (a.u.)     (a.u.)
+-------------------------------------------------------------------
+    6:   1623.45   66.660000  ( -0.050000   0.010000   0.000000)
+    7:   3652.84   11.110000  (  0.020000   0.000000   0.000000)
+"""
+)
+
+
+class TestSpectrumColumnsRealHeaders(unittest.TestCase):
+    def test_orca5_ir_intensity(self):
+        p = _parse_method(_REAL_ORCA5_SPECTRA, "parse_frequencies")
+        self.assertAlmostEqual(p.data["frequencies"][6]["ir"], 66.66, places=2)
+        self.assertAlmostEqual(p.data["frequencies"][7]["ir"], 11.11, places=2)
+
+    def test_orca5_raman_reads_activity_not_depolarization(self):
+        p = _parse_method(_REAL_ORCA5_SPECTRA, "parse_frequencies")
+        self.assertAlmostEqual(p.data["frequencies"][6]["raman"], 45.678, places=3)
+        self.assertAlmostEqual(p.data["frequencies"][7]["raman"], 12.345, places=3)
+
+    def test_orca4_ir_intensity_not_tx(self):
+        p = _parse_method(_REAL_ORCA4_IR, "parse_frequencies")
+        self.assertAlmostEqual(p.data["frequencies"][6]["ir"], 66.66, places=2)
+        self.assertAlmostEqual(p.data["frequencies"][7]["ir"], 11.11, places=2)
+
+    def test_unit_tokens_ignored_in_header_lookup(self):
+        p = OrcaParser()
+        p.lines = [
+            "RAMAN SPECTRUM",
+            " Mode    freq (cm**-1)   Activity   Depolarization",
+        ]
+        self.assertEqual(p._find_intensity_column(0, ("activity",), default=99), 2)
+
+
+# ---------------------------------------------------------------------------
 # TestParseChargesMayer
 # ---------------------------------------------------------------------------
 
@@ -368,6 +458,22 @@ class TestParseChargesMayer(unittest.TestCase):
     def test_empty_content(self):
         p = _parse_method("", "parse_charges")
         self.assertNotIn("Mayer", p.data["charges"])
+
+    def test_a_truncated_row_does_not_take_out_the_others(self):
+        """QA is parts[4]; a >= 4 guard let a short row reach an IndexError
+        that the blanket handler swallowed, silently losing the row."""
+        content = (
+            "MAYER POPULATION ANALYSIS\n"
+            "---\n"
+            "ATOM    NA    ZA    QA\n"
+            "   0 C     6.0000  6.0000  -0.12345\n"
+            "   1 H     0.8765\n"
+            "   2 H     0.8765  1.0000   0.06172\n"
+            "Mayer bond orders\n"
+        )
+        p = _parse_method(content, "parse_charges")
+        idxs = [e["atom_idx"] for e in p.data["charges"]["Mayer"]]
+        self.assertEqual(idxs, [0, 2])
 
 
 # ---------------------------------------------------------------------------

@@ -439,14 +439,9 @@ class FreqSpectrumWindow(QWidget):
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
     def closeEvent(self, event):
-        # Notify parent that we are closing (optional, effectively done by parent checking .isVisible())
-        # Or we can nullify reference in parent?
-        if self.freq_dialog and hasattr(self.freq_dialog, "spectrum_win"):
-            # Don't nullify, just let it stay?
-            # Better to let parent know we can reopen.
-            # But parent just creates new one or shows existing?
-            # We'll just hide basically.
-            pass
+        # No cleanup of its own: the parent FrequencyDialog keeps the
+        # reference and reuses this window, checking visibility to decide
+        # whether to re-show it.
         super().closeEvent(event)
 
 
