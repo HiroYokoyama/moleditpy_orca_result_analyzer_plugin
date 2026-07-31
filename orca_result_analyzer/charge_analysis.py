@@ -277,7 +277,7 @@ class ChargeDialog(QDialog):
             try:
                 with open(settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         # Prepare charge-specific data
@@ -299,7 +299,7 @@ class ChargeDialog(QDialog):
 
         try:
             save_json_atomic(settings_file, all_settings)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving settings: %s", e)
 
     def toggle_labels(self):
@@ -311,7 +311,7 @@ class ChargeDialog(QDialog):
             for actor in self._charge_labels:
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             self._charge_labels = []
 
@@ -377,7 +377,7 @@ class ChargeDialog(QDialog):
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     delattr(self, "_charge_scalar_bar")
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
             # Remove labels if exist
@@ -385,7 +385,7 @@ class ChargeDialog(QDialog):
                 for actor in self._charge_labels:
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(actor)
-                    except Exception as _e:
+                    except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 self._charge_labels = []
                 self.chk_show_labels.setChecked(False)
@@ -569,7 +569,7 @@ class ChargeDialog(QDialog):
                         for actor in self._charge_labels:
                             try:
                                 self.parent_dlg.mw.plotter.remove_actor(actor)
-                            except Exception as _e:
+                            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                                 logging.warning("silenced: %s", _e)
 
                     self._charge_labels = []
@@ -602,7 +602,7 @@ class ChargeDialog(QDialog):
                 if getattr(self, "_charge_scalar_bar", None) is not None:
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
-                    except Exception as _e:
+                    except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
 
                 # Create dummy mesh for scalar bar
@@ -745,7 +745,7 @@ class ChargeDialog(QDialog):
         if getattr(self, "_charge_scalar_bar", None) is not None:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         # Remove labels
@@ -753,7 +753,7 @@ class ChargeDialog(QDialog):
             for actor in self._charge_labels:
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
         if hasattr(self.parent_dlg.mw, "plotter"):

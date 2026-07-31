@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QComboBox,
     QCheckBox,
+    QMenu,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
@@ -39,7 +40,7 @@ except ImportError:
     try:
         from mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
         from vis import CubeVisualizer
-    except Exception:
+    except ImportError:
         BasisSetEngine = None
         CalcWorker = None
         CubeVisualizer = None
@@ -70,6 +71,7 @@ class MODialog(QDialog):
         self.parent_dlg = parent
         self.last_cube_path = None
         self.generation_queue = []  # Init queue
+        self.generation_force = False  # Overwrite cached cubes for this batch
         self.energy_dlg = None  # Track Energy Diagram
         self.setup_ui()
 
@@ -244,13 +246,16 @@ class MODialog(QDialog):
         # but currentItemChanged covers the "primary" selection change.
         self.tree.itemSelectionChanged.connect(self.on_selection_changed)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_tree_context_menu)
         layout.addWidget(self.tree)
 
         # 3. Action Buttons
         btn_layout = QHBoxLayout()
         self.btn_vis = QPushButton("Visualize Selected")
         self.btn_vis.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
-        self.btn_vis.clicked.connect(self.visualize_selected_mos)
+        # Wrapped: clicked(bool) would otherwise bind `checked` to `force`.
+        self.btn_vis.clicked.connect(lambda: self.visualize_selected_mos())
         self.btn_vis.setEnabled(False)  # Default disabled until selection
         btn_layout.addWidget(self.btn_vis)
 
@@ -396,7 +401,7 @@ class MODialog(QDialog):
             local_idx = -1
             try:
                 local_idx = int(mo_idx_val)
-            except Exception as _e:
+            except (TypeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
             if spin in spin_homo_idx:
@@ -528,7 +533,7 @@ class MODialog(QDialog):
                             # Use key directly
                             if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
-            except Exception as _e:
+            except (KeyError, IndexError) as _e:
                 logging.warning("silenced: %s", _e)
 
         self.btn_vis.setEnabled(has_coeffs)
@@ -604,7 +609,42 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
-    def visualize_selected_mos(self):
+    def show_tree_context_menu(self, pos):
+        """Right-click menu on the orbital table."""
+        selected = self.tree.selectedItems()
+        if not selected:
+            return
+
+        cached = [
+            item
+            for item in selected
+            if (path := self.get_cube_path(item.text(0))) and os.path.exists(path)
+        ]
+
+        menu = QMenu(self.tree)
+        act_vis = menu.addAction(f"Visualize Selected ({len(selected)})")
+        act_regen = menu.addAction(f"Regenerate Cube ({len(selected)}) — overwrite")
+        act_regen.setToolTip(
+            "Recompute the cube even if a file already exists, replacing it."
+        )
+        # Regenerating is only meaningful when something is actually cached;
+        # with no file on disk a plain Visualize already computes it.
+        act_regen.setEnabled(bool(cached))
+
+        viewport = self.tree.viewport()
+        chosen = menu.exec(
+            viewport.mapToGlobal(pos) if viewport else self.tree.mapToGlobal(pos)
+        )
+        if chosen is act_vis:
+            self.visualize_selected_mos()
+        elif chosen is act_regen:
+            self.regenerate_selected_mos()
+
+    def regenerate_selected_mos(self):
+        """Recompute cubes for the selected orbitals, overwriting existing files."""
+        self.visualize_selected_mos(force=True)
+
+    def visualize_selected_mos(self, force=False):
         # Batch generation for selected items
         selected = self.tree.selectedItems()
         if not selected:
@@ -620,6 +660,10 @@ class MODialog(QDialog):
         if not self.generation_queue:
             return
 
+        # Applies to the whole batch; generation is strictly sequential, so a
+        # single flag cannot straddle two different requests.
+        self.generation_force = bool(force)
+
         # Start Batch
         self.process_generation_queue()
 
@@ -632,6 +676,8 @@ class MODialog(QDialog):
             ):
                 self.progress_dialog.close()
                 self.progress_dialog = None
+            # Batch over: a later plain Visualize must use the cache again.
+            self.generation_force = False
             return
 
         # Get next key
@@ -754,12 +800,12 @@ class MODialog(QDialog):
             if not os.path.exists(out_dir):
                 try:
                     os.makedirs(out_dir)
-                except Exception as _e:
+                except OSError as _e:
                     logging.warning("silenced: %s", _e)
 
         self.last_cube_path = out_path
 
-        if os.path.exists(out_path):
+        if os.path.exists(out_path) and not getattr(self, "generation_force", False):
             self.show_cube(out_path)
             # Highlight
             it = QTreeWidgetItemIterator(self.tree)
@@ -856,7 +902,7 @@ class MODialog(QDialog):
             if "background-color:" in style:
                 c_str = style.split("background-color:")[1].split(";")[0].strip()
                 current_col = QColor(c_str)
-        except Exception as _e:
+        except (RuntimeError, AttributeError, IndexError) as _e:
             logging.warning("silenced: %s", _e)
 
         col = QColorDialog.getColor(current_col, self, "Select Color")
@@ -926,7 +972,7 @@ class MODialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         mo_settings = {
@@ -938,7 +984,7 @@ class MODialog(QDialog):
 
         try:
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving settings: %s", e)
 
     def save_preset(self):
@@ -1090,7 +1136,7 @@ class MODialog(QDialog):
         if getattr(self, "energy_dlg", None) is not None and self.energy_dlg:
             try:
                 self.energy_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
             self.energy_dlg = None
 

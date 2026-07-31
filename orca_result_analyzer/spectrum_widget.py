@@ -227,7 +227,7 @@ class SpectrumWidget(QWidget):
                 for i in range(len(display_x)):
                     writer.writerow([display_x[i], curve_y[i]])
             return True
-        except Exception as e:
+        except (OSError, IndexError, ValueError) as e:
             logging.warning("Error saving CSV: %s", e)
             return False
 
@@ -256,7 +256,7 @@ class SpectrumWidget(QWidget):
                 for x, y in points:
                     writer.writerow([x, y])
             return True
-        except Exception:
+        except (OSError, IndexError, ValueError):
             return False
 
     def set_scaling(self, factor):
@@ -270,7 +270,7 @@ class SpectrumWidget(QWidget):
             try:
                 self.ax2.remove()
                 del self.ax2
-            except Exception as _e:
+            except (AttributeError, ValueError, NotImplementedError) as _e:
                 logging.warning("silenced: %s", _e)
         self.plot_spectrum()
 
@@ -281,7 +281,7 @@ class SpectrumWidget(QWidget):
             if getattr(self, "ax2", None) is not None:
                 try:
                     self.ax2.clear()
-                except Exception as _e:
+                except (AttributeError, ValueError, NotImplementedError) as _e:
                     logging.warning("silenced: %s", _e)
 
             if getattr(self, "scaling_factor", None) is None:

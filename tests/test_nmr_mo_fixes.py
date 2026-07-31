@@ -518,6 +518,7 @@ def _install_mo_stubs():
         "QSpinBox",
         "QCheckBox",
         "QComboBox",
+        "QMenu",
     ]
 
     existing_widgets = sys.modules.get("PyQt6.QtWidgets")

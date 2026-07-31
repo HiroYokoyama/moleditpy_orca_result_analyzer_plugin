@@ -136,7 +136,7 @@ try:
     from rdkit.Chem import GetPeriodicTable
 
     _PERIODIC_TABLE = GetPeriodicTable()
-except Exception:
+except ImportError:
     _PERIODIC_TABLE = None
 
 # Highlight halo radius as a fraction of the van der Waals radius.
@@ -148,7 +148,7 @@ def _vdw(sym):
     if _PERIODIC_TABLE is not None:
         try:
             return _PERIODIC_TABLE.GetRvdw(sym)
-        except Exception:
+        except (RuntimeError, AttributeError, ValueError):
             logging.debug(
                 "vdW radius lookup failed for '%s'; using default", sym, exc_info=True
             )
@@ -275,12 +275,12 @@ class BondAnalysisDialog(QDialog):
         for actor in self._actors:
             try:
                 plotter.remove_actor(actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         self._actors = []
         try:
             plotter.render()
-        except Exception as _e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
             logging.warning("silenced: %s", _e)
 
     def _highlight_atoms(self, indices):
@@ -302,7 +302,7 @@ class BondAnalysisDialog(QDialog):
                         plotter.add_mesh(sphere, color="yellow", opacity=0.4)
                     )
             plotter.render()
-        except Exception as _e:
+        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
             logging.warning("silenced: %s", _e)
 
     def _highlight_bond(self, i, j):
@@ -326,7 +326,7 @@ class BondAnalysisDialog(QDialog):
                     plotter.add_mesh(sphere, color="orange", opacity=0.4)
                 )
             plotter.render()
-        except Exception as _e:
+        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
             logging.warning("silenced: %s", _e)
 
     @staticmethod

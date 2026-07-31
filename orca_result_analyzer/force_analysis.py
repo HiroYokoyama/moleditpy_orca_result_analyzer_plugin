@@ -140,7 +140,7 @@ class ConvergenceGraphDialog(QDialog):
             from PyQt6.QtWidgets import QMessageBox
 
             QMessageBox.information(self, "Exported", f"Saved to:\n{path}")
-        except Exception as e:
+        except (ImportError, OSError, IndexError, ValueError) as e:
             from PyQt6.QtWidgets import QMessageBox
 
             QMessageBox.critical(self, "Export Error", str(e))
@@ -303,7 +303,7 @@ class ConvergenceGraphDialog(QDialog):
                     ]
                     yticks.append(targets[k])
                     ax.set_yticks(yticks)
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("Failed to add threshold tick: %s", _e)
 
                 # Draw a triangle marker on the side of the Y-axis
@@ -638,7 +638,7 @@ class ForceViewerDialog(QDialog):
         if getattr(self, "graph_dlg", None) is not None:
             try:
                 self.graph_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
 
         # pass current_step_idx so it can draw a vertical line for the current frame
@@ -907,7 +907,7 @@ class ForceViewerDialog(QDialog):
                 conf.SetAtomPosition(
                     i, Point3D(coords[i][0], coords[i][1], coords[i][2])
                 )
-        except Exception:
+        except (RuntimeError, AttributeError, IndexError, ValueError):
             return
 
         mol.AddConformer(conf)
@@ -917,7 +917,7 @@ class ForceViewerDialog(QDialog):
             try:
                 charge = self.parser.data.get("charge", 0) if self.parser else 0
                 determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         final_mol = mol.GetMol()
@@ -1080,7 +1080,7 @@ class ForceViewerDialog(QDialog):
         for actor in self.actors:
             try:
                 mw.plotter.remove_actor(actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         self.actors = []
@@ -1097,7 +1097,7 @@ class ForceViewerDialog(QDialog):
         if getattr(self, "graph_dlg", None) is not None:
             try:
                 self.graph_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
             self.graph_dlg = None
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
@@ -1117,7 +1117,7 @@ class ForceViewerDialog(QDialog):
                 if "force_color" in settings:
                     self.force_color = settings["force_color"]
 
-            except Exception as e:
+            except (OSError, KeyError, IndexError, ValueError) as e:
                 logging.warning("Error loading force settings: %s", e)
 
     def save_settings(self):
@@ -1126,7 +1126,7 @@ class ForceViewerDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         force_settings = {
@@ -1141,5 +1141,5 @@ class ForceViewerDialog(QDialog):
             from .utils import save_json_atomic
 
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except ImportError as e:
             logging.warning("Error saving force settings: %s", e)

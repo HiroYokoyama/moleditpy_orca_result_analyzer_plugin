@@ -198,7 +198,7 @@ class TrajectoryResultDialog(QDialog):
                         full_path = os.path.join(self.base_dir, f_cands[0])
                         self.load_external_trj(full_path, silent=True)
                         loaded = True
-                except Exception as _e:
+                except (OSError, IndexError) as _e:
                     logging.warning("silenced: %s", _e)
 
             if not loaded:
@@ -631,12 +631,12 @@ class TrajectoryResultDialog(QDialog):
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except Exception as _e:
+            except (AttributeError, ValueError, NotImplementedError) as _e:
                 logging.warning("silenced: %s", _e)
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except Exception as _e:
+            except (AttributeError, ValueError, NotImplementedError) as _e:
                 logging.warning("silenced: %s", _e)
 
         if not self.display_energies or idx < 0 or idx >= len(self.display_energies):
@@ -720,7 +720,7 @@ class TrajectoryResultDialog(QDialog):
                 conf.SetAtomPosition(
                     i, Point3D(coords[i][0], coords[i][1], coords[i][2])
                 )
-        except Exception:
+        except (RuntimeError, AttributeError, IndexError, ValueError):
             return
 
         mol.AddConformer(conf)
@@ -864,12 +864,12 @@ class TrajectoryResultDialog(QDialog):
                 if hasattr(mw.ui_manager, "enter_3d_viewer_mode"):
                     try:
                         mw.ui_manager.enter_3d_viewer_mode()
-                    except Exception as _e:
+                    except (AttributeError, RuntimeError) as _e:
                         logging.warning("[traj_analysis.py] silenced: %s", _e)
                 elif hasattr(mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
-                    except Exception as _e:
+                    except (AttributeError, RuntimeError) as _e:
                         logging.warning("silenced: %s", _e)
                 else:
                     try:
@@ -883,19 +883,19 @@ class TrajectoryResultDialog(QDialog):
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
-                except Exception as _e:
+                except IndexError as _e:
                     logging.warning("silenced: %s", _e)
 
             # Reset Camera
             if self.context:
                 try:
                     self.context.reset_3d_camera()
-                except Exception as _e:
+                except (AttributeError, RuntimeError) as _e:
                     logging.warning("silenced: %s", _e)
             elif hasattr(mw, "plotter") and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
             # Only show message if manual load (optional, or just show it)
@@ -1047,13 +1047,13 @@ class TrajectoryResultDialog(QDialog):
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except Exception as _e:
+            except (AttributeError, ValueError, NotImplementedError) as _e:
                 logging.warning("silenced: %s", _e)
             del self._highlight_marker
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except Exception as _e:
+            except (AttributeError, ValueError, NotImplementedError) as _e:
                 logging.warning("silenced: %s", _e)
             del self._highlight_line
 

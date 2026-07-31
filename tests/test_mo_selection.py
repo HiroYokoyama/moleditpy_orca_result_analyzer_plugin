@@ -200,3 +200,186 @@ class TestGenerationQueue(_MOCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Regenerate (overwrite) — context menu on the orbital table
+# ---------------------------------------------------------------------------
+
+
+class _RegenCase(_MOCase):
+    """Drives _generate_single_mo far enough to reach the cache check."""
+
+    def setUp(self):
+        super().setUp()
+        self.host.parser.data = {
+            "mo_coeffs": {"1": {"coeffs": [{"coeff": 0.1}, {"coeff": 0.2}]}},
+            "atoms": ["H", "H"],
+            "coords": [(0.0, 0.0, 0.0), (0.0, 0.0, 0.74)],
+        }
+        engine = MagicMock()
+        engine.n_basis = 2
+        patcher = patch.object(self.dlg, "get_engine", return_value=engine)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.shown = []
+        patcher2 = patch.object(self.dlg, "show_cube", self.shown.append)
+        patcher2.start()
+        self.addCleanup(patcher2.stop)
+
+        self.worker_cls = patch.object(M, "CalcWorker")
+        self.worker = self.worker_cls.start()
+        self.addCleanup(self.worker_cls.stop)
+
+    def _write_cached_cube(self):
+        path = self.dlg.get_cube_path("1")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("stale cube\n")
+        return path
+
+
+class TestRegenerateOverwrites(_RegenCase):
+    def test_an_existing_cube_is_reused_without_recomputing(self):
+        path = self._write_cached_cube()
+        self.dlg._generate_single_mo("1")
+        self.assertEqual(self.shown, [path])
+        self.worker.assert_not_called()
+
+    def test_forcing_recomputes_even_though_the_cube_exists(self):
+        self._write_cached_cube()
+        self.dlg.generation_force = True
+        self.dlg._generate_single_mo("1")
+        # The cached file must NOT be displayed; a worker must run instead.
+        self.assertEqual(self.shown, [])
+        self.worker.assert_called_once()
+
+    def test_the_worker_writes_over_the_existing_path(self):
+        path = self._write_cached_cube()
+        self.dlg.generation_force = True
+        self.dlg._generate_single_mo("1")
+        self.assertEqual(self.worker.call_args[0][-1], path)
+
+    def test_regenerate_selected_sets_the_force_flag(self):
+        self._select(1)
+        with patch.object(self.dlg, "_generate_single_mo"):
+            self.dlg.regenerate_selected_mos()
+        self.assertTrue(self.dlg.generation_force)
+
+    def test_plain_visualise_leaves_the_force_flag_off(self):
+        self._select(1)
+        with patch.object(self.dlg, "_generate_single_mo"):
+            self.dlg.visualize_selected_mos()
+        self.assertFalse(self.dlg.generation_force)
+
+    def test_force_is_cleared_once_the_batch_drains(self):
+        """Otherwise the next plain Visualize would silently recompute too."""
+        self.dlg.generation_force = True
+        self.dlg.generation_queue = []
+        self.dlg.progress_dialog = None
+        self.dlg.process_generation_queue()
+        self.assertFalse(self.dlg.generation_force)
+
+    def test_a_stale_force_flag_does_not_survive_into_a_new_batch(self):
+        self.dlg.generation_force = True
+        self._select(1)
+        with patch.object(self.dlg, "_generate_single_mo"):
+            self.dlg.visualize_selected_mos()
+        self.assertFalse(self.dlg.generation_force)
+
+
+class TestTreeContextMenu(_RegenCase):
+    def _menu(self):
+        """Capture the QMenu built for a right-click."""
+        created = []
+
+        class _Menu:
+            def __init__(self, *a, **k):
+                self.actions = []
+                created.append(self)
+
+            def addAction(self, text):
+                act = MagicMock()
+                act.text = text
+                act.enabled = True
+                act.setEnabled = lambda v, a=act: setattr(a, "enabled", v)
+                self.actions.append(act)
+                return act
+
+            def exec(self, *a, **k):
+                return self.chosen
+
+        return created, _Menu
+
+    def test_no_menu_without_a_selection(self):
+        self.dlg.tree.selectedItems = lambda: []
+        created, menu_cls = self._menu()
+        with patch.object(M, "QMenu", menu_cls):
+            self.dlg.show_tree_context_menu(MagicMock())
+        self.assertEqual(created, [])
+
+    def test_menu_offers_visualise_and_regenerate(self):
+        self._select(1)
+        created, menu_cls = self._menu()
+        menu_cls.chosen = None
+        with patch.object(M, "QMenu", menu_cls):
+            self.dlg.show_tree_context_menu(MagicMock())
+        labels = [a.text for a in created[0].actions]
+        self.assertEqual(len(labels), 2)
+        self.assertIn("Visualize", labels[0])
+        self.assertIn("Regenerate", labels[1])
+
+    def test_regenerate_is_disabled_when_nothing_is_cached(self):
+        self._select(1)
+        created, menu_cls = self._menu()
+        menu_cls.chosen = None
+        with patch.object(M, "QMenu", menu_cls):
+            self.dlg.show_tree_context_menu(MagicMock())
+        self.assertFalse(created[0].actions[1].enabled)
+
+    def test_regenerate_is_enabled_once_a_cube_exists(self):
+        self._write_cached_cube()
+        self._select(1)
+        created, menu_cls = self._menu()
+        menu_cls.chosen = None
+        with patch.object(M, "QMenu", menu_cls):
+            self.dlg.show_tree_context_menu(MagicMock())
+        self.assertTrue(created[0].actions[1].enabled)
+
+    def test_choosing_regenerate_forces_a_rebuild(self):
+        self._write_cached_cube()
+        self._select(1)
+        created, menu_cls = self._menu()
+
+        class _MenuChoosingRegen(menu_cls):
+            def exec(self, *a, **k):
+                return self.actions[1]
+
+        with patch.object(M, "QMenu", _MenuChoosingRegen):
+            with patch.object(self.dlg, "_generate_single_mo"):
+                self.dlg.show_tree_context_menu(MagicMock())
+        self.assertTrue(self.dlg.generation_force)
+
+    def test_choosing_visualise_does_not_force(self):
+        self._write_cached_cube()
+        self._select(1)
+        created, menu_cls = self._menu()
+
+        class _MenuChoosingVis(menu_cls):
+            def exec(self, *a, **k):
+                return self.actions[0]
+
+        with patch.object(M, "QMenu", _MenuChoosingVis):
+            with patch.object(self.dlg, "_generate_single_mo"):
+                self.dlg.show_tree_context_menu(MagicMock())
+        self.assertFalse(self.dlg.generation_force)
+
+    def test_dismissing_the_menu_starts_no_work(self):
+        self._select(1)
+        created, menu_cls = self._menu()
+        menu_cls.chosen = None
+        with patch.object(M, "QMenu", menu_cls):
+            with patch.object(self.dlg, "_generate_single_mo") as gen:
+                self.dlg.show_tree_context_menu(MagicMock())
+        gen.assert_not_called()

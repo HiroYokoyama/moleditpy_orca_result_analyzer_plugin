@@ -119,7 +119,7 @@ class DipoleDialog(QDialog):
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             self.arrow_actor = None
 
@@ -193,7 +193,7 @@ class DipoleDialog(QDialog):
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
                 self.parent_dlg.mw.plotter.render()
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         # Clean up reference in parent
         if hasattr(self.parent_dlg, "dipole_dlg"):
@@ -237,7 +237,7 @@ class DipoleDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception:
+            except (OSError, ValueError):
                 # settings file may be empty or corrupt; start fresh
                 logging.debug(
                     "Could not read settings file; starting fresh", exc_info=True
@@ -257,5 +257,5 @@ class DipoleDialog(QDialog):
             from .utils import save_json_atomic
 
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except ImportError as e:
             logging.warning("Error saving dipole settings: %s", e)

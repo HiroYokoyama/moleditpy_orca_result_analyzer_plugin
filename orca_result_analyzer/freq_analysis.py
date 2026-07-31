@@ -97,7 +97,7 @@ class FreqSpectrumWindow(QWidget):
                     self.chk_auto_x.setChecked(bool(settings["spec_auto_x"]))
                 if "spec_auto_y" in settings:
                     self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
-            except Exception as _e:
+            except (OSError, KeyError, TypeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
     def init_ui(self):
@@ -841,7 +841,7 @@ class FrequencyDialog(QDialog):
                         tree_item, QAbstractItemView.ScrollHint.PositionAtCenter
                     )
                     break
-            except Exception as _e:
+            except (RuntimeError, AttributeError, TypeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             it += 1
 
@@ -882,7 +882,7 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             self.vector_actor = None
 
@@ -985,7 +985,7 @@ class FrequencyDialog(QDialog):
                 if self.vector_actor:
                     try:
                         self.mw.plotter.remove_actor(self.vector_actor)
-                    except Exception as _e:
+                    except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                     self.vector_actor = None
 
@@ -1070,7 +1070,7 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             self.vector_actor = None
 
@@ -1125,7 +1125,7 @@ class FrequencyDialog(QDialog):
                 self.context.draw_molecule_3d(mol)
             else:
                 self.mw.view_3d_manager.draw_molecule_3d(mol)
-        except Exception as e:
+        except (RuntimeError, AttributeError, ValueError) as e:
             logging.warning("Error in reset_geometry: %s", e)
 
     def save_gif(self):
@@ -1325,7 +1325,7 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         if self.spectrum_win:
             self.spectrum_win.close()
@@ -1384,7 +1384,7 @@ class FrequencyDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         freq_settings = {
@@ -1423,5 +1423,5 @@ class FrequencyDialog(QDialog):
 
         try:
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving freq settings: %s", e)

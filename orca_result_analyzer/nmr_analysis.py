@@ -645,7 +645,7 @@ class NMRDialog(QDialog):
         """Save merged peaks to JSON file"""
         try:
             save_json_atomic(self.merged_peaks_file, self.merged_peaks)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving merged peaks: %s", e)
 
     def load_merged_peaks(self):
@@ -656,15 +656,21 @@ class NMRDialog(QDialog):
         try:
             with open(self.merged_peaks_file, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logging.warning("Error loading merged peaks: %s", e)
             # Move the unreadable file aside instead of leaving it in the
             # save path: the next save would otherwise silently replace
             # every previously saved merge with the empty list.
             try:
                 os.replace(self.merged_peaks_file, self.merged_peaks_file + ".corrupt")
-            except OSError:
-                pass
+            except OSError as move_exc:
+                # Non-fatal, but worth saying: the unreadable file stays in the
+                # save path and the next save will overwrite it.
+                logging.warning(
+                    "Could not move aside unreadable merged-peaks file %s: %s",
+                    self.merged_peaks_file,
+                    move_exc,
+                )
             return
         if not isinstance(raw, list):
             logging.warning(
@@ -689,7 +695,7 @@ class NMRDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         # Extract custom references only (non-default)
@@ -724,7 +730,7 @@ class NMRDialog(QDialog):
 
         try:
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving NMR settings: %s", e)
 
     def reset_zoom(self, event):
@@ -1715,7 +1721,7 @@ class NMRDialog(QDialog):
             for artist in self.highlight_artists:
                 try:
                     artist.remove()
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             self.highlight_artists = []
             self.canvas.draw_idle()
@@ -1729,7 +1735,7 @@ class NMRDialog(QDialog):
         for artist in self.highlight_artists:
             try:
                 artist.remove()
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         self.highlight_artists = []
 
@@ -1858,7 +1864,7 @@ class NMRDialog(QDialog):
                     )
                 else:
                     logging.info("Spectrum exported to: %s", filename)
-            except Exception as e:
+            except OSError as e:
                 QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
     def export_spectrum_csv(self):
@@ -2213,7 +2219,7 @@ class NMRDialog(QDialog):
                 if e3d:
                     try:
                         e3d.update_3d_selection_display()
-                    except Exception as _e:
+                    except (AttributeError, RuntimeError) as _e:
                         logging.warning("silenced: %s", _e)
 
             # Draw yellow highlights for NMR selection
@@ -2234,7 +2240,7 @@ class NMRDialog(QDialog):
         chk = getattr(self, "chk_label_shifts", None)
         try:
             return bool(chk is not None and chk.isChecked())
-        except Exception:
+        except (RuntimeError, AttributeError):
             return False
 
     def on_label_shifts_toggled(self):
@@ -2305,7 +2311,7 @@ class NMRDialog(QDialog):
         for artist in self.highlight_artists:
             try:
                 artist.remove()
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         self.highlight_artists = []
 
@@ -2320,7 +2326,7 @@ class NMRDialog(QDialog):
                 e3d.selected_atoms_3d.clear()
                 try:
                     e3d.update_3d_selection_display()
-                except Exception as _e:
+                except (AttributeError, RuntimeError) as _e:
                     logging.warning("silenced: %s", _e)
 
         # Redraw spectrum
@@ -2622,7 +2628,7 @@ class NMRDialog(QDialog):
         # 1. Clear custom NMR selection spheres by name (most reliable in PyVista)
         try:
             plotter.remove_actor("nmr_selection_highlights")
-        except Exception as _e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
             logging.warning("silenced: %s", _e)
 
         # 2. Clear labels by tracked name
@@ -2630,7 +2636,7 @@ class NMRDialog(QDialog):
             for name in self._nmr_label_names:
                 try:
                     plotter.remove_actor(name)
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             self._nmr_label_names = []
 
@@ -2638,7 +2644,7 @@ class NMRDialog(QDialog):
         for actor in self._atom_labels:
             try:
                 plotter.remove_actor(actor)
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         self._atom_labels = []
 
@@ -2647,13 +2653,13 @@ class NMRDialog(QDialog):
             for actor in self._nmr_sphere_actors:
                 try:
                     plotter.remove_actor(actor)
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             self._nmr_sphere_actors = []
 
         try:
             plotter.render()
-        except Exception as _e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
             logging.warning("silenced: %s", _e)
 
     def draw_custom_nmr_highlights_3d(self, atom_indices):
@@ -2668,7 +2674,7 @@ class NMRDialog(QDialog):
         # ALWAYS clear existing custom highlights first to prevent stacking/phantom spheres
         try:
             plotter.remove_actor("nmr_selection_highlights")
-        except Exception as _e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
             logging.warning("silenced: %s", _e)
 
         # Clear tracker list to prevent stale references
@@ -2678,7 +2684,7 @@ class NMRDialog(QDialog):
         if not atom_indices or not hasattr(v3d, "atom_positions_3d"):
             try:
                 plotter.render()
-            except Exception as _e:
+            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             return
 
@@ -2703,7 +2709,7 @@ class NMRDialog(QDialog):
                     base_r = float(mw.view_3d_manager.glyph_source["radii"][i])
                     if base_r < 0.1:
                         raise ValueError("Radius too small")
-                except Exception:
+                except (RuntimeError, AttributeError, KeyError, IndexError, TypeError, ValueError):
                     # Fallback to calculated radius if not available
                     atom_item = next(
                         (d for d in self.data if i == d.get("atom_idx", None)), None

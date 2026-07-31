@@ -116,7 +116,7 @@ class SCFTraceDialog(QDialog):
     def closeEvent(self, event):
         try:
             plt.close(self.figure)
-        except Exception as _e:
+        except (AttributeError, ValueError, NotImplementedError) as _e:
             logging.warning("silenced: %s", _e)
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.

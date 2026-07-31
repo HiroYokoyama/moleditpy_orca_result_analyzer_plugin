@@ -3,10 +3,14 @@ tests/test_utils.py
 Unit tests for orca_result_analyzer/utils.py (pure Python, no stubs required).
 """
 
+import json
 import os
+import shutil
+import stat
 import sys
 import importlib.util
 import unittest
+from unittest.mock import patch
 
 _SRC = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer", "utils.py")
@@ -27,6 +31,7 @@ normalize_atom_symbol = _utils.normalize_atom_symbol
 determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
 list_orca_output_files = _utils.list_orca_output_files
 clear_atom_color_overrides = _utils.clear_atom_color_overrides
+save_json_atomic = _utils.save_json_atomic
 
 # ---------------------------------------------------------------------------
 # RDKit availability — used by skipUnless decorators throughout this module
@@ -291,6 +296,109 @@ class TestClearAtomColorOverrides(unittest.TestCase):
             self.fail(
                 f"Should be non-fatal without _plugin_color_overrides, raised: {exc}"
             )
+
+
+class TestSaveJsonAtomic(unittest.TestCase):
+    """Windows hands back WinError 5 from os.replace for two very different
+    reasons: a transient handle held by a scanner/indexer, and a genuinely
+    read-only destination. The first recovers on its own, the second never
+    does — a save that gives up on the first PermissionError loses the
+    user's settings either way (observed against a plugin dir unpacked from
+    a zip that carried the read-only attribute)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def test_writes_and_reads_back(self):
+        save_json_atomic(self.path, {"a": 1})
+        with open(self.path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"a": 1})
+        self.assertFalse(os.path.exists(self.path + ".tmp"))
+
+    def test_transient_permission_error_is_retried(self):
+        save_json_atomic(self.path, {"gen": 1})
+        real_replace = os.replace
+        calls = []
+
+        def flaky(src, dst):
+            calls.append(src)
+            if len(calls) < 3:
+                raise PermissionError(5, "Access is denied")
+            return real_replace(src, dst)
+
+        with (
+            patch.object(_utils.os, "replace", flaky),
+            patch.object(_utils.time, "sleep", lambda _s: None),
+        ):
+            save_json_atomic(self.path, {"gen": 2})
+
+        self.assertEqual(len(calls), 3)
+        with open(self.path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"gen": 2})
+
+    def test_read_only_destination_is_cleared_and_written(self):
+        save_json_atomic(self.path, {"gen": 1})
+        os.chmod(self.path, stat.S_IREAD)
+        self.addCleanup(os.chmod, self.path, stat.S_IWRITE | stat.S_IREAD)
+
+        attempts = []
+        real_replace = os.replace
+
+        def readonly_aware(src, dst):
+            attempts.append(dst)
+            # Emulate Windows: replacing onto a read-only file is denied.
+            if not os.access(dst, os.W_OK):
+                raise PermissionError(5, "Access is denied")
+            return real_replace(src, dst)
+
+        with (
+            patch.object(_utils.os, "replace", readonly_aware),
+            patch.object(_utils.time, "sleep", lambda _s: None),
+        ):
+            save_json_atomic(self.path, {"gen": 2})
+
+        with open(self.path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"gen": 2})
+
+    def test_permanent_failure_raises_and_leaves_original_intact(self):
+        save_json_atomic(self.path, {"keep": True})
+
+        def always_denied(src, dst):
+            raise PermissionError(5, "Access is denied")
+
+        with (
+            patch.object(_utils.os, "replace", always_denied),
+            patch.object(_utils.time, "sleep", lambda _s: None),
+        ):
+            with self.assertRaises(PermissionError):
+                save_json_atomic(self.path, {"keep": False})
+
+        # The point of the temp-file dance: the previous settings survive.
+        with open(self.path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), {"keep": True})
+
+    def test_failed_save_does_not_leave_a_temp_file(self):
+        def always_denied(src, dst):
+            raise PermissionError(5, "Access is denied")
+
+        with (
+            patch.object(_utils.os, "replace", always_denied),
+            patch.object(_utils.time, "sleep", lambda _s: None),
+        ):
+            with self.assertRaises(PermissionError):
+                save_json_atomic(self.path, {"a": 1})
+
+        self.assertFalse(
+            os.path.exists(self.path + ".tmp"),
+            "a failing save must not accumulate .tmp files beside the real one",
+        )
+
+    def test_unserializable_payload_cleans_up_and_raises(self):
+        with self.assertRaises(TypeError):
+            save_json_atomic(self.path, {"bad": object()})
+        self.assertFalse(os.path.exists(self.path + ".tmp"))
 
 
 if __name__ == "__main__":
