@@ -86,6 +86,7 @@ def _load_mo_engine():
 
 _mod = _load_mo_engine()
 CubeWriter = _mod.CubeWriter
+read_generation_settings = _mod.read_generation_settings
 BasisSetEngine = _mod.BasisSetEngine
 BasisSetEngineErrors = _mod.UnsupportedBasisError
 
@@ -138,6 +139,87 @@ class TestCubeWriter(unittest.TestCase):
         self.assertIn(f"v{PLUGIN_VERSION}", lines[1])
         # The fallback must not reach a written file.
         self.assertNotIn("unknown", lines[1])
+
+    def test_the_generation_settings_ride_on_the_second_comment_line(self):
+        """The cube format allows exactly two comment lines, so the grid and
+        margin cannot have one of their own."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "s.cube")
+            CubeWriter.write(
+                path,
+                [8],
+                [(0.0, 0.0, 0.0)],
+                origin=(0.0, 0.0, 0.0),
+                vectors=np.diag([0.5, 0.5, 0.5]),
+                data=np.zeros((2, 2, 2)),
+                comment="MO 1",
+                grid_points=40,
+                margin=4.0,
+            )
+            with open(path, encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        self.assertIn("grid=40", lines[1])
+        self.assertIn("margin=4.00", lines[1])
+        # Line 3 must still be the atom-count record, not another comment.
+        self.assertEqual(int(lines[2].split()[0]), 1)
+
+    def test_the_settings_read_back(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "s.cube")
+            CubeWriter.write(
+                path,
+                [8],
+                [(0.0, 0.0, 0.0)],
+                origin=(0.0, 0.0, 0.0),
+                vectors=np.diag([0.5, 0.5, 0.5]),
+                data=np.zeros((2, 2, 2)),
+                comment="MO 1",
+                grid_points=60,
+                margin=5.5,
+            )
+            info = read_generation_settings(path)
+        self.assertEqual(info["grid"], 60)
+        self.assertAlmostEqual(info["margin"], 5.5)
+        self.assertEqual(info["version"], PLUGIN_VERSION)
+
+    def test_a_cube_without_settings_reports_them_missing(self):
+        """Cubes written before the stamp, or by another program, must not be
+        described with the current spin-box values."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "old.cube")
+            CubeWriter.write(
+                path,
+                [8],
+                [(0.0, 0.0, 0.0)],
+                origin=(0.0, 0.0, 0.0),
+                vectors=np.diag([0.5, 0.5, 0.5]),
+                data=np.zeros((2, 2, 2)),
+                comment="MO 1",
+            )
+            info = read_generation_settings(path)
+        self.assertIsNone(info["grid"])
+        self.assertIsNone(info["margin"])
+        self.assertEqual(info["version"], PLUGIN_VERSION)
+
+    def test_a_foreign_cube_reports_everything_unknown(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "foreign.cube")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("Gaussian cube\nSCF density\n 1 0.0 0.0 0.0\n")
+            info = read_generation_settings(path)
+        self.assertEqual(info, {"version": None, "grid": None, "margin": None})
+
+    def test_an_unreadable_cube_reports_everything_unknown(self):
+        info = read_generation_settings(os.path.join("no", "such", "file.cube"))
+        self.assertEqual(info, {"version": None, "grid": None, "margin": None})
 
     def test_version_line_does_not_disturb_the_grid_header(self):
         """The atom/grid block still starts on line 3 (cube format is positional)."""

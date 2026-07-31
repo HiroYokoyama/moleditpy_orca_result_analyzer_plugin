@@ -34,16 +34,27 @@ from .utils import get_default_export_path, save_json_atomic
 import logging
 
 try:
-    from .mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
+    from .mo_engine import (
+        BasisSetEngine,
+        CalcWorker,
+        UnsupportedBasisError,
+        read_generation_settings,
+    )
     from .vis import CubeVisualizer
 except ImportError:
     try:
-        from mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
+        from mo_engine import (
+            BasisSetEngine,
+            CalcWorker,
+            UnsupportedBasisError,
+            read_generation_settings,
+        )
         from vis import CubeVisualizer
     except ImportError:
         BasisSetEngine = None
         CalcWorker = None
         CubeVisualizer = None
+        read_generation_settings = None
 
         class UnsupportedBasisError(ValueError):
             """Stand-in so the except clause stays valid without the engine."""
@@ -624,6 +635,28 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
+    def describe_cached_cube(self, item):
+        """One line naming the settings the cached cube was built with.
+
+        Cubes written before the settings were stamped, or by another
+        program, report what is genuinely missing rather than the current
+        spin-box values, which may have nothing to do with the file.
+        """
+        path = self.get_cube_path(item.text(0))
+        if not path or not os.path.exists(path):
+            return "Not generated yet"
+        if read_generation_settings is None:
+            return "Cube on disk"
+
+        info = read_generation_settings(path)
+        grid = info.get("grid")
+        margin = info.get("margin")
+        grid_s = f"{grid} pts" if grid is not None else "unknown grid"
+        margin_s = f"{margin:.2f} Bohr" if margin is not None else "unknown margin"
+        version = info.get("version")
+        version_s = f" — v{version}" if version else ""
+        return f"Cached: {grid_s}, margin {margin_s}{version_s}"
+
     def show_tree_context_menu(self, pos):
         """Right-click menu on the orbital table."""
         selected = self.tree.selectedItems()
@@ -637,6 +670,10 @@ class MODialog(QDialog):
         ]
 
         menu = QMenu(self.tree)
+        info = menu.addAction(self.describe_cached_cube(selected[0]))
+        info.setEnabled(False)
+        menu.addSeparator()
+
         act_vis = menu.addAction(f"Visualize Selected ({len(selected)})")
         act_regen = menu.addAction(f"Regenerate Cube ({len(selected)})")
         act_regen.setToolTip(

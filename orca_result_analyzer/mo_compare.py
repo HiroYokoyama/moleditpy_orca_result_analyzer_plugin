@@ -195,6 +195,10 @@ class MOCompareDialog(QDialog):
         self.setWindowTitle("Compare Molecular Orbitals")
         self.resize(760, 520)
         self.slots = []
+        # Guards the live-redraw slots while the dialog sets widgets itself.
+        self._ready = False
+        self._suspend = 0
+        self.opened_from_selection = False
         self.setup_ui()
 
     # -- construction ------------------------------------------------------
@@ -251,25 +255,72 @@ class MOCompareDialog(QDialog):
         """Fill the slots with *keys*, or with the table selection, or with
         the frontier orbitals — whichever is available, in that order."""
         if keys is None:
-            keys = self.preselected_keys() or self.default_keys()
+            preselected = self.preselected_keys()
+            self.opened_from_selection = bool(preselected)
+            keys = preselected or self.default_keys()
+        else:
+            self.opened_from_selection = True
         positions = {key: i for i, (_l, key, _d, _t) in enumerate(self.orbitals)}
 
-        assigned = 0
+        # One redraw at the end, not one per widget touched.
+        self._suspend += 1
+        try:
+            assigned = 0
+            for slot in self.slots:
+                key = keys[assigned] if assigned < len(keys) else None
+                pos = positions.get(key) if key is not None else None
+                if pos is None:
+                    slot.check_on.setChecked(False)
+                    continue
+                slot.combo_mo.setCurrentIndex(pos)
+                slot.check_on.setChecked(True)
+                assigned += 1
+        finally:
+            self._suspend -= 1
+
+        if self._ready:
+            self.on_open()
+
+    def missing_keys(self):
+        """Orbitals that are switched on but have no cube on disk."""
+        out = []
         for slot in self.slots:
-            key = keys[assigned] if assigned < len(keys) else None
-            pos = positions.get(key) if key is not None else None
-            if pos is None:
-                slot.check_on.setChecked(False)
+            if not slot.is_on():
                 continue
-            slot.combo_mo.setCurrentIndex(pos)
-            slot.check_on.setChecked(True)
-            assigned += 1
+            key, display_id = slot.selection()
+            if key is None:
+                continue
+            path = self._cube_path(display_id)
+            if (not path or not os.path.exists(path)) and key not in out:
+                out.append(key)
+        return out
+
+    def refresh_update_button(self):
+        """The button is the only thing the user must press, so it has to say
+        so: enabled exactly when a shown orbital still needs computing."""
+        missing = self.missing_keys()
+        self.btn_update.setEnabled(bool(missing))
+        if missing:
+            self.btn_update.setText(f"Generate {len(missing)} Missing Cube(s)")
+            self.btn_update.setToolTip(
+                "These orbitals have no cube yet. Press to compute them."
+            )
+            self.btn_update.setStyleSheet(
+                "font-weight: bold; background-color: #ffe0b2;"
+            )
+        else:
+            self.btn_update.setText("All Cubes Ready")
+            self.btn_update.setToolTip(
+                "Every shown orbital is drawn; other changes apply instantly."
+            )
+            self.btn_update.setStyleSheet("")
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
 
         info = QLabel(
-            "Pick up to four orbitals. Missing cubes are generated on Update."
+            "Pick up to four orbitals. Colour, isovalue, opacity and style "
+            "apply instantly; only a missing cube needs the button."
         )
         layout.addWidget(info)
 
@@ -294,8 +345,7 @@ class MOCompareDialog(QDialog):
         self.apply_selection()
 
         btns = QHBoxLayout()
-        self.btn_update = QPushButton("Update View")
-        self.btn_update.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
+        self.btn_update = QPushButton("Generate Missing Cubes")
         self.btn_update.clicked.connect(self.update_view)
         btns.addWidget(self.btn_update)
 
@@ -318,6 +368,44 @@ class MOCompareDialog(QDialog):
 
         self.lbl_status = QLabel("")
         layout.addWidget(self.lbl_status)
+
+        # Wired only now: everything above set widget values programmatically,
+        # and a half-built dialog must not try to render.
+        for slot in self.slots:
+            slot.check_on.toggled.connect(self.on_live_change)
+            slot.combo_mo.currentIndexChanged.connect(self.on_live_change)
+            slot.spin_iso.valueChanged.connect(self.on_live_change)
+            slot.spin_opacity.valueChanged.connect(self.on_live_change)
+            slot.combo_style.currentTextChanged.connect(self.on_live_change)
+            slot.check_smooth.toggled.connect(self.on_live_change)
+
+        self._ready = True
+        self.on_open()
+
+    def on_open(self):
+        """Draw what is already on disk.
+
+        Cubes cost seconds to compute, so they are only generated up front
+        when the user asked for these specific orbitals by selecting them in
+        the table. Otherwise the frontier defaults just show whatever is
+        cached and the button offers the rest.
+        """
+        if self.opened_from_selection and self.missing_keys():
+            self.update_view()
+        else:
+            self.render_all()
+
+    def on_live_change(self, *_args):
+        """A cheap setting changed: redraw straight away.
+
+        Colour, isovalue, opacity, style and visibility all re-contour a grid
+        that is already in memory, so there is nothing to wait for. Switching
+        to an orbital with no cube leaves that slot blank and lights up the
+        button instead — render_all refreshes it.
+        """
+        if not self._ready:
+            return
+        self.render_all()
 
     # -- persistence -------------------------------------------------------
 
@@ -400,29 +488,25 @@ class MOCompareDialog(QDialog):
         if not self.slots:
             return
         value = self.slots[0].spin_iso.value()
-        for slot in self.slots[1:]:
-            slot.spin_iso.setValue(value)
+        self._suspend += 1
+        try:
+            for slot in self.slots[1:]:
+                slot.spin_iso.setValue(value)
+        finally:
+            self._suspend -= 1
         self.render_all()
 
     def update_view(self):
         """Generate whatever cube files are missing, then draw everything."""
-        missing = []
-        for slot in self.slots:
-            if not slot.is_on():
-                continue
-            key, display_id = slot.selection()
-            if key is None:
-                continue
-            path = self._cube_path(display_id)
-            if not path or not os.path.exists(path):
-                if key not in missing:
-                    missing.append(key)
-
+        missing = self.missing_keys()
         if not missing:
             self.render_all()
             return
 
         self.lbl_status.setText(f"Generating {len(missing)} cube(s)...")
+        # A second press while the queue runs would start an overlapping
+        # batch; refresh_update_button turns it back on afterwards.
+        self.btn_update.setEnabled(False)
         try:
             self.parent_dlg.generate_cubes(missing, on_done=self.render_all)
         except (AttributeError, RuntimeError) as e:
@@ -431,6 +515,7 @@ class MOCompareDialog(QDialog):
                 self, "Error", f"Could not generate the missing cubes:\n{e}"
             )
             self.lbl_status.setText("")
+            self.refresh_update_button()
 
     def _cube_path(self, display_id):
         try:
@@ -440,15 +525,19 @@ class MOCompareDialog(QDialog):
             return None
 
     def render_all(self):
+        if self._suspend:
+            return
         if not CubeVisualizer:
             QMessageBox.warning(
                 self,
                 "Visualizer Error",
                 "CubeVisualizer module not loaded.\nCheck if 'pyvista' is installed.",
             )
+            self.refresh_update_button()
             return
         mw = self.mw
         if not mw:
+            self.refresh_update_button()
             return
 
         # The MO dialog's own single-orbital actors would sit on top of the
@@ -493,17 +582,24 @@ class MOCompareDialog(QDialog):
             msg += f" {missing} cube(s) still missing."
         self.lbl_status.setText(msg)
         self.save_settings()
+        # Last, so the button always reflects what is actually on screen.
+        self.refresh_update_button()
 
     def clear_all(self):
-        for slot in self.slots:
-            slot.check_on.setChecked(False)
-            self._remove_actors(slot.prefix)
+        self._suspend += 1
+        try:
+            for slot in self.slots:
+                slot.check_on.setChecked(False)
+                self._remove_actors(slot.prefix)
+        finally:
+            self._suspend -= 1
         try:
             if self.mw:
                 self.mw.plotter.render()
         except (AttributeError, RuntimeError) as _e:
             logging.warning("silenced: %s", _e)
         self.lbl_status.setText("")
+        self.refresh_update_button()
 
     def _remove_actors(self, prefix):
         try:

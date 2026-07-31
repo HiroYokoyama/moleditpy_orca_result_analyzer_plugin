@@ -307,6 +307,9 @@ class TestTreeContextMenu(_RegenCase):
                 self.actions.append(act)
                 return act
 
+            def addSeparator(self):
+                return None
+
             def exec(self, *a, **k):
                 return self.chosen
 
@@ -326,10 +329,11 @@ class TestTreeContextMenu(_RegenCase):
         with patch.object(M, "QMenu", menu_cls):
             self.dlg.show_tree_context_menu(MagicMock())
         labels = [a.text for a in created[0].actions]
-        self.assertEqual(len(labels), 3)
-        self.assertIn("Visualize", labels[0])
-        self.assertIn("Regenerate", labels[1])
-        self.assertIn("Compare", labels[2])
+        # The cached-cube description sits at the top, above the actions.
+        self.assertEqual(len(labels), 4)
+        self.assertIn("Visualize", labels[1])
+        self.assertIn("Regenerate", labels[2])
+        self.assertIn("Compare", labels[3])
 
     def test_regenerate_is_disabled_when_nothing_is_cached(self):
         self._select(1)
@@ -337,7 +341,7 @@ class TestTreeContextMenu(_RegenCase):
         menu_cls.chosen = None
         with patch.object(M, "QMenu", menu_cls):
             self.dlg.show_tree_context_menu(MagicMock())
-        self.assertFalse(created[0].actions[1].enabled)
+        self.assertFalse(created[0].actions[2].enabled)
 
     def test_regenerate_is_enabled_once_a_cube_exists(self):
         self._write_cached_cube()
@@ -346,7 +350,7 @@ class TestTreeContextMenu(_RegenCase):
         menu_cls.chosen = None
         with patch.object(M, "QMenu", menu_cls):
             self.dlg.show_tree_context_menu(MagicMock())
-        self.assertTrue(created[0].actions[1].enabled)
+        self.assertTrue(created[0].actions[2].enabled)
 
     def test_choosing_regenerate_forces_a_rebuild(self):
         self._write_cached_cube()
@@ -355,7 +359,7 @@ class TestTreeContextMenu(_RegenCase):
 
         class _MenuChoosingRegen(menu_cls):
             def exec(self, *a, **k):
-                return self.actions[1]
+                return self.actions[2]
 
         with patch.object(M, "QMenu", _MenuChoosingRegen):
             with patch.object(self.dlg, "_generate_single_mo"):
@@ -369,7 +373,7 @@ class TestTreeContextMenu(_RegenCase):
 
         class _MenuChoosingVis(menu_cls):
             def exec(self, *a, **k):
-                return self.actions[0]
+                return self.actions[1]
 
         with patch.object(M, "QMenu", _MenuChoosingVis):
             with patch.object(self.dlg, "_generate_single_mo"):
