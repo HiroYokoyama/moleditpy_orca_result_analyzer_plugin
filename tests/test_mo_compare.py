@@ -822,6 +822,54 @@ class TestSlotColorPicking(_CompareCase):
         self.assertEqual(cmp_dlg.slots[0].color("p"), "#ff0000")
 
 
+class TestSyncIsovalue(_CompareCase):
+    def test_every_slot_takes_orbital_ones_isovalue(self):
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots[0].spin_iso.setValue(0.066)
+        cmp_dlg.sync_isovalue()
+        self.assertTrue(
+            all(abs(s.spin_iso.value() - 0.066) < 1e-9 for s in cmp_dlg.slots)
+        )
+
+    def test_orbital_one_is_left_alone(self):
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots[0].spin_iso.setValue(0.066)
+        cmp_dlg.sync_isovalue()
+        self.assertAlmostEqual(cmp_dlg.slots[0].spin_iso.value(), 0.066)
+
+    def test_the_other_settings_stay_independent(self):
+        """Only the contour level is shared; the colours must stay distinct."""
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots[1].set_color("p", "#00ff00")
+        cmp_dlg.slots[1].spin_opacity.setValue(0.9)
+        cmp_dlg.slots[1].combo_style.setCurrentText("Points")
+        cmp_dlg.sync_isovalue()
+        self.assertEqual(cmp_dlg.slots[1].color("p"), "#00ff00")
+        self.assertAlmostEqual(cmp_dlg.slots[1].spin_opacity.value(), 0.9)
+        self.assertEqual(cmp_dlg.slots[1].combo_style.currentText(), "Points")
+
+    def test_syncing_redraws_at_the_new_level(self):
+        self._write_cube("1")
+        cmp_dlg = self._blank_compare()
+        self._enable(cmp_dlg, 1, "1")
+        cmp_dlg.slots[0].spin_iso.setValue(0.066)
+        cmp_dlg.sync_isovalue()
+        self.assertAlmostEqual(_FakeVisualizer.calls[-1]["iso"], 0.066)
+
+    def test_syncing_with_no_slots_is_harmless(self):
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots = []
+        cmp_dlg.sync_isovalue()
+        self.assertEqual(_FakeVisualizer.calls, [])
+
+    def test_the_synced_isovalue_is_saved(self):
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots[0].spin_iso.setValue(0.066)
+        cmp_dlg.sync_isovalue()
+        cmp_dlg.closeEvent(MagicMock())
+        self.assertAlmostEqual(self._blank_compare().slots[2].spin_iso.value(), 0.066)
+
+
 class TestContrastText(unittest.TestCase):
     def test_dark_backgrounds_get_white_text(self):
         self.assertEqual(CMP.contrast_text("#000080"), "white")

@@ -299,6 +299,14 @@ class MOCompareDialog(QDialog):
         self.btn_update.clicked.connect(self.update_view)
         btns.addWidget(self.btn_update)
 
+        self.btn_sync_iso = QPushButton("Sync Iso from Orbital 1")
+        self.btn_sync_iso.setToolTip(
+            "Copy Orbital 1's isovalue to the other slots, so the lobes are "
+            "drawn at the same contour level."
+        )
+        self.btn_sync_iso.clicked.connect(self.sync_isovalue)
+        btns.addWidget(self.btn_sync_iso)
+
         btn_clear = QPushButton("Clear All")
         btn_clear.clicked.connect(self.clear_all)
         btns.addWidget(btn_clear)
@@ -382,6 +390,19 @@ class MOCompareDialog(QDialog):
         if col.isValid():
             slot.set_color(which, col.name())
             self.render_all()
+
+    def sync_isovalue(self):
+        """Give every slot Orbital 1's isovalue.
+
+        Orbitals only compare meaningfully at one contour level; the other
+        per-slot settings stay independent so the lobes remain tellable apart.
+        """
+        if not self.slots:
+            return
+        value = self.slots[0].spin_iso.value()
+        for slot in self.slots[1:]:
+            slot.spin_iso.setValue(value)
+        self.render_all()
 
     def update_view(self):
         """Generate whatever cube files are missing, then draw everything."""
