@@ -3,6 +3,17 @@ import logging
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
+#: Shell letters ORCA can print, indexed by angular momentum.
+SHELL_LETTERS = "SPDFGHIK"
+
+
+class UnsupportedBasisError(ValueError):
+    """The basis set uses shells this engine cannot evaluate exactly.
+
+    Raised instead of rendering a partial or mis-indexed orbital — the
+    message is written for the user and shown verbatim in the dialog.
+    """
+
 
 class CubeWriter:
     @staticmethod
@@ -360,11 +371,21 @@ class BasisSetEngine:
             l_type = sh["type"]
             defs = self.basis_definitions.get(l_type, None)
             if not defs:
-                # Fallback or error?
-                pass
-                logging.warning("Warning: Unsupported shell type %s", l_type)
-                sh["basis_data"] = []
-                continue
+                # Skipping used to leave start_idx unset and current_idx
+                # unadvanced, so every later shell read the wrong slice of the
+                # MO coefficient vector -- a silently wrong orbital with
+                # nothing on screen to say so. Refuse the basis set instead.
+                letter = (
+                    SHELL_LETTERS[l_type]
+                    if 0 <= l_type < len(SHELL_LETTERS)
+                    else f"l={l_type}"
+                )
+                raise UnsupportedBasisError(
+                    f"This basis set contains {letter} shells, which the "
+                    "orbital renderer does not support (S through G only).\n\n"
+                    "Visualization is blocked rather than showing an orbital "
+                    "that would be silently incorrect."
+                )
 
             sh["defs"] = defs
 

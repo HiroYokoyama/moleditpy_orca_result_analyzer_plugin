@@ -62,6 +62,7 @@ def _load_mo_engine():
 _mod = _load_mo_engine()
 CubeWriter = _mod.CubeWriter
 BasisSetEngine = _mod.BasisSetEngine
+BasisSetEngineErrors = _mod.UnsupportedBasisError
 
 ANG_TO_BOHR = 1.0 / 0.529177249
 
@@ -187,11 +188,11 @@ class TestBasisSetEngine(unittest.TestCase):
         eng = BasisSetEngine(shells)
         self.assertEqual(eng.n_basis, 1 + 3 + 5 + 7 + 9)
 
-    def test_unsupported_shell_type_skipped(self):
-        eng = BasisSetEngine([_s_shell(), {**_s_shell(), "type": 99}])
-        self.assertEqual(eng.n_basis, 1)
-        val = eng.evaluate_mo_on_grid(0, np.zeros((1, 3)), np.array([1.0]))
-        self.assertEqual(val.shape, (1,))
+    def test_unsupported_shell_type_is_rejected(self):
+        """Superseded the old "skipped" behaviour — see
+        TestUnsupportedShellsAreRejected for why skipping was unsafe."""
+        with self.assertRaises(BasisSetEngineErrors):
+            BasisSetEngine([_s_shell(), {**_s_shell(), "type": 99}])
 
     def test_s_orbital_value_at_center(self):
         eng = BasisSetEngine([_s_shell(alpha=1.0, coeff=1.0)])
@@ -254,6 +255,41 @@ class TestBasisSetEngine(unittest.TestCase):
         self.assertAlmostEqual(
             n_p, (2 * alpha / math.pi) ** 0.75 * math.sqrt(4 * alpha), places=10
         )
+
+
+class TestUnsupportedShellsAreRejected(unittest.TestCase):
+    """A shell the engine cannot evaluate must block, not be skipped.
+
+    Skipping left start_idx unset and current_idx unadvanced, so every shell
+    after it read the wrong slice of the MO coefficient vector — a silently
+    wrong orbital with nothing on screen to say so.
+    """
+
+    @staticmethod
+    def _shells(*types):
+        return [{**_s_shell(), "type": t} for t in types]
+
+    def test_an_h_shell_is_rejected(self):
+        with self.assertRaises(BasisSetEngineErrors):
+            BasisSetEngine(self._shells(0, 5))
+
+    def test_the_message_names_the_shell_letter(self):
+        with self.assertRaises(BasisSetEngineErrors) as ctx:
+            BasisSetEngine(self._shells(5))
+        self.assertIn("H shell", str(ctx.exception))
+
+    def test_an_out_of_range_type_is_rejected(self):
+        with self.assertRaises(BasisSetEngineErrors):
+            BasisSetEngine(self._shells(99))
+
+    def test_s_through_g_are_all_accepted(self):
+        eng = BasisSetEngine(self._shells(0, 1, 2, 3, 4))
+        self.assertEqual(eng.n_basis, 1 + 3 + 5 + 7 + 9)
+
+    def test_later_shells_keep_their_offsets(self):
+        """The reason the skip mattered: indices after it must stay right."""
+        eng = BasisSetEngine(self._shells(0, 2, 0))
+        self.assertEqual([sh["start_idx"] for sh in eng.shells], [0, 1, 6])
 
 
 class TestSphericalShellNormalization(unittest.TestCase):

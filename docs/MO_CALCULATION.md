@@ -79,6 +79,27 @@ Components per shell type, in the order ORCA emits them:
 ORCA writes spherical (`5D`/`7F`) functions for d and above in standard
 output; the engine assumes this.
 
+## Refusing what cannot be rendered exactly
+
+Anything beyond G (H shells in `aug-cc-pV5Z`, `def2-QZVPP` on heavy elements)
+has no definitions here. `_precompute_shells` raises `UnsupportedBasisError`
+rather than skipping the shell: skipping left `start_idx` unset and
+`current_idx` unadvanced, so every later shell read the wrong slice of the MO
+coefficient vector — a silently wrong orbital with nothing on screen to say
+so.
+
+`mo_analysis` adds a second, broader guard. ORCA prints one coefficient per
+basis function, so if `len(coeffs) != engine.n_basis` the basis set that was
+rebuilt is not the one the coefficients belong to — most often a shell
+`parser.parse_basis_set` did not recognise, since it only matches the letters
+`S P D F G`. That mismatch used to be absorbed by `min(len(raw), n_basis)`,
+which silently truncated the vector and left every coefficient after the gap
+paired with the wrong basis function.
+
+Both refusals surface as a dialog naming the cause. Prefer adding that kind
+of guard over a best-effort render: a partially-correct orbital is
+indistinguishable from a correct one by eye.
+
 ## Spherical components: the subtle part
 
 Each spherical component is written as a weighted sum of Cartesian monomials.

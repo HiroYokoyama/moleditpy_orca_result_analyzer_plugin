@@ -33,16 +33,20 @@ from .utils import get_default_export_path, save_json_atomic
 import logging
 
 try:
-    from .mo_engine import BasisSetEngine, CalcWorker
+    from .mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
     from .vis import CubeVisualizer
 except ImportError:
     try:
-        from mo_engine import BasisSetEngine, CalcWorker
+        from mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
         from vis import CubeVisualizer
     except Exception:
         BasisSetEngine = None
         CalcWorker = None
         CubeVisualizer = None
+
+        class UnsupportedBasisError(ValueError):
+            """Stand-in so the except clause stays valid without the engine."""
+
 
 try:
     from .energy_diag import EnergyDiagramDialog
@@ -591,6 +595,11 @@ class MODialog(QDialog):
                 clean_shells.append(d)
 
             return BasisSetEngine(clean_shells)
+        except UnsupportedBasisError as e:
+            # Written for the user; show it as-is rather than wrapped in
+            # "Engine Init Failed".
+            QMessageBox.warning(self, "Unsupported basis set", str(e))
+            return None
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
@@ -706,9 +715,26 @@ class MODialog(QDialog):
 
         # Prepare Data
         raw_coeffs = [x["coeff"] for x in mo_data_coeffs["coeffs"]]
-        dense_vec = np.zeros(engine.n_basis)
-        n = min(len(raw_coeffs), engine.n_basis)
-        dense_vec[:n] = raw_coeffs[:n]
+
+        # ORCA prints one coefficient per basis function, so a mismatch means
+        # the basis set we rebuilt is not the one the coefficients belong to
+        # -- typically a shell the parser did not recognise. min()-truncating
+        # the vector used to hide that: after a dropped shell every remaining
+        # coefficient lines up with the wrong basis function and the orbital
+        # is quietly wrong.
+        if len(raw_coeffs) != engine.n_basis:
+            QMessageBox.warning(
+                self,
+                "Basis set mismatch",
+                f"This job has {len(raw_coeffs)} MO coefficients per orbital "
+                f"but the reconstructed basis set has {engine.n_basis} "
+                "functions.\n\nVisualization is blocked rather than showing "
+                "an orbital that would be silently incorrect.",
+            )
+            self.process_generation_queue()
+            return
+
+        dense_vec = np.array(raw_coeffs, dtype=float)
 
         if np.sum(np.abs(dense_vec)) < 1e-9:
             QMessageBox.warning(
