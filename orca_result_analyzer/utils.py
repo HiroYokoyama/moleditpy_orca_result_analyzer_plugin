@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import stat
+import time
 
 # Known dummy / pseudo-atom labels used in ORCA and other QC output files.
 _DUMMY_SYMBOLS: frozenset[str] = frozenset(
@@ -21,6 +23,34 @@ def get_default_export_path(base_path, suffix="_analyzed", extension=""):
     return os.path.join(dirname, new_filename)
 
 
+def _replace_with_retry(tmp_path, path, attempts=5, delay=0.05):
+    """``os.replace`` with Windows-specific recovery.
+
+    On Windows the destination is opened by the replace itself, so a virus
+    scanner, search indexer or backup agent holding a transient handle makes
+    it fail with ``PermissionError`` (WinError 5) even though nothing is
+    wrong. A read-only destination — common when the plugin was unpacked
+    from a zip that carried the attribute — fails the same way but never
+    recovers on its own, so clear it before the final try.
+    """
+    last = None
+    for attempt in range(attempts):
+        try:
+            os.replace(tmp_path, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            if attempt == attempts - 2 and os.path.exists(path):
+                # Transient-lock retries are exhausted; treat it as a
+                # read-only destination for the last attempt.
+                try:
+                    os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+                except OSError:
+                    logging.debug("Could not clear read-only on %s", path)
+            time.sleep(delay * (attempt + 1))
+    raise last
+
+
 def save_json_atomic(path, data, indent=2):
     """Write *data* as JSON via a temp file + ``os.replace``.
 
@@ -28,11 +58,21 @@ def save_json_atomic(path, data, indent=2):
     I/O error mid-write destroys the previous contents (saved NMR merges,
     dialog settings). Writing to a sibling temp file and atomically
     replacing keeps the old file intact until the new one is complete.
+
+    The temp file is removed if the write or the replace fails, so a failing
+    save cannot leave a growing pile of ``*.json.tmp`` beside the real file.
     """
     tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=indent)
-    os.replace(tmp_path, path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=indent)
+        _replace_with_retry(tmp_path, path)
+    except (OSError, TypeError, ValueError):
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            logging.debug("Could not remove temp file %s", tmp_path)
+        raise
 
 
 def normalize_atom_symbol(raw: str) -> str:

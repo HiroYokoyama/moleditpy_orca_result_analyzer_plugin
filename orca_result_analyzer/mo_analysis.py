@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QComboBox,
     QCheckBox,
+    QMenu,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
@@ -70,6 +71,7 @@ class MODialog(QDialog):
         self.parent_dlg = parent
         self.last_cube_path = None
         self.generation_queue = []  # Init queue
+        self.generation_force = False  # Overwrite cached cubes for this batch
         self.energy_dlg = None  # Track Energy Diagram
         self.setup_ui()
 
@@ -244,13 +246,16 @@ class MODialog(QDialog):
         # but currentItemChanged covers the "primary" selection change.
         self.tree.itemSelectionChanged.connect(self.on_selection_changed)
         self.tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_tree_context_menu)
         layout.addWidget(self.tree)
 
         # 3. Action Buttons
         btn_layout = QHBoxLayout()
         self.btn_vis = QPushButton("Visualize Selected")
         self.btn_vis.setStyleSheet("font-weight: bold; background-color: #d0f0c0;")
-        self.btn_vis.clicked.connect(self.visualize_selected_mos)
+        # Wrapped: clicked(bool) would otherwise bind `checked` to `force`.
+        self.btn_vis.clicked.connect(lambda: self.visualize_selected_mos())
         self.btn_vis.setEnabled(False)  # Default disabled until selection
         btn_layout.addWidget(self.btn_vis)
 
@@ -604,7 +609,42 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
-    def visualize_selected_mos(self):
+    def show_tree_context_menu(self, pos):
+        """Right-click menu on the orbital table."""
+        selected = self.tree.selectedItems()
+        if not selected:
+            return
+
+        cached = [
+            item
+            for item in selected
+            if (path := self.get_cube_path(item.text(0))) and os.path.exists(path)
+        ]
+
+        menu = QMenu(self.tree)
+        act_vis = menu.addAction(f"Visualize Selected ({len(selected)})")
+        act_regen = menu.addAction(f"Regenerate Cube ({len(selected)}) — overwrite")
+        act_regen.setToolTip(
+            "Recompute the cube even if a file already exists, replacing it."
+        )
+        # Regenerating is only meaningful when something is actually cached;
+        # with no file on disk a plain Visualize already computes it.
+        act_regen.setEnabled(bool(cached))
+
+        viewport = self.tree.viewport()
+        chosen = menu.exec(
+            viewport.mapToGlobal(pos) if viewport else self.tree.mapToGlobal(pos)
+        )
+        if chosen is act_vis:
+            self.visualize_selected_mos()
+        elif chosen is act_regen:
+            self.regenerate_selected_mos()
+
+    def regenerate_selected_mos(self):
+        """Recompute cubes for the selected orbitals, overwriting existing files."""
+        self.visualize_selected_mos(force=True)
+
+    def visualize_selected_mos(self, force=False):
         # Batch generation for selected items
         selected = self.tree.selectedItems()
         if not selected:
@@ -620,6 +660,10 @@ class MODialog(QDialog):
         if not self.generation_queue:
             return
 
+        # Applies to the whole batch; generation is strictly sequential, so a
+        # single flag cannot straddle two different requests.
+        self.generation_force = bool(force)
+
         # Start Batch
         self.process_generation_queue()
 
@@ -632,6 +676,8 @@ class MODialog(QDialog):
             ):
                 self.progress_dialog.close()
                 self.progress_dialog = None
+            # Batch over: a later plain Visualize must use the cache again.
+            self.generation_force = False
             return
 
         # Get next key
@@ -759,7 +805,7 @@ class MODialog(QDialog):
 
         self.last_cube_path = out_path
 
-        if os.path.exists(out_path):
+        if os.path.exists(out_path) and not getattr(self, "generation_force", False):
             self.show_cube(out_path)
             # Highlight
             it = QTreeWidgetItemIterator(self.tree)

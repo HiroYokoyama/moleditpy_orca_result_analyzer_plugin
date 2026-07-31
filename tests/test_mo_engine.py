@@ -10,6 +10,7 @@ inheritable class for CalcWorker's class definition to succeed).
 import importlib.util
 import math
 import os
+import re
 import sys
 import types
 import unittest
@@ -22,6 +23,17 @@ _SRC = os.path.normpath(
         os.path.dirname(__file__), "..", "orca_result_analyzer", "mo_engine.py"
     )
 )
+
+
+def _plugin_version():
+    """PLUGIN_VERSION read from the package source, without importing it."""
+    init = os.path.join(os.path.dirname(_SRC), "__init__.py")
+    with open(init, encoding="utf-8") as fh:
+        m = re.search(r"""PLUGIN_VERSION\s*=\s*['"](.+?)['"]""", fh.read())
+    return m.group(1)
+
+
+PLUGIN_VERSION = _plugin_version()
 
 
 def _load_mo_engine():
@@ -45,9 +57,22 @@ def _load_mo_engine():
     saved = {k: sys.modules.get(k) for k in ("PyQt6", "PyQt6.QtCore")}
     sys.modules["PyQt6"] = pyqt6
     sys.modules["PyQt6.QtCore"] = core
+
+    # mo_engine stamps PLUGIN_VERSION into every cube header via `from . import
+    # PLUGIN_VERSION`. Give it a package to resolve that against, so the test
+    # covers the real import branch rather than the flat-load fallback.
+    pkg = sys.modules.get("orca_result_analyzer")
+    if pkg is None:
+        pkg = types.ModuleType("orca_result_analyzer")
+        sys.modules["orca_result_analyzer"] = pkg
+        saved["orca_result_analyzer"] = None
+    if not hasattr(pkg, "PLUGIN_VERSION"):
+        pkg.PLUGIN_VERSION = PLUGIN_VERSION
+
     try:
         spec = importlib.util.spec_from_file_location("mo_engine_standalone", _SRC)
         mod = importlib.util.module_from_spec(spec)
+        mod.__package__ = "orca_result_analyzer"
         sys.modules["mo_engine_standalone"] = mod
         spec.loader.exec_module(mod)
         return mod
@@ -97,6 +122,30 @@ class TestCubeWriter(unittest.TestCase):
             lines = self._write(td)
         self.assertIn("MO 5", lines[0])
         self.assertTrue(lines[1])
+
+    def test_second_comment_line_stamps_the_plugin_version(self):
+        """Cube provenance must be readable from the file.
+
+        The f/g normalization fix changed the values in every cube built from
+        a basis carrying those shells, so "which version wrote this" cannot
+        be answered by looking at the numbers.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            lines = self._write(td)
+        self.assertIn("MoleditPy ORCA Result Analyzer", lines[1])
+        self.assertIn(f"v{PLUGIN_VERSION}", lines[1])
+        # The fallback must not reach a written file.
+        self.assertNotIn("unknown", lines[1])
+
+    def test_version_line_does_not_disturb_the_grid_header(self):
+        """The atom/grid block still starts on line 3 (cube format is positional)."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            lines = self._write(td)
+        self.assertEqual(int(lines[2].split()[0]), 3)
 
     def test_atom_count_and_origin(self):
         import tempfile
