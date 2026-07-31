@@ -26,6 +26,11 @@ as a zip of that directory.
   the 3D structure, atom picking, and one `show_*` launcher per analysis dialog.
 - One module per analysis type (`nmr_analysis.py`, `mo_analysis.py`, …), each a
   self-contained `QDialog`.
+- `mo_engine.py` — basis-set evaluation for MO cubes. Read
+  `docs/MO_CALCULATION.md` before changing it: a mis-normalized basis function
+  still renders as a plausible orbital, so changes there must be verified
+  numerically (spherical-harmonic similarity, unit norm, nodal angles) rather
+  than by looking at the picture.
 - `utils.py` — shared helpers, notably `save_json_atomic` and
   `get_default_export_path`.
 
