@@ -23,6 +23,11 @@ Real-time convergence visualization for SCF energy cycles.
 - **Levels**: View orbital energies and occupancy with HOMO/LUMO identification.
 - **Visualization**: Generate 3D Cubes (isosurfaces) with **Smooth Shading** and adjustable opacity.
 - **Presets**: Save and manage visualization presets (colors, isovalues, styles).
+- **Compare MOs**: Show up to four orbitals at once in a separate window, each with
+  its own lobe colors, isovalue, opacity and style. Opens on the orbitals selected
+  in the table — or on HOMO, LUMO, LUMO+1 and HOMO-1 when nothing is selected —
+  and generates any missing cubes on demand. Also available from the orbital
+  table's right-click menu.
 - **Advanced Support**: Successfully handles S, P, D, F, and G shells (L=4).
 - **Feedback**: Integrated warning system identifies missing ORCA output keywords required for cube generation.
 

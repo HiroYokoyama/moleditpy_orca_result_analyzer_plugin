@@ -53,6 +53,9 @@ DEFAULT_COLORS = [
 
 STYLES = ["Surface", "Wireframe", "Points"]
 
+# Slot defaults when the MO table has no selection to inherit.
+DEFAULT_TAGS = ["HOMO", "LUMO", "LUMO+1", "HOMO-1"]
+
 
 def contrast_text(hex_c):
     """'black' or 'white', whichever stays readable on *hex_c*."""
@@ -82,7 +85,7 @@ class MOSlot:
         row1.addWidget(self.check_on)
 
         self.combo_mo = QComboBox()
-        for label, key, display_id in orbitals:
+        for label, key, display_id, _tag in orbitals:
             self.combo_mo.addItem(label, (key, display_id))
         row1.addWidget(self.combo_mo)
         outer.addLayout(row1)
@@ -151,8 +154,9 @@ class MOSlot:
         return None, None
 
     def to_settings(self):
+        """Appearance only. Which orbital a slot holds, and whether it is on,
+        follow the loaded file's selection and are not persisted."""
         return {
-            "enabled": bool(self.check_on.isChecked()),
             "color_p": self.color("p"),
             "color_n": self.color("n"),
             "iso": self.spin_iso.value(),
@@ -181,8 +185,6 @@ class MOSlot:
                 self.combo_style.setCurrentIndex(idx)
         if "smooth_shading" in data:
             self.check_smooth.setChecked(bool(data.get("smooth_shading")))
-        if "enabled" in data:
-            self.check_on.setChecked(bool(data.get("enabled")))
 
 
 class MOCompareDialog(QDialog):
@@ -198,7 +200,7 @@ class MOCompareDialog(QDialog):
     # -- construction ------------------------------------------------------
 
     def collect_orbitals(self):
-        """(label, access key, display id) for every row of the MO table."""
+        """(label, access key, display id, frontier tag) per MO table row."""
         out = []
         tree = getattr(self.parent_dlg, "tree", None)
         if tree is None:
@@ -213,8 +215,55 @@ class MOCompareDialog(QDialog):
             key = item.data(0, Qt.ItemDataRole.UserRole)
             if key is None:
                 continue
-            out.append((label, key, display_id))
+            out.append((label, key, display_id, tag))
         return out
+
+    def preselected_keys(self):
+        """Orbitals highlighted in the MO table when this window opened."""
+        keys = []
+        tree = getattr(self.parent_dlg, "tree", None)
+        if tree is None:
+            return keys
+        try:
+            selected = tree.selectedItems() or []
+        except (AttributeError, RuntimeError) as _e:
+            logging.warning("silenced: %s", _e)
+            return keys
+        for item in selected:
+            key = item.data(0, Qt.ItemDataRole.UserRole)
+            if key is not None and key not in keys:
+                keys.append(key)
+        return keys[:SLOT_COUNT]
+
+    def default_keys(self):
+        """The frontier orbitals, in DEFAULT_TAGS order.
+
+        Unrestricted output tags both spin channels, so a tag can repeat; the
+        first row wins, which is the channel the table lists first.
+        """
+        by_tag = {}
+        for _label, key, _display_id, tag in self.orbitals:
+            if tag and tag not in by_tag:
+                by_tag[tag] = key
+        return [by_tag[t] for t in DEFAULT_TAGS if t in by_tag]
+
+    def apply_selection(self, keys=None):
+        """Fill the slots with *keys*, or with the table selection, or with
+        the frontier orbitals — whichever is available, in that order."""
+        if keys is None:
+            keys = self.preselected_keys() or self.default_keys()
+        positions = {key: i for i, (_l, key, _d, _t) in enumerate(self.orbitals)}
+
+        assigned = 0
+        for slot in self.slots:
+            key = keys[assigned] if assigned < len(keys) else None
+            pos = positions.get(key) if key is not None else None
+            if pos is None:
+                slot.check_on.setChecked(False)
+                continue
+            slot.combo_mo.setCurrentIndex(pos)
+            slot.check_on.setChecked(True)
+            assigned += 1
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
@@ -224,15 +273,15 @@ class MOCompareDialog(QDialog):
         )
         layout.addWidget(info)
 
-        orbitals = self.collect_orbitals()
+        self.orbitals = self.collect_orbitals()
         grid = QGridLayout()
         for i in range(SLOT_COUNT):
             colors = list(DEFAULT_COLORS[i])
             if i == 0:
                 colors = [self._parent_color("p"), self._parent_color("n")]
-            slot = MOSlot(i, orbitals, colors, self)
+            slot = MOSlot(i, self.orbitals, colors, self)
             if i == 0:
-                self._seed_first_slot(slot, orbitals)
+                self._seed_first_slot(slot)
             grid.addWidget(slot.box, i // 2, i % 2)
             self.slots.append(slot)
         layout.addLayout(grid)
@@ -240,6 +289,9 @@ class MOCompareDialog(QDialog):
         # Saved appearance wins over the seeded defaults; with nothing saved,
         # slot 1 keeps the colours it just inherited from the MO dialog.
         self.load_settings()
+        # Which orbitals go where depends on the loaded file, not on saved
+        # settings, so this runs last.
+        self.apply_selection()
 
         btns = QHBoxLayout()
         self.btn_update = QPushButton("Update View")
@@ -308,8 +360,8 @@ class MOCompareDialog(QDialog):
             logging.warning("silenced: %s", _e)
             return DEFAULT_COLORS[0][0 if which == "p" else 1]
 
-    def _seed_first_slot(self, slot, orbitals):
-        """Slot 1 mirrors the MO dialog: same orbital, same render settings."""
+    def _seed_first_slot(self, slot):
+        """Slot 1 renders with the MO dialog's own settings."""
         parent = self.parent_dlg
         try:
             slot.spin_iso.setValue(parent.spin_iso.value())
@@ -320,19 +372,6 @@ class MOCompareDialog(QDialog):
             slot.check_smooth.setChecked(parent.check_smooth.isChecked())
         except (AttributeError, RuntimeError, TypeError) as _e:
             logging.warning("silenced: %s", _e)
-
-        current = None
-        tree = getattr(parent, "tree", None)
-        if tree is not None:
-            item = tree.currentItem()
-            if item is not None:
-                current = item.data(0, Qt.ItemDataRole.UserRole)
-        if current is not None:
-            for pos, (_lbl, key, _disp) in enumerate(orbitals):
-                if key == current:
-                    slot.combo_mo.setCurrentIndex(pos)
-                    break
-        slot.check_on.setChecked(True)
 
     # -- interaction -------------------------------------------------------
 

@@ -319,16 +319,17 @@ class TestTreeContextMenu(_RegenCase):
             self.dlg.show_tree_context_menu(MagicMock())
         self.assertEqual(created, [])
 
-    def test_menu_offers_visualise_and_regenerate(self):
+    def test_menu_offers_visualise_regenerate_and_compare(self):
         self._select(1)
         created, menu_cls = self._menu()
         menu_cls.chosen = None
         with patch.object(M, "QMenu", menu_cls):
             self.dlg.show_tree_context_menu(MagicMock())
         labels = [a.text for a in created[0].actions]
-        self.assertEqual(len(labels), 2)
+        self.assertEqual(len(labels), 3)
         self.assertIn("Visualize", labels[0])
         self.assertIn("Regenerate", labels[1])
+        self.assertIn("Compare", labels[2])
 
     def test_regenerate_is_disabled_when_nothing_is_cached(self):
         self._select(1)

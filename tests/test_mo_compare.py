@@ -100,6 +100,34 @@ class _CompareCase(unittest.TestCase):
                 return tree.topLevelItem(i)
         raise AssertionError(f"no row {display_id}")
 
+    def _select_rows(self, *display_ids):
+        """Highlight rows in the MO table, as a click would."""
+        for i in range(self.dlg.tree.topLevelItemCount()):
+            self.dlg.tree.topLevelItem(i).setSelected(False)
+        for display_id in display_ids:
+            self._row(display_id).setSelected(True)
+
+    def _blank_compare(self):
+        """A comparison window with every slot switched off, so a test can
+        enable exactly the slots it is about."""
+        cmp_dlg = self._make_compare()
+        for slot in cmp_dlg.slots:
+            slot.check_on.setChecked(False)
+        return cmp_dlg
+
+    def _enable(self, cmp_dlg, index, display_id):
+        slot = cmp_dlg.slots[index]
+        slot.check_on.setChecked(True)
+        for i in range(slot.combo_mo.count()):
+            if slot.combo_mo.itemData(i)[1] == display_id:
+                slot.combo_mo.setCurrentIndex(i)
+                break
+        return slot
+
+    def _shown(self, cmp_dlg):
+        """(slot index, display id) for every switched-on slot."""
+        return [(s.index, s.selection()[1]) for s in cmp_dlg.slots if s.is_on()]
+
 
 # ---------------------------------------------------------------------------
 # Context menu wording
@@ -127,6 +155,63 @@ class TestContextMenuLabel(_CompareCase):
         with patch.object(M, "QMenu", _Menu):
             self.dlg.show_tree_context_menu(MagicMock())
         return captured
+
+    def _choose(self, index):
+        """Right-click and pick the action at *index*."""
+
+        class _Menu:
+            def __init__(self, *a, **k):
+                self.actions = []
+
+            def addAction(self, text):
+                act = MagicMock()
+                act.text = text
+                act.enabled = True
+                act.setEnabled = lambda v, a=act: setattr(a, "enabled", v)
+                self.actions.append(act)
+                return act
+
+            def exec(self, *a, **k):
+                self.picked = self.actions[index]
+                return self.picked
+
+        made = []
+
+        class _Recorded(_Menu):
+            def __init__(self, *a, **k):
+                super().__init__(*a, **k)
+                made.append(self)
+
+        with patch.object(M, "QMenu", _Recorded):
+            with patch.object(self.dlg, "show_compare_dialog") as opened:
+                with patch.object(self.dlg, "_generate_single_mo"):
+                    self.dlg.show_tree_context_menu(MagicMock())
+        return made[0], opened
+
+    def test_the_menu_offers_compare(self):
+        self._row("1").setSelected(True)
+        self.assertEqual(self._labels()[2], "Compare Selected (1)")
+
+    def test_choosing_compare_opens_the_comparison_window(self):
+        self._row("1").setSelected(True)
+        _menu, opened = self._choose(2)
+        opened.assert_called_once()
+
+    def test_compare_is_disabled_beyond_four_orbitals(self):
+        for mo in ("0", "1", "2", "3"):
+            self._row(mo).setSelected(True)
+        menu, _opened = self._choose(0)
+        self.assertTrue(menu.actions[2].enabled)
+        self.dlg.tree.selectedItems = lambda: [self._row(m) for m in "0123"] + [
+            self._row("0")
+        ]
+        menu, _opened = self._choose(0)
+        self.assertFalse(menu.actions[2].enabled)
+
+    def test_choosing_visualise_does_not_open_the_comparison(self):
+        self._row("1").setSelected(True)
+        _menu, opened = self._choose(0)
+        opened.assert_not_called()
 
     def test_regenerate_entry_no_longer_says_overwrite(self):
         self.assertNotIn("overwrite", " ".join(self._labels()).lower())
@@ -259,6 +344,21 @@ class TestCompareLauncher(_CompareCase):
             self.assertEqual(cls.call_count, 1)
         self.dlg.compare_dlg.raise_.assert_called_once()
 
+    def test_reopening_refills_the_slots_from_the_new_selection(self):
+        """Otherwise the raised window still shows the previous orbitals."""
+        with patch.object(M, "MOCompareDialog"):
+            self.dlg.show_compare_dialog()
+            self.dlg.show_compare_dialog()
+        self.dlg.compare_dlg.apply_selection.assert_called_once_with()
+
+    def test_reopening_really_refills_a_live_window(self):
+        self._select_rows("2")
+        cmp_dlg = self._make_compare()
+        self.dlg.compare_dlg = cmp_dlg
+        self._select_rows("0")
+        self.dlg.show_compare_dialog()
+        self.assertEqual(self._shown(cmp_dlg), [(0, "0")])
+
     def test_a_destroyed_window_is_rebuilt_rather_than_raised(self):
         stale = MagicMock()
         stale.raise_.side_effect = RuntimeError("wrapped C/C++ object deleted")
@@ -301,8 +401,13 @@ class TestCompareConstruction(_CompareCase):
             self.assertEqual(slot.combo_mo.count(), 4)
 
     def test_orbital_entries_are_labelled_with_their_frontier_tag(self):
-        labels = [lbl for lbl, _k, _d in self._make_compare().collect_orbitals()]
+        labels = [lbl for lbl, _k, _d, _t in self._make_compare().collect_orbitals()]
         self.assertTrue(any("HOMO" in lbl for lbl in labels))
+
+    def test_orbital_entries_carry_the_frontier_tag(self):
+        tags = {d: t for _l, _k, d, t in self._make_compare().collect_orbitals()}
+        self.assertEqual(tags["1"], "HOMO")
+        self.assertEqual(tags["2"], "LUMO")
 
     def test_orbital_entries_carry_the_lookup_key_and_display_id(self):
         cmp_dlg = self._make_compare()
@@ -323,10 +428,104 @@ class TestCompareConstruction(_CompareCase):
         prefixes = [s.prefix for s in self._make_compare().slots]
         self.assertEqual(len(set(prefixes)), CMP.SLOT_COUNT)
 
-    def test_only_the_first_slot_starts_enabled(self):
+
+# ---------------------------------------------------------------------------
+# Which orbitals the slots open on
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultOrbitals(_CompareCase):
+    """With nothing selected in the table, the slots open on the frontier."""
+
+    def test_the_slots_are_filled_with_the_frontier_orbitals(self):
+        # HOMO=1, LUMO=2, LUMO+1=3, HOMO-1=0 for this fixture.
+        self.assertEqual(
+            self._shown(self._make_compare()),
+            [(0, "1"), (1, "2"), (2, "3"), (3, "0")],
+        )
+
+    def test_all_four_start_switched_on(self):
+        self.assertTrue(all(s.is_on() for s in self._make_compare().slots))
+
+    def test_the_default_order_is_homo_lumo_lumo_plus_one_homo_minus_one(self):
+        self.assertEqual(CMP.DEFAULT_TAGS, ["HOMO", "LUMO", "LUMO+1", "HOMO-1"])
+
+    def test_absent_frontier_tags_leave_their_slots_off(self):
+        """A two-orbital job has no LUMO+1 or HOMO-1 to show."""
+        small = {
+            str(i): {"id": i, "energy": e, "occ": occ, "spin": "restricted"}
+            for i, (e, occ) in enumerate([(-1.0, 2.0), (0.2, 0.0)])
+        }
+        self.dlg.mos = small
+        self.dlg.normalize_and_populate()
+        cmp_dlg = self._make_compare()
+        self.assertEqual(self._shown(cmp_dlg), [(0, "0"), (1, "1")])
+
+    def test_the_same_tag_in_two_spin_channels_is_taken_once(self):
+        mos = {}
+        for i, (e, occ) in enumerate([(-1.0, 1.0), (0.3, 0.0)]):
+            mos[f"{i}_alpha"] = {"id": i, "energy": e, "occ": occ, "spin": "alpha"}
+            mos[f"{i}_beta"] = {"id": i, "energy": e, "occ": occ, "spin": "beta"}
+        self.dlg.mos = mos
+        self.dlg.normalize_and_populate()
+        filled = [d for _i, d in self._shown(self._make_compare())]
+        self.assertEqual(len(filled), len(set(filled)))
+
+
+class TestPreselectedOrbitals(_CompareCase):
+    """Rows highlighted in the MO table fill the slots in order."""
+
+    def test_a_single_selected_orbital_fills_the_first_slot(self):
+        self._select_rows("2")
+        self.assertEqual(self._shown(self._make_compare()), [(0, "2")])
+
+    def test_several_selected_orbitals_fill_consecutive_slots(self):
+        self._select_rows("3", "1")
+        self.assertEqual(self._shown(self._make_compare()), [(0, "3"), (1, "1")])
+
+    def test_unfilled_slots_are_switched_off(self):
+        self._select_rows("2")
         slots = self._make_compare().slots
-        self.assertTrue(slots[0].is_on())
         self.assertFalse(any(s.is_on() for s in slots[1:]))
+
+    def test_a_selection_beats_the_frontier_defaults(self):
+        self._select_rows("0")
+        self.assertEqual(self._shown(self._make_compare()), [(0, "0")])
+
+    def test_more_than_four_selected_orbitals_are_truncated(self):
+        mos = {
+            str(i): {
+                "id": i,
+                "energy": -1.0 + 0.2 * i,
+                "occ": 2.0,
+                "spin": "restricted",
+            }
+            for i in range(6)
+        }
+        self.dlg.mos = mos
+        self.dlg.normalize_and_populate()
+        self._select_rows("0", "1", "2", "3", "4", "5")
+        self.assertEqual(len(self._shown(self._make_compare())), CMP.SLOT_COUNT)
+
+    def test_explicit_keys_win_over_everything(self):
+        cmp_dlg = self._make_compare()
+        cmp_dlg.apply_selection(["0"])
+        self.assertEqual(self._shown(cmp_dlg), [(0, "0")])
+
+    def test_reapplying_replaces_the_previous_fill(self):
+        cmp_dlg = self._make_compare()
+        cmp_dlg.apply_selection(["2", "3"])
+        cmp_dlg.apply_selection(["1"])
+        self.assertEqual(self._shown(cmp_dlg), [(0, "1")])
+
+    def test_an_unknown_key_does_not_fill_a_slot(self):
+        cmp_dlg = self._make_compare()
+        cmp_dlg.apply_selection(["nosuchmo"])
+        self.assertEqual(self._shown(cmp_dlg), [])
+
+    def test_a_table_that_cannot_report_its_selection_falls_back(self):
+        self.dlg.tree.selectedItems = MagicMock(side_effect=RuntimeError("gone"))
+        self.assertEqual(self._make_compare().preselected_keys(), [])
 
 
 class TestNoOrbitals(_CompareCase):
@@ -390,11 +589,6 @@ class TestFirstSlotMirrorsTheMODialog(_CompareCase):
         self.dlg.check_smooth.setChecked(False)
         self.assertFalse(self._make_compare().slots[0].check_smooth.isChecked())
 
-    def test_the_selected_orbital_matches(self):
-        self.dlg.tree.setCurrentItem(self._row("2"))
-        slot = self._make_compare().slots[0]
-        self.assertEqual(slot.selection()[1], "2")
-
     def test_an_unreadable_parent_colour_falls_back_to_the_default(self):
         self.dlg.get_color_hex = MagicMock(side_effect=AttributeError("gone"))
         self.assertEqual(
@@ -408,24 +602,15 @@ class TestFirstSlotMirrorsTheMODialog(_CompareCase):
 
 
 class TestRendering(_CompareCase):
-    def _enable(self, cmp_dlg, index, display_id):
-        slot = cmp_dlg.slots[index]
-        slot.check_on.setChecked(True)
-        for i in range(slot.combo_mo.count()):
-            if slot.combo_mo.itemData(i)[1] == display_id:
-                slot.combo_mo.setCurrentIndex(i)
-                break
-        return slot
-
     def test_an_enabled_slot_with_a_cube_is_drawn(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         cmp_dlg.render_all()
         self.assertEqual(len(_FakeVisualizer.calls), 1)
 
     def test_four_orbitals_are_drawn_at_once(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         for i, mo in enumerate(["0", "1", "2", "3"]):
             self._write_cube(mo)
             self._enable(cmp_dlg, i, mo)
@@ -433,7 +618,7 @@ class TestRendering(_CompareCase):
         self.assertEqual(len(_FakeVisualizer.calls), 4)
 
     def test_each_orbital_gets_its_own_actor_names(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         for i, mo in enumerate(["0", "1", "2", "3"]):
             self._write_cube(mo)
             self._enable(cmp_dlg, i, mo)
@@ -442,7 +627,7 @@ class TestRendering(_CompareCase):
         self.assertEqual(len(set(names)), 4)
 
     def test_each_slot_renders_with_its_own_colours(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         for i, mo in enumerate(["0", "1"]):
             self._write_cube(mo)
             self._enable(cmp_dlg, i, mo)
@@ -452,7 +637,7 @@ class TestRendering(_CompareCase):
 
     def test_per_slot_isovalue_and_opacity_reach_the_renderer(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         slot = self._enable(cmp_dlg, 0, "1")
         slot.spin_iso.setValue(0.055)
         slot.spin_opacity.setValue(0.8)
@@ -463,7 +648,7 @@ class TestRendering(_CompareCase):
 
     def test_the_style_is_lower_cased_for_pyvista(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         slot = self._enable(cmp_dlg, 0, "1")
         slot.combo_style.setCurrentText("Wireframe")
         cmp_dlg.render_all()
@@ -471,13 +656,13 @@ class TestRendering(_CompareCase):
 
     def test_a_disabled_slot_is_not_drawn(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1").check_on.setChecked(False)
         cmp_dlg.render_all()
         self.assertEqual(_FakeVisualizer.calls, [])
 
     def test_a_disabled_slot_has_its_actors_removed(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.slots[1].check_on.setChecked(False)
         cmp_dlg.render_all()
         removed = [c[0][0] for c in self.dlg.mw.plotter.remove_actor.call_args_list]
@@ -486,7 +671,7 @@ class TestRendering(_CompareCase):
     def test_the_single_orbital_actors_are_cleared_first(self):
         """Otherwise the MO dialog's own lobes double-draw over slot 1."""
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         cmp_dlg.render_all()
         removed = [c[0][0] for c in self.dlg.mw.plotter.remove_actor.call_args_list]
@@ -494,7 +679,7 @@ class TestRendering(_CompareCase):
         self.assertIn("mo_iso_n", removed)
 
     def test_a_missing_cube_is_reported_not_drawn(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         cmp_dlg.render_all()
         self.assertEqual(_FakeVisualizer.calls, [])
@@ -503,27 +688,27 @@ class TestRendering(_CompareCase):
     def test_an_unreadable_cube_is_skipped(self):
         self._write_cube("1")
         _FakeVisualizer.loadable = False
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         cmp_dlg.render_all()
         self.assertEqual(_FakeVisualizer.calls, [])
 
     def test_the_status_line_counts_what_was_drawn(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         cmp_dlg.render_all()
         self.assertIn("1 orbital", cmp_dlg.lbl_status.text())
 
     def test_a_missing_visualiser_is_reported(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         with patch.object(CMP, "CubeVisualizer", None):
             with patch.object(CMP, "QMessageBox") as mb:
                 cmp_dlg.render_all()
                 mb.warning.assert_called_once()
 
     def test_rendering_without_a_main_window_is_a_no_op(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.mw = None
         cmp_dlg.render_all()
         self.assertEqual(_FakeVisualizer.calls, [])
@@ -535,18 +720,9 @@ class TestRendering(_CompareCase):
 
 
 class TestUpdateView(_CompareCase):
-    def _enable(self, cmp_dlg, index, display_id):
-        slot = cmp_dlg.slots[index]
-        slot.check_on.setChecked(True)
-        for i in range(slot.combo_mo.count()):
-            if slot.combo_mo.itemData(i)[1] == display_id:
-                slot.combo_mo.setCurrentIndex(i)
-                break
-        return slot
-
     def test_cached_orbitals_are_drawn_without_recomputing(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         with patch.object(self.dlg, "generate_cubes") as gen:
             cmp_dlg.update_view()
@@ -554,14 +730,14 @@ class TestUpdateView(_CompareCase):
         self.assertEqual(len(_FakeVisualizer.calls), 1)
 
     def test_a_missing_cube_is_requested_from_the_mo_dialog(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         with patch.object(self.dlg, "generate_cubes") as gen:
             cmp_dlg.update_view()
             self.assertEqual(gen.call_args[0][0], ["1"])
 
     def test_the_render_runs_once_generation_finishes(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         with patch.object(self.dlg, "generate_cubes") as gen:
             cmp_dlg.update_view()
@@ -569,7 +745,7 @@ class TestUpdateView(_CompareCase):
 
     def test_only_missing_cubes_are_generated(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         self._enable(cmp_dlg, 1, "2")
         with patch.object(self.dlg, "generate_cubes") as gen:
@@ -577,7 +753,7 @@ class TestUpdateView(_CompareCase):
             self.assertEqual(gen.call_args[0][0], ["2"])
 
     def test_the_same_orbital_in_two_slots_is_generated_once(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         self._enable(cmp_dlg, 1, "1")
         with patch.object(self.dlg, "generate_cubes") as gen:
@@ -585,14 +761,14 @@ class TestUpdateView(_CompareCase):
             self.assertEqual(gen.call_args[0][0], ["1"])
 
     def test_disabled_slots_do_not_trigger_generation(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         with patch.object(self.dlg, "generate_cubes") as gen:
             cmp_dlg.slots[0].check_on.setChecked(False)
             cmp_dlg.update_view()
             gen.assert_not_called()
 
     def test_a_generation_failure_is_reported_to_the_user(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._enable(cmp_dlg, 0, "1")
         with patch.object(self.dlg, "generate_cubes", side_effect=RuntimeError("boom")):
             with patch.object(CMP, "QMessageBox") as mb:
@@ -617,30 +793,31 @@ class TestSlotColorPicking(_CompareCase):
                 cmp_dlg.pick_slot_color(slot, which)
 
     def test_a_chosen_colour_is_stored_on_the_slot(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self._pick(cmp_dlg, cmp_dlg.slots[2], "p", "#abcdef")
         self.assertEqual(cmp_dlg.slots[2].color("p"), "#abcdef")
 
     def test_choosing_a_colour_redraws(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
+        self._enable(cmp_dlg, 0, "1")
         self._pick(cmp_dlg, cmp_dlg.slots[0], "n", "#abcdef")
         self.assertTrue(_FakeVisualizer.calls)
 
     def test_cancelling_leaves_the_colour_alone(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         before = cmp_dlg.slots[3].color("p")
         self._pick(cmp_dlg, cmp_dlg.slots[3], "p", "#abcdef", valid=False)
         self.assertEqual(cmp_dlg.slots[3].color("p"), before)
 
     def test_a_colour_only_affects_its_own_slot(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         other = cmp_dlg.slots[1].color("p")
         self._pick(cmp_dlg, cmp_dlg.slots[2], "p", "#abcdef")
         self.assertEqual(cmp_dlg.slots[1].color("p"), other)
 
     def test_a_slot_with_no_stylesheet_reports_a_default(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.slots[0].btn_p.setStyleSheet("")
         self.assertEqual(cmp_dlg.slots[0].color("p"), "#ff0000")
 
@@ -661,12 +838,12 @@ class TestContrastText(unittest.TestCase):
 
 class TestClearAndClose(_CompareCase):
     def test_clear_all_switches_every_slot_off(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.clear_all()
         self.assertFalse(any(s.is_on() for s in cmp_dlg.slots))
 
     def test_clear_all_removes_every_actor(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.clear_all()
         removed = [c[0][0] for c in self.dlg.mw.plotter.remove_actor.call_args_list]
         for i in range(CMP.SLOT_COUNT):
@@ -674,25 +851,25 @@ class TestClearAndClose(_CompareCase):
             self.assertIn(f"mo_cmp{i}_n", removed)
 
     def test_closing_removes_every_actor(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.closeEvent(MagicMock())
         removed = [c[0][0] for c in self.dlg.mw.plotter.remove_actor.call_args_list]
         self.assertIn("mo_cmp3_n", removed)
 
     def test_closing_tells_the_mo_dialog_to_forget_it(self):
         self.dlg.compare_dlg = object()
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.closeEvent(MagicMock())
         self.assertIsNone(self.dlg.compare_dlg)
 
     def test_closing_accepts_the_event_rather_than_recursing(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         event = MagicMock()
         cmp_dlg.closeEvent(event)
         event.accept.assert_called_once()
 
     def test_escape_routes_through_the_cleanup(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         with patch.object(cmp_dlg, "close") as close:
             cmp_dlg.reject()
             close.assert_called_once()
@@ -711,7 +888,7 @@ class TestSettingsPersistence(_CompareCase):
             return json.load(fh)
 
     def test_closing_writes_the_slot_settings(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.slots[1].set_color("p", "#010203")
         cmp_dlg.closeEvent(MagicMock())
         self.assertEqual(
@@ -719,78 +896,79 @@ class TestSettingsPersistence(_CompareCase):
         )
 
     def test_every_slot_is_written(self):
-        self._make_compare().closeEvent(MagicMock())
+        self._blank_compare().closeEvent(MagicMock())
         self.assertEqual(len(self._settings()["mo_compare"]["slots"]), CMP.SLOT_COUNT)
 
     def test_rendering_saves_too(self):
         self._write_cube("1")
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         cmp_dlg.slots[0].spin_iso.setValue(0.031)
         cmp_dlg.render_all()
         self.assertAlmostEqual(self._settings()["mo_compare"]["slots"][0]["iso"], 0.031)
 
     def test_saved_colours_come_back_on_reopen(self):
-        first = self._make_compare()
+        first = self._blank_compare()
         first.slots[2].set_color("n", "#0a0b0c")
         first.closeEvent(MagicMock())
-        self.assertEqual(self._make_compare().slots[2].color("n"), "#0a0b0c")
+        self.assertEqual(self._blank_compare().slots[2].color("n"), "#0a0b0c")
 
     def test_saved_isovalue_opacity_and_style_come_back(self):
-        first = self._make_compare()
+        first = self._blank_compare()
         first.slots[1].spin_iso.setValue(0.044)
         first.slots[1].spin_opacity.setValue(0.9)
         first.slots[1].combo_style.setCurrentText("Points")
         first.slots[1].check_smooth.setChecked(False)
         first.closeEvent(MagicMock())
 
-        slot = self._make_compare().slots[1]
+        slot = self._blank_compare().slots[1]
         self.assertAlmostEqual(slot.spin_iso.value(), 0.044)
         self.assertAlmostEqual(slot.spin_opacity.value(), 0.9)
         self.assertEqual(slot.combo_style.currentText(), "Points")
         self.assertFalse(slot.check_smooth.isChecked())
 
-    def test_saved_enabled_state_comes_back(self):
-        first = self._make_compare()
-        first.slots[3].check_on.setChecked(True)
+    def test_which_slots_are_on_is_not_persisted(self):
+        """That follows the loaded file's orbitals, not last session's."""
+        first = self._blank_compare()
         first.closeEvent(MagicMock())
-        self.assertTrue(self._make_compare().slots[3].is_on())
+        self.assertNotIn("enabled", self._settings()["mo_compare"]["slots"][0])
+        self.assertTrue(all(s.is_on() for s in self._make_compare().slots))
 
     def test_a_saved_slot_one_colour_wins_over_the_mo_dialog_default(self):
-        first = self._make_compare()
+        first = self._blank_compare()
         first.slots[0].set_color("p", "#111111")
         first.closeEvent(MagicMock())
         self.dlg.set_btn_color(self.dlg.btn_color_p, "#999999")
-        self.assertEqual(self._make_compare().slots[0].color("p"), "#111111")
+        self.assertEqual(self._blank_compare().slots[0].color("p"), "#111111")
 
     def test_the_mo_dialog_settings_are_not_clobbered(self):
         self.dlg.presets["Mine"] = {"iso": 0.05}
         self.dlg.settings_file = os.path.join(self.tmp, "settings.json")
         self.dlg.save_settings()
-        self._make_compare().closeEvent(MagicMock())
+        self._blank_compare().closeEvent(MagicMock())
         self.assertIn("Mine", self._settings()["mo_settings"]["presets"])
 
     def test_nothing_saved_yet_leaves_the_defaults_alone(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self.assertEqual(cmp_dlg.slots[1].color("p"), CMP.DEFAULT_COLORS[1][0])
 
     def test_a_corrupt_settings_file_is_survivable(self):
         with open(os.path.join(self.tmp, "settings.json"), "w", encoding="utf-8") as fh:
             fh.write("{not json")
-        self.assertEqual(len(self._make_compare().slots), CMP.SLOT_COUNT)
+        self.assertEqual(len(self._blank_compare().slots), CMP.SLOT_COUNT)
 
     def test_a_settings_file_without_a_compare_section_is_survivable(self):
         with open(os.path.join(self.tmp, "settings.json"), "w", encoding="utf-8") as fh:
             fh.write('{"mo_settings": {}}')
-        self.assertEqual(len(self._make_compare().slots), CMP.SLOT_COUNT)
+        self.assertEqual(len(self._blank_compare().slots), CMP.SLOT_COUNT)
 
     def test_malformed_slot_entries_are_ignored(self):
         with open(os.path.join(self.tmp, "settings.json"), "w", encoding="utf-8") as fh:
             fh.write('{"mo_compare": {"slots": ["nonsense", {"iso": "big"}]}}')
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         self.assertAlmostEqual(cmp_dlg.slots[1].spin_iso.value(), 0.02)
 
     def test_an_unwritable_settings_path_does_not_break_closing(self):
-        cmp_dlg = self._make_compare()
+        cmp_dlg = self._blank_compare()
         CMP.__file__ = os.path.join(self.tmp, "job.out", "mo_compare.py")
         with open(self.out, "w", encoding="utf-8") as fh:
             fh.write("x")

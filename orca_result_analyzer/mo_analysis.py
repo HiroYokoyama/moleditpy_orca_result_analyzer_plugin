@@ -646,6 +646,12 @@ class MODialog(QDialog):
         # with no file on disk a plain Visualize already computes it.
         act_regen.setEnabled(bool(cached))
 
+        act_compare = menu.addAction(f"Compare Selected ({len(selected)})")
+        act_compare.setToolTip(
+            "Open the comparison window with these orbitals filled in."
+        )
+        act_compare.setEnabled(len(selected) <= 4)
+
         viewport = self.tree.viewport()
         chosen = menu.exec(
             viewport.mapToGlobal(pos) if viewport else self.tree.mapToGlobal(pos)
@@ -654,6 +660,8 @@ class MODialog(QDialog):
             self.visualize_selected_mos()
         elif chosen is act_regen:
             self.regenerate_selected_mos()
+        elif chosen is act_compare:
+            self.show_compare_dialog()
 
     def regenerate_selected_mos(self):
         """Recompute cubes for the selected orbitals, overwriting existing files."""
@@ -1348,6 +1356,9 @@ class MODialog(QDialog):
 
         if getattr(self, "compare_dlg", None) is not None and self.compare_dlg:
             try:
+                # Reopening from a new table selection must refill the slots,
+                # not just surface a window still showing the old orbitals.
+                self.compare_dlg.apply_selection()
                 self.compare_dlg.raise_()
                 self.compare_dlg.activateWindow()
                 return
