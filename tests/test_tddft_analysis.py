@@ -610,7 +610,7 @@ class TestExports(_TDDFTCase):
         with patch.object(T.QFileDialog, "getSaveFileName", return_value=(path, "")):
             dlg.save_orca_report()
         text = open(path, encoding="utf-8").read()
-        self.assertIn("3.0996", text)   # 1239.84193 / 400
+        self.assertIn("3.0996", text)  # 1239.84193 / 400
         self.assertIn("25000.0", text)  # 1e7 / 400
 
     def test_report_without_data_warns(self):

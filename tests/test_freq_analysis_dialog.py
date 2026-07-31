@@ -716,9 +716,7 @@ class TestSpectrumWindow(_SpectrumCase):
         with patch.object(F.QFileDialog, "getSaveFileName", return_value=("", "")):
             self.win.save_csv()
             self.win.save_sticks()
-        self.assertFalse(
-            [f for f in os.listdir(self.tmp) if f.endswith(".csv")]
-        )
+        self.assertFalse([f for f in os.listdir(self.tmp) if f.endswith(".csv")])
 
 
 class TestOpenSpectrum(_FreqCase):

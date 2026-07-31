@@ -45,9 +45,7 @@ class TestEnergyLabelWordBoundary(unittest.TestCase):
 
     def test_coordinate_before_energy_label(self):
         # Old behavior: 'coordinatE 1.2' matched first -> energy = 1.2
-        steps = OrcaParser().parse_xyz_content(
-            _frame("Coordinate 1.2 Energy -76.400")
-        )
+        steps = OrcaParser().parse_xyz_content(_frame("Coordinate 1.2 Energy -76.400"))
         self.assertAlmostEqual(steps[0]["energy"], -76.400, places=3)
 
     def test_word_ending_in_e_before_number_falls_back_to_last_float(self):
@@ -118,9 +116,9 @@ class TestMalformedCoordinateLine(unittest.TestCase):
         self.assertEqual(len(steps[0]["coords"]), 2)
 
     def test_bad_frame_does_not_kill_later_frames(self):
-        content = _frame(
-            "E -76.1", atom_lines=("O 0.0 0.0 0.1", "H x y z")
-        ) + _frame("E -76.2")
+        content = _frame("E -76.1", atom_lines=("O 0.0 0.0 0.1", "H x y z")) + _frame(
+            "E -76.2"
+        )
         steps = OrcaParser().parse_xyz_content(content)
         self.assertEqual(len(steps), 2)
         self.assertAlmostEqual(steps[1]["energy"], -76.2, places=3)

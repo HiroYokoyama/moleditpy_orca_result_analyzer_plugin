@@ -81,7 +81,9 @@ class TestExceptionPolicy(unittest.TestCase):
 
     def test_broad_handler_count_does_not_grow(self):
         broad = [
-            f"{name}:{ln}" for name, ln, caught, _h, _t in _handlers() if _is_broad(caught)
+            f"{name}:{ln}"
+            for name, ln, caught, _h, _t in _handlers()
+            if _is_broad(caught)
         ]
         self.assertLessEqual(
             len(broad),
@@ -134,7 +136,9 @@ class TestExceptionPolicy(unittest.TestCase):
                 isinstance(n, (ast.Assign, ast.Return, ast.FunctionDef)) for n in h.body
             ):
                 mute.append(f"{name}:{ln}")
-        self.assertEqual(mute, [], f"broad handlers that neither log nor report: {mute}")
+        self.assertEqual(
+            mute, [], f"broad handlers that neither log nor report: {mute}"
+        )
 
 
 class TestOptionalDependencyHandlers(unittest.TestCase):
@@ -159,9 +163,7 @@ class TestOptionalDependencyHandlers(unittest.TestCase):
                         and isinstance(n.value, ast.Constant)
                         and n.value.value is None
                     ):
-                        names.update(
-                            t.id for t in n.targets if isinstance(t, ast.Name)
-                        )
+                        names.update(t.id for t in n.targets if isinstance(t, ast.Name))
         return names
 
     def test_handlers_guarding_optional_calls_catch_typeerror(self):
@@ -197,9 +199,7 @@ class TestOptionalDependencyHandlers(unittest.TestCase):
                     caught = (
                         {h.type.id}
                         if isinstance(h.type, ast.Name)
-                        else {
-                            e.id for e in h.type.elts if isinstance(e, ast.Name)
-                        }
+                        else {e.id for e in h.type.elts if isinstance(e, ast.Name)}
                         if isinstance(h.type, ast.Tuple)
                         else set()
                     )

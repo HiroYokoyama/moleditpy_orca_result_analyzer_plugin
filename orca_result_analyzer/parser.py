@@ -807,7 +807,13 @@ class OrcaParser:
                                 curr += 2  # Skip these 2 lines
                             except (KeyError, IndexError, TypeError, ValueError) as _e:
                                 logging.warning("silenced: %s", _e)
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
 
                     curr += 1
@@ -852,9 +858,20 @@ class OrcaParser:
                                                 "coeff": val,
                                             }
                                         )
-                                except (KeyError, IndexError, TypeError, ValueError) as _e:
+                                except (
+                                    KeyError,
+                                    IndexError,
+                                    TypeError,
+                                    ValueError,
+                                ) as _e:
                                     logging.warning("silenced: %s", _e)
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
 
@@ -934,7 +951,13 @@ class OrcaParser:
                         block_grads.append(
                             {"atom_idx": idx, "atom_sym": sym, "vector": [vx, vy, vz]}
                         )
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
 
@@ -1473,7 +1496,13 @@ class OrcaParser:
                                 atom_data["spin"] = float(parts[4])
 
                         res.append(atom_data)
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
             return res
@@ -1530,7 +1559,13 @@ class OrcaParser:
                         mayer_res.append(
                             {"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra}
                         )
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
             if mayer_res:
@@ -1598,7 +1633,13 @@ class OrcaParser:
                                     "total": tot,
                                 }
                             )
-                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                        except (
+                            AttributeError,
+                            KeyError,
+                            IndexError,
+                            TypeError,
+                            ValueError,
+                        ) as _e:
                             logging.warning("silenced: %s", _e)
                     curr += 1
 
@@ -1707,7 +1748,13 @@ class OrcaParser:
                                     "lumo_loewdin": lumo_l,
                                 }
                             )
-                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                        except (
+                            AttributeError,
+                            KeyError,
+                            IndexError,
+                            TypeError,
+                            ValueError,
+                        ) as _e:
                             logging.warning("silenced: %s", _e)
                     curr += 1
 
@@ -1857,7 +1904,13 @@ class OrcaParser:
                                                 "coupling": val,
                                             }
                                         )
-                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                        except (
+                            AttributeError,
+                            KeyError,
+                            IndexError,
+                            TypeError,
+                            ValueError,
+                        ) as _e:
                             logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -2038,7 +2091,13 @@ class OrcaParser:
                                     entry["energy_nm"] = float(parts[arrow_idx + 4])
                                 except (IndexError, TypeError, ValueError) as _e:
                                     logging.warning("silenced: %s", _e)
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ):
                         # パース失敗行はスキップ
                         logging.debug("Skipping unparseable TDDFT line", exc_info=True)
 
@@ -2075,7 +2134,13 @@ class OrcaParser:
                                 entry["energy_ev"] = col1
                         elif entry["energy_ev"] == 0:
                             entry["energy_ev"] = col1
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -2541,7 +2606,13 @@ class OrcaParser:
                         }
                         self.data["orbital_energies"].append(orb_data)
                         self.data["mos"].append(orb_data)
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                    ) as _e:
                         logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -2700,7 +2771,13 @@ class OrcaParser:
                         )
 
                     continue
-                except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
+                except (
+                    AttributeError,
+                    KeyError,
+                    IndexError,
+                    TypeError,
+                    ValueError,
+                ) as _e:
                     logging.warning("silenced: %s", _e)
 
             curr += 1

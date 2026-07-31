@@ -29,12 +29,22 @@ LAUNCHERS = [
         "freq_dlg",
         {"frequencies": [{"freq": 1600.0}], "atoms": ["O"], "coords": [[0, 0, 0]]},
     ),
-    ("show_thermal", "ThermalTableDialog", "thermal_dlg", {"thermal": {"gibbs": -76.4}}),
+    (
+        "show_thermal",
+        "ThermalTableDialog",
+        "thermal_dlg",
+        {"thermal": {"gibbs": -76.4}},
+    ),
     ("show_tddft", "TDDFTDialog", "tddft_dlg", {"tddft": [{"state": 1}]}),
     ("show_dipole", "DipoleDialog", "dipole_dlg", {"dipoles": {"magnitude": 1.8}}),
     ("show_charges", "ChargeDialog", "charges_dlg", {"charges": {"Mulliken": []}}),
     ("show_nmr", "NMRDialog", "nmr_dlg", {"nmr_shielding": [{"atom_idx": 0}]}),
-    ("show_scf_trace", "SCFTraceDialog", "scf_dlg", {"scf_traces": [{"iterations": []}]}),
+    (
+        "show_scf_trace",
+        "SCFTraceDialog",
+        "scf_dlg",
+        {"scf_traces": [{"iterations": []}]},
+    ),
 ]
 
 
@@ -116,9 +126,20 @@ class TestLaunchers(_LauncherCase):
 
 class TestTeardown(_LauncherCase):
     ATTRS = [
-        "mo_dlg", "freq_dlg", "traj_dlg", "forces_dlg", "conv_graph_dlg",
-        "thermal_dlg", "tddft_dlg", "dipole_dlg", "charges_dlg", "nmr_dlg",
-        "scf_dlg", "props_dlg", "bond_dlg", "energy_dlg",
+        "mo_dlg",
+        "freq_dlg",
+        "traj_dlg",
+        "forces_dlg",
+        "conv_graph_dlg",
+        "thermal_dlg",
+        "tddft_dlg",
+        "dipole_dlg",
+        "charges_dlg",
+        "nmr_dlg",
+        "scf_dlg",
+        "props_dlg",
+        "bond_dlg",
+        "energy_dlg",
     ]
 
     def test_every_tracked_window_is_closed(self):

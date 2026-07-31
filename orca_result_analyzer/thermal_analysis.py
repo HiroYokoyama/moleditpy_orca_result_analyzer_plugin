@@ -76,7 +76,14 @@ class ThermalTableDialog(QDialog):
                 if "show_details" in settings:
                     self.chk_details.setChecked(bool(settings["show_details"]))
 
-            except (OSError, RuntimeError, AttributeError, KeyError, IndexError, ValueError) as e:
+            except (
+                OSError,
+                RuntimeError,
+                AttributeError,
+                KeyError,
+                IndexError,
+                ValueError,
+            ) as e:
                 logging.warning("Error loading thermal settings: %s", e)
 
     def save_settings(self):

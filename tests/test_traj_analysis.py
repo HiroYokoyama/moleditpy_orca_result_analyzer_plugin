@@ -561,9 +561,7 @@ class TestGoToFirstLastFrame(unittest.TestCase):
         fake.slider.setValue.assert_called_once_with(0)
 
     def test_go_to_last_frame_stops_playback_first(self):
-        fake = _FakeNavDialog(
-            steps=[{"energy": 1.0}, {"energy": 2.0}], is_playing=True
-        )
+        fake = _FakeNavDialog(steps=[{"energy": 1.0}, {"energy": 2.0}], is_playing=True)
         TrajectoryResultDialog.go_to_last_frame(fake)
         self.assertEqual(fake.toggle_play_calls, 1)
         fake.slider.setValue.assert_called_once_with(1)

@@ -73,9 +73,7 @@ class _ConvCase(unittest.TestCase):
         file_dialog = MagicMock()
         file_dialog.getSaveFileName.return_value = (path, "")
         message_box = MagicMock()
-        with gui_harness.qt_available(
-            QFileDialog=file_dialog, QMessageBox=message_box
-        ):
+        with gui_harness.qt_available(QFileDialog=file_dialog, QMessageBox=message_box):
             self.dlg.export_csv()
         return message_box
 

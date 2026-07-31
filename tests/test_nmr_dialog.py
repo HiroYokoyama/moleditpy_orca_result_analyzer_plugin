@@ -137,9 +137,7 @@ class _NMRCase(unittest.TestCase):
 class TestMergedPeaksPath(unittest.TestCase):
     def test_path_is_derived_from_the_result_file(self):
         path = N.NMRDialog._merged_peaks_path("/results/job.out", _data())
-        self.assertEqual(
-            path, os.path.join("/results", "job-nmr_peak_info.json")
-        )
+        self.assertEqual(path, os.path.join("/results", "job-nmr_peak_info.json"))
 
     def test_extension_is_replaced_not_appended(self):
         path = N.NMRDialog._merged_peaks_path("/r/calc.property.txt", _data())
@@ -162,8 +160,11 @@ class TestMergedPeaksPath(unittest.TestCase):
 
     def test_fingerprint_ignores_dict_key_order(self):
         reordered = [
-            {"atom_sym": d["atom_sym"], "shielding": d["shielding"],
-             "atom_idx": d["atom_idx"]}
+            {
+                "atom_sym": d["atom_sym"],
+                "shielding": d["shielding"],
+                "atom_idx": d["atom_idx"],
+            }
             for d in _data()
         ]
         self.assertEqual(
@@ -494,11 +495,11 @@ class TestMergePersistence(_NMRCase):
         with open(self.dlg.merged_peaks_file, "w", encoding="utf-8") as fh:
             json.dump(
                 [
-                    {"indices": [1, 2]},   # good
-                    {"indices": []},       # empty
-                    {"indices": "12"},     # not a list
-                    {"nope": [1]},         # wrong key
-                    "garbage",             # not a dict
+                    {"indices": [1, 2]},  # good
+                    {"indices": []},  # empty
+                    {"indices": "12"},  # not a list
+                    {"nope": [1]},  # wrong key
+                    "garbage",  # not a dict
                     {"indices": [1, True]},  # bools are not atom indices
                 ],
                 fh,
@@ -516,9 +517,7 @@ class TestFilterAndExport(_NMRCase):
     def test_filtering_narrows_the_displayed_nuclei(self):
         self.dlg.current_nucleus = "H"
         self.dlg.apply_filter()
-        self.assertEqual(
-            [d["atom_idx"] for d in self.dlg.displayed_data], [1, 2, 3]
-        )
+        self.assertEqual([d["atom_idx"] for d in self.dlg.displayed_data], [1, 2, 3])
 
     def test_the_all_filter_shows_every_nucleus(self):
         self.dlg.current_nucleus = "All"

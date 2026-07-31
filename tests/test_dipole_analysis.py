@@ -31,6 +31,7 @@ def _assert_close(testcase, actual, expected, tol=1e-6):
     for a, e in zip(actual, expected):
         testcase.assertAlmostEqual(a, e, delta=tol)
 
+
 # Load dipole_analysis in isolation (own copy of the Qt/pyvista stubs, restored
 # afterwards so the shared stubs other test modules rely on stay untouched).
 D = gui_harness.load_isolated("dipole_analysis")
@@ -140,9 +141,13 @@ class TestUpdateView(unittest.TestCase):
         _assert_close(self, self.arrow_calls[0]["start"], [1.0, 0.0, 0.0])
 
     def test_reverse_flips_direction(self):
-        fwd = _bare_dialog({"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=False)
+        fwd = _bare_dialog(
+            {"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=False
+        )
         fwd.update_view()
-        rev = _bare_dialog({"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=True)
+        rev = _bare_dialog(
+            {"vector": [0.0, 0.0, 3.0]}, coords=[[0, 0, 0]], reverse=True
+        )
         rev.update_view()
         _assert_close(self, self.arrow_calls[0]["direction"], [0, 0, 1])
         _assert_close(self, self.arrow_calls[1]["direction"], [0, 0, -1])
@@ -198,8 +203,11 @@ class TestSettings(unittest.TestCase):
             settings = os.path.join(d, "settings.json")
 
             dlg = _bare_dialog(
-                {"vector": [1, 0, 0]}, coords=[[0, 0, 0]],
-                show=True, reverse=False, res=42,
+                {"vector": [1, 0, 0]},
+                coords=[[0, 0, 0]],
+                show=True,
+                reverse=False,
+                res=42,
             )
             dlg.arrow_color = "#ff0000"
             dlg.settings_file = settings
@@ -213,8 +221,11 @@ class TestSettings(unittest.TestCase):
             self.assertFalse(on_disk["reverse"])
 
             other = _bare_dialog(
-                {"vector": [1, 0, 0]}, coords=[[0, 0, 0]],
-                show=False, reverse=True, res=20,
+                {"vector": [1, 0, 0]},
+                coords=[[0, 0, 0]],
+                show=False,
+                reverse=True,
+                res=20,
             )
             other.btn_color = MagicMock()
             other.settings_file = settings

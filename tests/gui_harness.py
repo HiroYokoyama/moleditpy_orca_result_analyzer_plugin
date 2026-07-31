@@ -43,9 +43,20 @@ class _PermissiveMeta(type):
 
 
 _NOOP_METHODS = (
-    "closeEvent", "showEvent", "resizeEvent", "keyPressEvent", "paintEvent",
-    "moveEvent", "accept", "reject", "done", "close", "setWindowTitle",
-    "resize", "setLayout", "setAcceptDrops",
+    "closeEvent",
+    "showEvent",
+    "resizeEvent",
+    "keyPressEvent",
+    "paintEvent",
+    "moveEvent",
+    "accept",
+    "reject",
+    "done",
+    "close",
+    "setWindowTitle",
+    "resize",
+    "setLayout",
+    "setAcceptDrops",
 )
 
 
@@ -863,9 +874,7 @@ def _real_tree(root, wanted):
         return {n: _real_cache[n] for n in wanted}
 
     stub_backup = {
-        k: v
-        for k, v in sys.modules.items()
-        if k == root or k.startswith(root + ".")
+        k: v for k, v in sys.modules.items() if k == root or k.startswith(root + ".")
     }
     for k in stub_backup:
         del sys.modules[k]
@@ -931,8 +940,9 @@ class qt_available:
             "PyQt6.QtWidgets", _QTW_BASES, _make_widget, extra=_stateful_widgets()
         )
         core = _fresh_module("PyQt6.QtCore", _QTC_BASES, _make_widget)
-        gui = _fresh_module("PyQt6.QtGui", [], _make_widget,
-                            extra={"QColor": QColorStub})
+        gui = _fresh_module(
+            "PyQt6.QtGui", [], _make_widget, extra={"QColor": QColorStub}
+        )
         for name, value in self._overrides.items():
             setattr(widgets, name, value)
         pkg.QtWidgets, pkg.QtCore, pkg.QtGui = widgets, core, gui
@@ -998,8 +1008,9 @@ def load_isolated(modname):
             "PyQt6.QtWidgets", _QTW_BASES, _make_widget, extra=_stateful_widgets()
         ),
         "PyQt6.QtCore": _fresh_module("PyQt6.QtCore", _QTC_BASES, _make_widget),
-        "PyQt6.QtGui": _fresh_module("PyQt6.QtGui", [], _make_widget,
-                                     extra={"QColor": QColorStub}),
+        "PyQt6.QtGui": _fresh_module(
+            "PyQt6.QtGui", [], _make_widget, extra={"QColor": QColorStub}
+        ),
         "pyvista": _pyvista_module(),
     }
     swapped.update(_real_tree("numpy", {"numpy": ("linspace", "exp", "zeros_like")}))
@@ -1056,9 +1067,15 @@ def load_isolated(modname):
 # ---------------------------------------------------------------------------
 
 _NAMED = {
-    "red": (255, 0, 0), "green": (0, 128, 0), "blue": (0, 0, 255),
-    "white": (255, 255, 255), "black": (0, 0, 0), "purple": (128, 0, 128),
-    "cyan": (0, 255, 255), "yellow": (255, 255, 0), "gray": (128, 128, 128),
+    "red": (255, 0, 0),
+    "green": (0, 128, 0),
+    "blue": (0, 0, 255),
+    "white": (255, 255, 255),
+    "black": (0, 0, 0),
+    "purple": (128, 0, 128),
+    "cyan": (0, 255, 255),
+    "yellow": (255, 255, 0),
+    "gray": (128, 128, 128),
 }
 
 

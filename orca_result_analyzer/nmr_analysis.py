@@ -2709,7 +2709,14 @@ class NMRDialog(QDialog):
                     base_r = float(mw.view_3d_manager.glyph_source["radii"][i])
                     if base_r < 0.1:
                         raise ValueError("Radius too small")
-                except (RuntimeError, AttributeError, KeyError, IndexError, TypeError, ValueError):
+                except (
+                    RuntimeError,
+                    AttributeError,
+                    KeyError,
+                    IndexError,
+                    TypeError,
+                    ValueError,
+                ):
                     # Fallback to calculated radius if not available
                     atom_item = next(
                         (d for d in self.data if i == d.get("atom_idx", None)), None

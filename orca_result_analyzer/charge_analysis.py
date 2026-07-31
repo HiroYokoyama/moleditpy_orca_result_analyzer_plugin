@@ -569,7 +569,12 @@ class ChargeDialog(QDialog):
                         for actor in self._charge_labels:
                             try:
                                 self.parent_dlg.mw.plotter.remove_actor(actor)
-                            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
+                            except (
+                                RuntimeError,
+                                AttributeError,
+                                KeyError,
+                                ValueError,
+                            ) as _e:
                                 logging.warning("silenced: %s", _e)
 
                     self._charge_labels = []

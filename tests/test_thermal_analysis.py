@@ -250,7 +250,9 @@ class TestSettings(unittest.TestCase):
 
     def test_load_missing_file_is_noop(self):
         dlg = _bare_dialog({}, show_details=False)
-        dlg.settings_file = os.path.join(tempfile.gettempdir(), "does_not_exist_xyz.json")
+        dlg.settings_file = os.path.join(
+            tempfile.gettempdir(), "does_not_exist_xyz.json"
+        )
         dlg.load_settings()  # must not raise
         self.assertFalse(dlg.chk_details.isChecked())
 

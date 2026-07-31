@@ -53,8 +53,11 @@ class _SyncCase(unittest.TestCase):
         ]
         self.dlg._last_synced_mw_selection = frozenset()
 
-        for name in ("plot_spectrum", "highlight_selected_peaks",
-                     "update_selected_labels"):
+        for name in (
+            "plot_spectrum",
+            "highlight_selected_peaks",
+            "update_selected_labels",
+        ):
             patcher = patch.object(self.dlg, name)
             patcher.start()
             self.addCleanup(patcher.stop)
