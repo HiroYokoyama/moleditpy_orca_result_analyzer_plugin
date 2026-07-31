@@ -13,6 +13,7 @@ change this file too.
 """
 
 import ast
+import re
 import os
 import unittest
 
@@ -134,6 +135,85 @@ class TestExceptionPolicy(unittest.TestCase):
             ):
                 mute.append(f"{name}:{ln}")
         self.assertEqual(mute, [], f"broad handlers that neither log nor report: {mute}")
+
+
+class TestOptionalDependencyHandlers(unittest.TestCase):
+    """A missing optional dependency leaves its name bound to None.
+
+    Calling None raises TypeError, so any handler guarding such a call must
+    name TypeError. This is invisible in a dev environment with rdkit and
+    pyvista installed, and only shows up in CI, which installs neither --
+    exactly how freq_analysis.reset_geometry broke on the 3.12 job.
+    """
+
+    def _optional_names(self, tree):
+        """Names assigned None inside an except: block (import fallbacks)."""
+        names = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Try):
+                continue
+            for h in node.handlers:
+                for n in ast.walk(ast.Module(body=h.body, type_ignores=[])):
+                    if (
+                        isinstance(n, ast.Assign)
+                        and isinstance(n.value, ast.Constant)
+                        and n.value.value is None
+                    ):
+                        names.update(
+                            t.id for t in n.targets if isinstance(t, ast.Name)
+                        )
+        return names
+
+    def test_handlers_guarding_optional_calls_catch_typeerror(self):
+        offenders = []
+        for name in sorted(os.listdir(_PKG)):
+            if not name.endswith(".py"):
+                continue
+            with open(os.path.join(_PKG, name), encoding="utf-8") as fh:
+                src = fh.read()
+            tree = ast.parse(src)
+            optional = self._optional_names(tree)
+            if not optional:
+                continue
+            lines = src.splitlines()
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Try):
+                    continue
+                # A broad sibling handler already covers everything.
+                caught_all = any(
+                    h.type is None
+                    or (isinstance(h.type, ast.Name) and h.type.id == "Exception")
+                    for h in node.handlers
+                )
+                if caught_all:
+                    continue
+                b0 = node.body[0].lineno
+                b1 = max(getattr(n, "end_lineno", n.lineno) for n in node.body)
+                body = "\n".join(lines[b0 - 1 : b1])
+                called = {o for o in optional if re.search(rf"\b{o}\s*\(", body)}
+                if not called:
+                    continue
+                for h in node.handlers:
+                    caught = (
+                        {h.type.id}
+                        if isinstance(h.type, ast.Name)
+                        else {
+                            e.id for e in h.type.elts if isinstance(e, ast.Name)
+                        }
+                        if isinstance(h.type, ast.Tuple)
+                        else set()
+                    )
+                    if caught and "TypeError" not in caught:
+                        offenders.append(
+                            f"{name}:{h.lineno} calls {sorted(called)} "
+                            f"(may be None) but catches {sorted(caught)}"
+                        )
+        self.assertEqual(
+            offenders,
+            [],
+            "handlers around optional-dependency calls must catch TypeError:\n  "
+            + "\n  ".join(offenders),
+        )
 
 
 if __name__ == "__main__":

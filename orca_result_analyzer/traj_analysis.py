@@ -720,7 +720,7 @@ class TrajectoryResultDialog(QDialog):
                 conf.SetAtomPosition(
                     i, Point3D(coords[i][0], coords[i][1], coords[i][2])
                 )
-        except (RuntimeError, AttributeError, IndexError, ValueError):
+        except (RuntimeError, AttributeError, IndexError, TypeError, ValueError):
             return
 
         mol.AddConformer(conf)

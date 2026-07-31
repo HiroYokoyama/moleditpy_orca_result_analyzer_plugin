@@ -1125,7 +1125,7 @@ class FrequencyDialog(QDialog):
                 self.context.draw_molecule_3d(mol)
             else:
                 self.mw.view_3d_manager.draw_molecule_3d(mol)
-        except (RuntimeError, AttributeError, ValueError) as e:
+        except (RuntimeError, AttributeError, TypeError, ValueError) as e:
             logging.warning("Error in reset_geometry: %s", e)
 
     def save_gif(self):
