@@ -129,12 +129,19 @@ class CubeVisualizer:
         opacity=0.5,
         style="surface",
         smooth_shading=True,
+        name_prefix="mo_iso",
     ):
+        """Render the +/- lobes.
+
+        *name_prefix* namespaces the actors so several orbitals can be on
+        screen at once (the compare dialog gives each slot its own prefix).
+        """
         if not self.current_grid:
             return
 
-        self.plotter.remove_actor("mo_iso_p")
-        self.plotter.remove_actor("mo_iso_n")
+        name_p, name_n = f"{name_prefix}_p", f"{name_prefix}_n"
+        self.plotter.remove_actor(name_p)
+        self.plotter.remove_actor(name_n)
 
         try:
             iso_p = self.current_grid.contour([isovalue], scalars="values")
@@ -143,7 +150,7 @@ class CubeVisualizer:
                     iso_p,
                     color=color_p,
                     opacity=opacity,
-                    name="mo_iso_p",
+                    name=name_p,
                     style=style,
                     point_size=5,
                     smooth_shading=smooth_shading,
@@ -155,7 +162,7 @@ class CubeVisualizer:
                     iso_n,
                     color=color_n,
                     opacity=opacity,
-                    name="mo_iso_n",
+                    name=name_n,
                     style=style,
                     point_size=5,
                     smooth_shading=smooth_shading,
@@ -165,7 +172,7 @@ class CubeVisualizer:
         except Exception as e:
             logging.warning("Iso error: %s", e)
 
-    def clear(self):
-        self.plotter.remove_actor("mo_iso_p")
-        self.plotter.remove_actor("mo_iso_n")
+    def clear(self, name_prefix="mo_iso"):
+        self.plotter.remove_actor(f"{name_prefix}_p")
+        self.plotter.remove_actor(f"{name_prefix}_n")
         self.plotter.render()

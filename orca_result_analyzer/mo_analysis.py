@@ -54,6 +54,11 @@ try:
 except ImportError:
     EnergyDiagramDialog = None
 
+try:
+    from .mo_compare import MOCompareDialog
+except ImportError:
+    MOCompareDialog = None
+
 
 class MODialog(QDialog):
     def __init__(self, parent, mo_data, result_dir=None):
@@ -72,7 +77,10 @@ class MODialog(QDialog):
         self.last_cube_path = None
         self.generation_queue = []  # Init queue
         self.generation_force = False  # Overwrite cached cubes for this batch
+        self.generation_silent = False  # Batch generates files without redrawing
+        self.generation_done_cb = None
         self.energy_dlg = None  # Track Energy Diagram
+        self.compare_dlg = None  # Track Compare MOs
         self.setup_ui()
 
     def get_cube_path(self, display_id):
@@ -266,6 +274,13 @@ class MODialog(QDialog):
         btn_diag = QPushButton("Show MO Diagram")
         btn_diag.clicked.connect(self.show_mo_diagram)
         btn_layout.addWidget(btn_diag)
+
+        self.btn_compare = QPushButton("Compare MOs")
+        self.btn_compare.setToolTip(
+            "Show up to four orbitals at once, each with its own colours."
+        )
+        self.btn_compare.clicked.connect(self.show_compare_dialog)
+        btn_layout.addWidget(self.btn_compare)
 
         btn_csv = QPushButton("Export CSV")
         btn_csv.clicked.connect(self.export_csv)
@@ -623,7 +638,7 @@ class MODialog(QDialog):
 
         menu = QMenu(self.tree)
         act_vis = menu.addAction(f"Visualize Selected ({len(selected)})")
-        act_regen = menu.addAction(f"Regenerate Cube ({len(selected)}) — overwrite")
+        act_regen = menu.addAction(f"Regenerate Cube ({len(selected)})")
         act_regen.setToolTip(
             "Recompute the cube even if a file already exists, replacing it."
         )
@@ -643,6 +658,28 @@ class MODialog(QDialog):
     def regenerate_selected_mos(self):
         """Recompute cubes for the selected orbitals, overwriting existing files."""
         self.visualize_selected_mos(force=True)
+
+    def generate_cubes(self, keys, on_done=None, force=False):
+        """Write cubes for *keys* without disturbing the main 3D view.
+
+        The compare dialog draws the orbitals itself, so this reuses the
+        sequential worker queue but suppresses show_cube for the batch.
+        """
+        self.generation_queue = [k for k in keys if k is not None]
+        if not self.generation_queue:
+            if on_done:
+                on_done()
+            return
+        self.generation_force = bool(force)
+        self.generation_silent = True
+        self.generation_done_cb = on_done
+        self.process_generation_queue()
+
+    def _display_cube(self, path):
+        """show_cube unless the running batch asked for files only."""
+        if getattr(self, "generation_silent", False):
+            return
+        self.show_cube(path)
 
     def visualize_selected_mos(self, force=False):
         # Batch generation for selected items
@@ -678,6 +715,10 @@ class MODialog(QDialog):
                 self.progress_dialog = None
             # Batch over: a later plain Visualize must use the cache again.
             self.generation_force = False
+            self.generation_silent = False
+            cb, self.generation_done_cb = self.generation_done_cb, None
+            if cb:
+                cb()
             return
 
         # Get next key
@@ -803,10 +844,13 @@ class MODialog(QDialog):
                 except OSError as _e:
                     logging.warning("silenced: %s", _e)
 
-        self.last_cube_path = out_path
+        # A silent batch must not steal what the main view is showing: an
+        # update_vis_only() afterwards would redraw somebody else's orbital.
+        if not getattr(self, "generation_silent", False):
+            self.last_cube_path = out_path
 
         if os.path.exists(out_path) and not getattr(self, "generation_force", False):
-            self.show_cube(out_path)
+            self._display_cube(out_path)
             # Highlight
             it = QTreeWidgetItemIterator(self.tree)
             bg = QBrush(QColor(240, 255, 240))
@@ -850,7 +894,7 @@ class MODialog(QDialog):
 
         def on_finished(success, res):
             if success:
-                self.show_cube(res)
+                self._display_cube(res)
                 # Highlight
                 it = QTreeWidgetItemIterator(self.tree)
                 bg = QBrush(QColor(240, 255, 240))
@@ -1140,6 +1184,13 @@ class MODialog(QDialog):
                 logging.warning("silenced: %s", _e)
             self.energy_dlg = None
 
+        if getattr(self, "compare_dlg", None) is not None and self.compare_dlg:
+            try:
+                self.compare_dlg.close()
+            except (RuntimeError, AttributeError) as _e:
+                logging.warning("silenced: %s", _e)
+            self.compare_dlg = None
+
         if hasattr(self.parent_dlg, "mw"):
             plotter = self.parent_dlg.mw.plotter
             plotter.remove_actor("mo_iso_p")
@@ -1284,6 +1335,31 @@ class MODialog(QDialog):
             diag_data, parent=self, result_dir=res_dir
         )
         self.energy_dlg.show()
+
+    def show_compare_dialog(self):
+        """Open the modeless multi-orbital comparison window."""
+        if not MOCompareDialog:
+            QMessageBox.warning(
+                self,
+                "Unavailable",
+                "The MO comparison dialog could not be loaded.",
+            )
+            return
+
+        if getattr(self, "compare_dlg", None) is not None and self.compare_dlg:
+            try:
+                self.compare_dlg.raise_()
+                self.compare_dlg.activateWindow()
+                return
+            except RuntimeError as _e:
+                # Underlying C++ object already gone; fall through and rebuild.
+                logging.warning("silenced: %s", _e)
+
+        self.compare_dlg = MOCompareDialog(self)
+        self.compare_dlg.show()
+
+    def on_compare_closed(self):
+        self.compare_dlg = None
 
     def load_file_by_path(self, path):
         """Called from Diagram to load valid existing file"""
