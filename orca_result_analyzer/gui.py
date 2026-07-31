@@ -633,7 +633,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 parent=self,
             )
             plotter.installEventFilter(self._click_filter)
-        except Exception as e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as e:
             logging.error("GUI _enable_plotter_picking failed: %s", e)
 
     def _disable_plotter_picking(self):
@@ -645,7 +645,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             plotter = getattr(v3d, "plotter", None) if v3d else None
             if plotter and self._click_filter:
                 plotter.removeEventFilter(self._click_filter)
-        except Exception as _e:
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
             logging.warning("silenced: %s", _e)
         self._click_filter = None
 
@@ -758,7 +758,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 if dlg is not None:
                     try:
                         dlg.close()
-                    except Exception as _e:
+                    except (RuntimeError, AttributeError) as _e:
                         logging.warning("silenced: %s", _e)
                 setattr(self, attr, None)
 
@@ -784,7 +784,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if self.context is not None:
             try:
                 self.context.register_window("analyzer", None)
-            except Exception as exc:  # noqa: BLE001
+            except (RuntimeError, AttributeError) as exc:
                 logging.warning("Could not deregister analyzer window: %s", exc)
         event.accept()
 
@@ -929,7 +929,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             try:
                 dt = datetime.fromtimestamp(os.path.getmtime(self.file_path))
                 mtime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-            except Exception as _e:
+            except OSError as _e:
                 logging.warning("silenced: %s", _e)
 
         if getattr(self, "lbl_updated", None) is not None:
@@ -1164,7 +1164,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                         self.mw.view_3d_manager, "plotter"
                     ):
                         self.mw.view_3d_manager.plotter.render()
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("3D camera/render update failed: %s", _e)
             elif hasattr(self.mw, "view_3d_manager") and hasattr(
                 self.mw.view_3d_manager, "plotter"
@@ -1172,7 +1172,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 # Still render so the redrawn structure is shown immediately.
                 try:
                     self.mw.view_3d_manager.plotter.render()
-                except Exception as _e:
+                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                     logging.warning("3D render update failed: %s", _e)
         except Exception as e:
             logging.error(
@@ -1259,7 +1259,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "conv_graph_dlg", None) is not None:
             try:
                 self.conv_graph_dlg.close()
-            except Exception:
+            except (RuntimeError, AttributeError):
                 logging.debug(
                     "Closing previous convergence graph failed", exc_info=True
                 )
@@ -1385,7 +1385,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "props_dlg", None) is not None:
             try:
                 self.props_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
         self.props_dlg = PropertiesDialog(self, self.parser.data)
         self.props_dlg.show()
@@ -1404,7 +1404,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "bond_dlg", None) is not None:
             try:
                 self.bond_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
         self.bond_dlg = BondAnalysisDialog(self, data)
         self.bond_dlg.show()
@@ -1422,7 +1422,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if getattr(self, "energy_dlg", None) is not None:
             try:
                 self.energy_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
         self.energy_dlg = EnergyComponentsDialog(self, self.parser.data)
         self.energy_dlg.show()

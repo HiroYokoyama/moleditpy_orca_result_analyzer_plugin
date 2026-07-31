@@ -76,7 +76,7 @@ class ThermalTableDialog(QDialog):
                 if "show_details" in settings:
                     self.chk_details.setChecked(bool(settings["show_details"]))
 
-            except Exception as e:
+            except (OSError, RuntimeError, AttributeError, KeyError, IndexError, ValueError) as e:
                 logging.warning("Error loading thermal settings: %s", e)
 
     def save_settings(self):
@@ -85,7 +85,7 @@ class ThermalTableDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         thermal_settings = {"show_details": self.chk_details.isChecked()}
@@ -96,7 +96,7 @@ class ThermalTableDialog(QDialog):
             from .utils import save_json_atomic
 
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except ImportError as e:
             logging.warning("Error saving thermal settings: %s", e)
 
     def update_table(self):
@@ -207,5 +207,5 @@ class ThermalTableDialog(QDialog):
                     self.parent().context.show_status_message(
                         f"Data exported to {path}", 5000
                     )
-            except Exception:
+            except (OSError, IndexError, ValueError):
                 logging.debug("Thermochemistry export failed", exc_info=True)

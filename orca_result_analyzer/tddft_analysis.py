@@ -26,7 +26,7 @@ try:
 except ImportError:
     try:
         from spectrum_widget import SpectrumWidget
-    except Exception:
+    except ImportError:
         SpectrumWidget = None
 from .utils import get_default_export_path, save_json_atomic
 import datetime
@@ -586,7 +586,7 @@ class TDDFTDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("[tddft_analysis.py:save_settings] silenced: %s", _e)
 
         tddft_settings = {
@@ -604,7 +604,7 @@ class TDDFTDialog(QDialog):
 
             if self.parent() and self.parent().context:
                 self.parent().context.show_status_message("TDDFT settings saved.", 3000)
-        except Exception as e:
+        except OSError as e:
             logging.warning("[tddft_analysis.py:save_settings] Error: %s", e)
 
     def toggle_auto_y(self):

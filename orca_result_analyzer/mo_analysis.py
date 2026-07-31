@@ -40,7 +40,7 @@ except ImportError:
     try:
         from mo_engine import BasisSetEngine, CalcWorker, UnsupportedBasisError
         from vis import CubeVisualizer
-    except Exception:
+    except ImportError:
         BasisSetEngine = None
         CalcWorker = None
         CubeVisualizer = None
@@ -401,7 +401,7 @@ class MODialog(QDialog):
             local_idx = -1
             try:
                 local_idx = int(mo_idx_val)
-            except Exception as _e:
+            except (TypeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
             if spin in spin_homo_idx:
@@ -533,7 +533,7 @@ class MODialog(QDialog):
                             # Use key directly
                             if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
-            except Exception as _e:
+            except (KeyError, IndexError) as _e:
                 logging.warning("silenced: %s", _e)
 
         self.btn_vis.setEnabled(has_coeffs)
@@ -800,7 +800,7 @@ class MODialog(QDialog):
             if not os.path.exists(out_dir):
                 try:
                     os.makedirs(out_dir)
-                except Exception as _e:
+                except OSError as _e:
                     logging.warning("silenced: %s", _e)
 
         self.last_cube_path = out_path
@@ -902,7 +902,7 @@ class MODialog(QDialog):
             if "background-color:" in style:
                 c_str = style.split("background-color:")[1].split(";")[0].strip()
                 current_col = QColor(c_str)
-        except Exception as _e:
+        except (RuntimeError, AttributeError, IndexError) as _e:
             logging.warning("silenced: %s", _e)
 
         col = QColorDialog.getColor(current_col, self, "Select Color")
@@ -972,7 +972,7 @@ class MODialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
         mo_settings = {
@@ -984,7 +984,7 @@ class MODialog(QDialog):
 
         try:
             save_json_atomic(self.settings_file, all_settings)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving settings: %s", e)
 
     def save_preset(self):
@@ -1136,7 +1136,7 @@ class MODialog(QDialog):
         if getattr(self, "energy_dlg", None) is not None and self.energy_dlg:
             try:
                 self.energy_dlg.close()
-            except Exception as _e:
+            except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
             self.energy_dlg = None
 

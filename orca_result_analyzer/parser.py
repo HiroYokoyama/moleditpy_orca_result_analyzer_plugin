@@ -101,7 +101,7 @@ class OrcaParser:
             if e_match:
                 try:
                     energy = float(e_match.group(1))
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             else:
                 # Fallback: Just take the last float (usually energy)
@@ -109,7 +109,7 @@ class OrcaParser:
                 if floats:
                     try:
                         energy = float(floats[-1])
-                    except Exception as _e:
+                    except (IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
@@ -121,7 +121,7 @@ class OrcaParser:
             if d_match:
                 try:
                     dist_val = float(d_match.group(1))
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
             i += 1
@@ -193,7 +193,7 @@ class OrcaParser:
             if "Program Version" in line:
                 try:
                     self.data["version"] = line.split("Version")[-1].strip().split()[0]
-                except Exception as _e:
+                except (KeyError, IndexError) as _e:
                     logging.warning("silenced: %s", _e)
 
             line = line.strip()
@@ -201,7 +201,7 @@ class OrcaParser:
             if "FINAL SINGLE POINT ENERGY" in uu:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
-                except Exception as _e:
+                except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             if "TOTAL CHARGE" in uu:
                 # Could be "Total Charge 0" or "Total Charge ... 0"
@@ -209,7 +209,7 @@ class OrcaParser:
                     parts = line.split()
                     val = int(parts[-1])
                     self.data["charge"] = val
-                except Exception as _e:
+                except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
             if "MULTIPLICITY" in uu:
@@ -217,7 +217,7 @@ class OrcaParser:
                     parts = line.split()
                     val = int(parts[-1])
                     self.data["mult"] = val
-                except Exception as _e:
+                except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             if (
                 "SCF CONVERGED" in uu
@@ -244,7 +244,7 @@ class OrcaParser:
                     # Fallback
                     try:
                         self.data["neb_trj_file"] = line.split()[-1].strip()
-                    except Exception as _e:
+                    except (KeyError, IndexError) as _e:
                         logging.warning("silenced: %s", _e)
 
             if "CARTESIAN COORDINATES (ANGSTROEM)" in uu:
@@ -384,7 +384,13 @@ class OrcaParser:
                                         "coords": [],
                                     }
                                 )
-                            except Exception as _e:
+                            except (
+                                AttributeError,
+                                KeyError,
+                                IndexError,
+                                TypeError,
+                                ValueError,
+                            ) as _e:
                                 logging.warning("silenced: %s", _e)
                         curr += 1
 
@@ -412,26 +418,26 @@ class OrcaParser:
                         try:
                             # Format: Actual scan coordinate      ...   1.500000
                             coord_val = float(self.lines[k].split()[-1])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     if "FINAL SINGLE POINT ENERGY" in uu:
                         try:
                             en = float(self.lines[k].split()[-1])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
@@ -534,19 +540,19 @@ class OrcaParser:
                     if "FINAL SINGLE POINT ENERGY" in uu:
                         try:
                             en = float(self.lines[k].split()[-1])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
@@ -634,7 +640,7 @@ class OrcaParser:
                     if "FINAL SINGLE POINT ENERGY" in uu_k:
                         try:
                             final_en = float(self.lines[k].split()[-1])
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("[parser.py] silenced: %s", _e)
                         break
                 f_atoms, f_coords, f_found = read_coords_from(i)
@@ -742,7 +748,7 @@ class OrcaParser:
                     if all(p.isdigit() for p in parts):
                         [int(p) for p in parts]
                         is_header = True
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
                 if is_header:
@@ -799,9 +805,9 @@ class OrcaParser:
                                         )
                                         self.data["mo_coeffs"][key]["occ"] = occs[k]
                                 curr += 2  # Skip these 2 lines
-                            except Exception as _e:
+                            except (KeyError, IndexError, TypeError, ValueError) as _e:
                                 logging.warning("silenced: %s", _e)
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
 
                     curr += 1
@@ -846,9 +852,9 @@ class OrcaParser:
                                                 "coeff": val,
                                             }
                                         )
-                                except Exception as _e:
+                                except (KeyError, IndexError, TypeError, ValueError) as _e:
                                     logging.warning("silenced: %s", _e)
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
 
@@ -928,7 +934,7 @@ class OrcaParser:
                         block_grads.append(
                             {"atom_idx": idx, "atom_sym": sym, "vector": [vx, vy, vz]}
                         )
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
 
@@ -976,7 +982,7 @@ class OrcaParser:
                                     mag_debye = val
                                 else:
                                     mag_au = val
-                            except Exception:
+                            except (IndexError, TypeError, ValueError):
                                 logging.debug(
                                     "Unparseable dipole magnitude line: %r",
                                     lk,
@@ -1008,7 +1014,7 @@ class OrcaParser:
                         "magnitude": mag_debye,
                     }
                     self.data["dipole"] = self.data["dipoles"]
-            except Exception as _e:
+            except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
 
     def parse_spin_contamination(self):
@@ -1029,12 +1035,12 @@ class OrcaParser:
             if "Expectation value of <S**2>" in line and ":" in line:
                 try:
                     actual = float(line.split(":")[1].strip().split()[0])
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             elif "Ideal value" in line and "S*(S+1)" in line and ":" in line:
                 try:
                     ideal = float(line.split(":")[1].strip().split()[0])
-                except Exception as _e:
+                except (IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
         if actual is not None:
             self.data["spin_s2"] = {
@@ -1058,7 +1064,7 @@ class OrcaParser:
             if m:
                 try:
                     self.data["dispersion"] = float(m.group(1))
-                except Exception as _e:
+                except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
     def parse_energy_components(self):
@@ -1467,7 +1473,7 @@ class OrcaParser:
                                 atom_data["spin"] = float(parts[4])
 
                         res.append(atom_data)
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
             return res
@@ -1524,7 +1530,7 @@ class OrcaParser:
                         mayer_res.append(
                             {"atom_idx": idx, "atom_sym": sym, "charge": qa, **extra}
                         )
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
             if mayer_res:
@@ -1592,7 +1598,7 @@ class OrcaParser:
                                     "total": tot,
                                 }
                             )
-                        except Exception as _e:
+                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     curr += 1
 
@@ -1629,7 +1635,7 @@ class OrcaParser:
                             nbo_charges.append(
                                 {"atom_idx": idx - 1, "atom_sym": sym, "charge": chg}
                             )
-                        except Exception as _e:
+                        except (IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     curr += 1
 
@@ -1701,7 +1707,7 @@ class OrcaParser:
                                     "lumo_loewdin": lumo_l,
                                 }
                             )
-                        except Exception as _e:
+                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
                     curr += 1
 
@@ -1754,7 +1760,7 @@ class OrcaParser:
                         self.data["nmr_shielding"].append(
                             {"atom_idx": idx, "atom_sym": sym, "shielding": val}
                         )
-                    except Exception as _e:
+                    except (KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 curr += 1
 
@@ -1851,7 +1857,7 @@ class OrcaParser:
                                                 "coupling": val,
                                             }
                                         )
-                        except Exception as _e:
+                        except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                             logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -1913,7 +1919,7 @@ class OrcaParser:
                     match_nm = re.search(r"([-+]?\d*\.\d+)\s*nm", line, re.IGNORECASE)
                     if match_nm:
                         state_entry["energy_nm"] = float(match_nm.group(1))
-                except Exception:
+                except (AttributeError, KeyError, IndexError, TypeError, ValueError):
                     current_state_id = -1
 
             # Detect Transitions
@@ -2020,19 +2026,19 @@ class OrcaParser:
                                 # 詳細ブロック(PASS 1)が見つからなかった場合のためにここでeVを取得することが重要
                                 try:
                                     entry["energy_ev"] = float(parts[arrow_idx + 2])
-                                except Exception as _e:
+                                except (IndexError, TypeError, ValueError) as _e:
                                     logging.warning("silenced: %s", _e)
 
                                 try:
                                     entry["energy_cm"] = float(parts[arrow_idx + 3])
-                                except Exception as _e:
+                                except (IndexError, TypeError, ValueError) as _e:
                                     logging.warning("silenced: %s", _e)
 
                                 try:
                                     entry["energy_nm"] = float(parts[arrow_idx + 4])
-                                except Exception as _e:
+                                except (IndexError, TypeError, ValueError) as _e:
                                     logging.warning("silenced: %s", _e)
-                    except Exception:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
                         # パース失敗行はスキップ
                         logging.debug("Skipping unparseable TDDFT line", exc_info=True)
 
@@ -2069,7 +2075,7 @@ class OrcaParser:
                                 entry["energy_ev"] = col1
                         elif entry["energy_ev"] == 0:
                             entry["energy_ev"] = col1
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -2240,7 +2246,7 @@ class OrcaParser:
                     val = float(parts[-1])
                     self.data["scf_energy"] = val
                     break
-                except Exception as _e:
+                except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
     def _find_intensity_column(self, section_start, wanted, default):
@@ -2311,7 +2317,7 @@ class OrcaParser:
                         self.data["frequencies"].append(
                             {"freq": val, "ir": 0.0, "raman": 0.0, "vector": []}
                         )
-                    except Exception as _e:
+                    except (KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
                 elif len(self.data["frequencies"]) > 0 and ":" not in line:
                     # Maybe end of block
@@ -2535,7 +2541,7 @@ class OrcaParser:
                         }
                         self.data["orbital_energies"].append(orb_data)
                         self.data["mos"].append(orb_data)
-                    except Exception as _e:
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                         logging.warning("silenced: %s", _e)
 
                 curr += 1
@@ -2569,7 +2575,7 @@ class OrcaParser:
                     coord = float(parts[0])
                     en = float(parts[-1])
                     table_vals.append({"coord": coord, "energy": en})
-                except Exception:
+                except (IndexError, TypeError, ValueError):
                     # Non-numeric line after data = end of table
                     if table_vals:
                         break
@@ -2694,7 +2700,7 @@ class OrcaParser:
                         )
 
                     continue
-                except Exception as _e:
+                except (AttributeError, KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
 
             curr += 1
@@ -2749,12 +2755,12 @@ class OrcaParser:
                         else parts[-2]
                     )
                     current_step_label = f"Cycle {cycle_part}"
-                except Exception:
+                except IndexError:
                     current_step_label = "Opt Cycle"
             elif "SCAN STEP" in uu:
                 try:
                     current_step_label = f"Scan Step {line.split()[-1]}"
-                except Exception:
+                except IndexError:
                     current_step_label = "Scan Step"
             elif "ORCA PROPERTIES" in uu or "ORCA PROPERTY" in uu:
                 current_step_label = "Property/Final"
@@ -2796,7 +2802,7 @@ class OrcaParser:
                                 it_no = int(parts[0])
                                 it_en = float(parts[1])
                                 trace.append({"iter": it_no, "energy": it_en})
-                            except Exception:
+                            except (IndexError, TypeError, ValueError):
                                 # ORCA prints '***' for overflow values; skip unparseable lines
                                 logging.debug(
                                     "Skipping unparseable SCF iteration line: %r",

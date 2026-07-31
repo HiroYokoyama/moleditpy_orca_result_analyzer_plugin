@@ -36,7 +36,7 @@ class CubeWriter:
         if dirname and not os.path.exists(dirname):
             try:
                 os.makedirs(dirname, exist_ok=True)
-            except Exception as e:
+            except OSError as e:
                 logging.warning("Error creating directory %s: %s", dirname, e)
 
         nx, ny, nz = data.shape
@@ -50,7 +50,7 @@ class CubeWriter:
 
             def to_z(s):
                 return pt.GetAtomicNumber(s) if isinstance(s, str) else int(s)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             # Fallback simple map if RDKit fails (unlikely)
             def to_z(s):
                 return 0 if isinstance(s, str) else int(s)
@@ -586,7 +586,7 @@ class CalcWorker(QThread):
                         mo_display_id = "_".join(parts)
                 else:
                     mo_display_id = str(int(self.mo_idx) + 1)
-            except Exception:
+            except (IndexError, TypeError, ValueError):
                 # Fallback to original string
                 logging.debug(
                     "MO display id formatting failed; using raw value", exc_info=True

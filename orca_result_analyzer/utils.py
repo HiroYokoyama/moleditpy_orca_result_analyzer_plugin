@@ -96,7 +96,7 @@ def normalize_atom_symbol(raw: str) -> str:
 
         if Chem.GetPeriodicTable().GetAtomicNumber(sym) <= 0:
             return "*"
-    except Exception:  # noqa: BLE001
+    except (ImportError, RuntimeError, AttributeError, ValueError):
         return "*"
     return sym
 
@@ -152,7 +152,7 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
         if bond_orders:
             try:
                 rdDetermineBonds.DetermineBondOrders(sub, charge=charge)
-            except Exception as e:
+            except (RuntimeError, ValueError) as e:
                 logging.debug(
                     "DetermineBondOrders failed, falling back to connectivity: %s", e
                 )
@@ -180,7 +180,7 @@ def clear_atom_color_overrides(mw) -> None:
     if v3d is not None and hasattr(v3d, "_plugin_color_overrides"):
         try:
             v3d._plugin_color_overrides.clear()
-        except Exception as exc:  # noqa: BLE001
+        except (AttributeError, RuntimeError) as exc:  # noqa: BLE001
             logging.warning("clear_atom_color_overrides: %s", exc)
 
 
@@ -197,6 +197,6 @@ def list_orca_output_files(directory: str) -> list[str]:
     """
     try:
         return sorted(f for f in os.listdir(directory) if f.lower().endswith(".out"))
-    except Exception as exc:  # noqa: BLE001
+    except OSError as exc:
         logging.debug("list_orca_output_files: cannot list '%s' — %s", directory, exc)
         return []

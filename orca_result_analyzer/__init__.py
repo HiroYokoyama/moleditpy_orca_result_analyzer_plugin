@@ -19,7 +19,7 @@ def _read_orca_file(path, parent_widget):
                 return f.read()
         except UnicodeError:
             continue
-        except Exception as e:
+        except (OSError, ValueError) as e:
             QMessageBox.critical(
                 parent_widget, "Error Reading File", f"Could not read file:\n{e}"
             )
@@ -28,7 +28,7 @@ def _read_orca_file(path, parent_widget):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
-    except Exception as e:
+    except (OSError, ValueError) as e:
         QMessageBox.critical(
             parent_widget, "Error Reading File", f"Could not read file:\n{e}"
         )
@@ -54,7 +54,7 @@ def _open_orca_file(path, context):
     if existing is not None:
         try:
             existing.close()
-        except Exception as _e:
+        except (RuntimeError, AttributeError) as _e:
             logging.warning("silenced: %s", _e)
 
     # New result loaded — any atom colors applied to the previous molecule's
@@ -94,7 +94,7 @@ def _open_orca_analyzer_empty(context):
             existing.raise_()
             existing.activateWindow()
             return
-        except Exception as _e:
+        except (RuntimeError, AttributeError) as _e:
             logging.warning("silenced: %s", _e)
 
     from .parser import OrcaParser
@@ -126,7 +126,7 @@ def _on_document_reset(context):
     if win is not None:
         try:
             win.close()
-        except Exception as e:
+        except (RuntimeError, AttributeError) as e:
             logging.warning("silenced: %s", e)
 
     from .utils import clear_atom_color_overrides
@@ -154,7 +154,7 @@ def initialize(context):
                 if "* O   R   C   A *" in header or "Program Version" in header:
                     _open_orca_file(path, context)
                     return True
-            except Exception as _e:
+            except (OSError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
         return False
 

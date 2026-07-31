@@ -374,7 +374,7 @@ class EnergyDiagramDialog(QDialog):
                     if os.path.isdir(item_path) and item.endswith("_cubes"):
                         if item_path not in search_dirs:
                             search_dirs.append(item_path)
-            except Exception as e:
+            except OSError as e:
                 logging.warning("Error listing result_dir in try_load_cube: %s", e)
 
         files = []
@@ -601,7 +601,8 @@ class EnergyDiagramDialog(QDialog):
                 step = 2 * magnitude
             else:
                 step = magnitude
-        except Exception:
+        except (TypeError, ValueError, ZeroDivisionError):
+            # ZeroDivision: a subnormal raw_step underflows 10**floor(log10(x)) to 0.0.
             step = 1.0
 
         if step <= 0:
