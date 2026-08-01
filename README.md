@@ -3,8 +3,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20726011.svg)](https://doi.org/10.5281/zenodo.20726011)
 [![Tests](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml)
 ![Test Coverage](https://img.shields.io/badge/coverage->80%25-green)
-[![Downloads](https://img.shields.io/github/downloads/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/total)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/releases)
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/HiroYokoyama)
+[![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_orca_result_analyzer_plugin?label=version)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/tags)
+[![GitHub Downloads](https://img.shields.io/github/downloads/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/total)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/releases)
 
 A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
 
@@ -92,7 +93,6 @@ Advanced NMR chemical shielding validation and visualization.
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels can optionally show the chemical shift ("Show shift values" checkbox, off by default); merged atoms show both their original and merged values (δ orig → merged).
 
 ![NMR](img/nmr.png)
-[![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_orca_result_analyzer_plugin?label=version)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/tags)
 
 ### 11. Bond Analysis
 Comprehensive bonding and orbital analysis:
