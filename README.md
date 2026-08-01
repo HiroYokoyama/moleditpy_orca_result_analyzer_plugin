@@ -92,6 +92,7 @@ Advanced NMR chemical shielding validation and visualization.
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels can optionally show the chemical shift ("Show shift values" checkbox, off by default); merged atoms show both their original and merged values (δ orig → merged).
 
 ![NMR](img/nmr.png)
+[![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_orca_result_analyzer_plugin?label=version)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/tags)
 
 ### 11. Bond Analysis
 Comprehensive bonding and orbital analysis:
