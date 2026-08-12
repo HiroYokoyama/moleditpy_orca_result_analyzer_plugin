@@ -2338,6 +2338,29 @@ class OrcaParser:
                     return lowered.index(name)
         return default
 
+    @staticmethod
+    def _parse_dipole_derivative(line):
+        """The (TX TY TZ) triple an IR row carries, or None.
+
+        ORCA prints the mode's transition dipole derivative in parentheses
+        after the intensity columns -- "( 0.040181 -0.009108  0.002223)" --
+        in atomic units. Older versions omit it entirely, so a row without
+        the group is normal rather than an error. Matched on the parenthesis
+        group instead of fixed columns because the leading columns move
+        between ORCA versions (the same reason ir_col is looked up).
+        """
+        m = re.search(r"\(([^)]*)\)", line)
+        if not m:
+            return None
+        parts = m.group(1).split()
+        if len(parts) != 3:
+            return None
+        try:
+            return tuple(float(p) for p in parts)
+        except ValueError:
+            logging.debug("Unparseable dipole derivative group: %r", line)
+            return None
+
     def parse_frequencies(self):
         self.data["frequencies"] = []
 
@@ -2419,6 +2442,9 @@ class OrcaParser:
                         inten = float(parts[ir_col])
                         if 0 <= idx < len(self.data["frequencies"]):
                             self.data["frequencies"][idx]["ir"] = inten
+                            deriv = self._parse_dipole_derivative(line)
+                            if deriv is not None:
+                                self.data["frequencies"][idx]["dipole_deriv"] = deriv
                     except ValueError:
                         logging.debug(
                             "IR row not parsed at column %d: %r", ir_col, line

@@ -101,6 +101,7 @@ def _bare_dialog(dipole_data, coords, show=True, reverse=False, scale=2.0, res=2
     inst.chk_reverse = _FakeCheck(reverse)
     inst.spin_scale = _FakeSpin(scale)
     inst.spin_res = _FakeSpin(res)
+    inst.spin_alpha = _FakeSpin(1.0)
     return inst
 
 

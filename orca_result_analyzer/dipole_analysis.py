@@ -100,6 +100,18 @@ class DipoleDialog(QDialog):
         )
         self.btn_color.clicked.connect(self.pick_color)
         color_row.addWidget(self.btn_color)
+
+        color_row.addWidget(QLabel(" Alpha:"))
+        self.spin_alpha = QDoubleSpinBox()
+        self.spin_alpha.setRange(0.05, 1.0)
+        self.spin_alpha.setSingleStep(0.05)
+        self.spin_alpha.setValue(1.0)
+        self.spin_alpha.setToolTip(
+            "Arrow opacity. Below 1.0 the structure stays visible through the "
+            "arrow, which helps when it points into the molecule."
+        )
+        self.spin_alpha.valueChanged.connect(self.update_view)
+        color_row.addWidget(self.spin_alpha)
         color_row.addStretch()
         view_layout.addLayout(color_row)
 
@@ -164,7 +176,10 @@ class DipoleDialog(QDialog):
                 tip_resolution=self.arrow_res,
             )
             self.arrow_actor = mw.plotter.add_mesh(
-                arrow, color=self.arrow_color, name="dipole_vector"
+                arrow,
+                color=self.arrow_color,
+                opacity=self.spin_alpha.value(),
+                name="dipole_vector",
             )
             mw.plotter.render()
 
@@ -222,6 +237,9 @@ class DipoleDialog(QDialog):
                         f"background-color: {self.arrow_color}; border: 1px solid gray; height: 20px;"
                     )
 
+                if "alpha" in settings:
+                    self.spin_alpha.setValue(float(settings["alpha"]))
+
                 if "show" in settings:
                     self.chk_show.setChecked(bool(settings["show"]))
 
@@ -247,6 +265,7 @@ class DipoleDialog(QDialog):
             # "scale": self.spin_scale.value(),
             "res": self.spin_res.value(),
             "color": self.arrow_color,
+            "alpha": self.spin_alpha.value(),
             "show": self.chk_show.isChecked(),
             "reverse": self.chk_reverse.isChecked(),
         }

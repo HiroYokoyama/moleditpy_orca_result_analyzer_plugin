@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QTreeWidgetItemIterator,
     QComboBox,
     QSlider,
+    QTabWidget,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
@@ -461,6 +462,8 @@ class FrequencyDialog(QDialog):
         self.current_mode_idx = -1
         self.vector_color = "orange"
         self.vector_res = 20
+        self.dipole_color = "magenta"
+        self.dipole_actor = None
 
         # Scaling Params (ax + b)
         self.scaling_a = 1.0
@@ -541,8 +544,17 @@ class FrequencyDialog(QDialog):
         main_layout.addWidget(list_group)
 
         # 2. 3D Appearance (Vectors)
+        # Two independent arrow overlays: the per-atom displacements of the
+        # mode, and the single molecule-wide dipole derivative. They are drawn
+        # at very different scales and are usually wanted one at a time, so
+        # each keeps its own scale/colour rather than sharing one set.
         vec_group = QGroupBox("3D Vector Appearance")
-        vec_layout = QVBoxLayout(vec_group)
+        vec_group_layout = QVBoxLayout(vec_group)
+        self.vec_tabs = QTabWidget()
+        vec_group_layout.addWidget(self.vec_tabs)
+
+        mode_tab = QWidget()
+        vec_layout = QVBoxLayout(mode_tab)
 
         vec_top_row = QHBoxLayout()
         self.chk_vector = QCheckBox("Show Vectors")
@@ -574,8 +586,83 @@ class FrequencyDialog(QDialog):
         )
         self.btn_vec_color.clicked.connect(self.pick_color)
         vec_bot_row.addWidget(self.btn_vec_color)
+
+        vec_bot_row.addWidget(QLabel(" Alpha:"))
+        self.spin_vec_alpha = QDoubleSpinBox()
+        self.spin_vec_alpha.setRange(0.05, 1.0)
+        self.spin_vec_alpha.setSingleStep(0.05)
+        self.spin_vec_alpha.setValue(1.0)
+        self.spin_vec_alpha.setToolTip(
+            "Arrow opacity. Below 1.0 the structure stays visible through the "
+            "arrows, which helps when they cover the molecule."
+        )
+        self.spin_vec_alpha.valueChanged.connect(self.update_view)
+        vec_bot_row.addWidget(self.spin_vec_alpha)
         vec_bot_row.addStretch()
         vec_layout.addLayout(vec_bot_row)
+        vec_layout.addStretch()
+        self.vec_tabs.addTab(mode_tab, "Mode Vectors")
+
+        dipole_tab = QWidget()
+        dip_layout = QVBoxLayout(dipole_tab)
+
+        dip_top_row = QHBoxLayout()
+        self.chk_dipole = QCheckBox("Show Dipole Change")
+        self.chk_dipole.setChecked(False)
+        self.chk_dipole.setToolTip(
+            "Draw this mode's transition dipole derivative (ORCA's TX/TY/TZ) as a\n"
+            "single arrow from the molecular centroid. Its direction is the way\n"
+            "the dipole moves as the mode is walked; an IR-inactive mode has\n"
+            "essentially none, which is why its arrow disappears."
+        )
+        self.chk_dipole.stateChanged.connect(self.update_view)
+        dip_top_row.addWidget(self.chk_dipole)
+
+        dip_top_row.addWidget(QLabel("Scale:"))
+        self.spin_dip_scale = QDoubleSpinBox()
+        self.spin_dip_scale.setRange(0.1, 200.0)
+        self.spin_dip_scale.setValue(20.0)
+        self.spin_dip_scale.setToolTip(
+            "Arrow length per sqrt(a.u.). The derivative is a few hundredths of\n"
+            "an atomic unit, so this needs to be far larger than the mode-vector\n"
+            "scale to give an arrow of comparable size."
+        )
+        self.spin_dip_scale.valueChanged.connect(self.update_view)
+        dip_top_row.addWidget(self.spin_dip_scale)
+        dip_layout.addLayout(dip_top_row)
+
+        dip_bot_row = QHBoxLayout()
+        dip_bot_row.addWidget(QLabel("Resolution:"))
+        self.spin_dip_res = QSpinBox()
+        self.spin_dip_res.setRange(3, 100)
+        self.spin_dip_res.setValue(20)
+        self.spin_dip_res.valueChanged.connect(self.update_view)
+        dip_bot_row.addWidget(self.spin_dip_res)
+
+        dip_bot_row.addWidget(QLabel(" Color:"))
+        self.btn_dip_color = QPushButton()
+        self.btn_dip_color.setFixedWidth(60)
+        self.btn_dip_color.setStyleSheet(
+            f"background-color: {self.dipole_color}; border: 1px solid gray; height: 20px;"
+        )
+        self.btn_dip_color.clicked.connect(self.pick_dipole_color)
+        dip_bot_row.addWidget(self.btn_dip_color)
+
+        dip_bot_row.addWidget(QLabel(" Alpha:"))
+        self.spin_dip_alpha = QDoubleSpinBox()
+        self.spin_dip_alpha.setRange(0.05, 1.0)
+        self.spin_dip_alpha.setSingleStep(0.05)
+        self.spin_dip_alpha.setValue(1.0)
+        self.spin_dip_alpha.valueChanged.connect(self.update_view)
+        dip_bot_row.addWidget(self.spin_dip_alpha)
+
+        self.lbl_dipole = QLabel("")
+        self.lbl_dipole.setStyleSheet("color: gray;")
+        dip_bot_row.addWidget(self.lbl_dipole)
+        dip_bot_row.addStretch()
+        dip_layout.addLayout(dip_bot_row)
+        dip_layout.addStretch()
+        self.vec_tabs.addTab(dipole_tab, "Dipole Change")
 
         main_layout.addWidget(vec_group)
 
@@ -885,9 +972,14 @@ class FrequencyDialog(QDialog):
             except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
             self.vector_actor = None
+        self._clear_dipole_actor()
 
         # 2. Reset geometry
         self.reset_geometry()
+
+        # Drawn before the manual-displacement early return: the dipole arrow
+        # describes the mode, not the current frame, so it stays valid there.
+        self.update_dipole_view()
 
         if self.chk_manual_displ.isChecked():
             self.apply_manual_displacement()
@@ -916,12 +1008,79 @@ class FrequencyDialog(QDialog):
             )
             arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
             self.vector_actor = self.mw.plotter.add_mesh(
-                arrows, color=self.vector_color, name="vib_vectors"
+                arrows,
+                color=self.vector_color,
+                opacity=self.spin_vec_alpha.value(),
+                name="vib_vectors",
             )
 
             self.mw.plotter.render()
         except Exception as e:
             logging.warning("Error in FrequencyDialog.update_view: %s", e)
+
+    def _clear_dipole_actor(self):
+        if getattr(self, "dipole_actor", None) is None:
+            return
+        try:
+            self.mw.plotter.remove_actor(self.dipole_actor)
+        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
+            logging.warning("silenced: %s", _e)
+        self.dipole_actor = None
+
+    def update_dipole_view(self):
+        """Draw the selected mode's dipole-change arrow, if it is wanted.
+
+        The vector is ORCA's transition dipole derivative for the mode, in
+        atomic units. It is a single molecule-wide quantity, not a per-atom
+        one, so it is drawn once from the centroid rather than glyphed onto
+        every atom like the displacement vectors.
+        """
+        self._clear_dipole_actor()
+        if not getattr(self, "chk_dipole", None) or not self.chk_dipole.isChecked():
+            if getattr(self, "lbl_dipole", None):
+                self.lbl_dipole.setText("")
+            return
+        if self.current_mode_idx < 0:
+            return
+
+        mode = self.frequencies[self.current_mode_idx]
+        deriv = mode.get("dipole_deriv")
+        if not deriv:
+            # Pre-5.x outputs, or a mode outside the IR table (the six
+            # translations/rotations): say so rather than draw nothing.
+            self.lbl_dipole.setText("not reported for this mode")
+            return
+
+        try:
+            vec = np.array(deriv, dtype=float)
+            magnitude = float(np.linalg.norm(vec))
+            self.lbl_dipole.setText(f"|dμ/dQ| = {magnitude:.4f} a.u.")
+            if magnitude <= 0.0:
+                return
+
+            # Length tracks sqrt(magnitude) -- IR intensity goes as the square
+            # of this vector, so the square root keeps a weak mode visible next
+            # to a strong one instead of vanishing entirely.
+            points = np.array(self.base_coords, dtype=float)
+            if points.size == 0:
+                return
+            centroid = points.mean(axis=0)
+            scale = self.spin_dip_scale.value() * math.sqrt(magnitude)
+
+            poly = pv.PolyData(centroid.reshape(1, 3))
+            poly.point_data["vectors"] = (vec / magnitude).reshape(1, 3)
+            res = self.spin_dip_res.value()
+            geom = pv.Arrow(shaft_resolution=res, tip_resolution=res)
+            arrow = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
+            self.dipole_actor = self.mw.plotter.add_mesh(
+                arrow,
+                color=self.dipole_color,
+                opacity=self.spin_dip_alpha.value(),
+                name="vib_dipole",
+            )
+            self.mw.plotter.render()
+        except (RuntimeError, AttributeError, KeyError, ValueError, TypeError) as e:
+            logging.warning("Error drawing dipole change vector: %s", e)
 
     def toggle_manual_displacement(self, checked):
         self.slider_displ.setEnabled(checked)
@@ -1099,6 +1258,7 @@ class FrequencyDialog(QDialog):
                     vecs_array,
                     mag=scale,
                     color=self.vector_color,
+                    opacity=self.spin_vec_alpha.value(),
                     show_scalar_bar=False,
                 )
             else:
@@ -1110,7 +1270,10 @@ class FrequencyDialog(QDialog):
                 )
                 arrows = poly.glyph(orient=True, scale=True, factor=scale, geom=geom)
                 self.vector_actor = self.mw.plotter.add_mesh(
-                    arrows, color=self.vector_color, name="vib_vectors"
+                    arrows,
+                    color=self.vector_color,
+                    opacity=self.spin_vec_alpha.value(),
+                    name="vib_vectors",
                 )
         except Exception as e:
             logging.warning("Error updating vectors: %s", e)
@@ -1306,6 +1469,17 @@ class FrequencyDialog(QDialog):
             self.btn_vec_color.setStyleSheet(f"background-color: {self.vector_color};")
             self.update_view()
 
+    def pick_dipole_color(self):
+        color = QColorDialog.getColor(
+            QColor(self.dipole_color), self, "Select Dipole Vector Color"
+        )
+        if color.isValid():
+            self.dipole_color = color.name()
+            self.btn_dip_color.setStyleSheet(
+                f"background-color: {self.dipole_color}; border: 1px solid gray; height: 20px;"
+            )
+            self.update_view()
+
     def on_res_changed(self, val):
         self.vector_res = val
         self.update_view()
@@ -1327,6 +1501,9 @@ class FrequencyDialog(QDialog):
                 self.mw.plotter.remove_actor(self.vector_actor)
             except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
                 logging.warning("silenced: %s", _e)
+        # The dipole arrow is a separate actor and outlives the dialog if it
+        # is not removed here -- it would stay in the 3D view after closing.
+        self._clear_dipole_actor()
         if self.spectrum_win:
             self.spectrum_win.close()
 
@@ -1370,6 +1547,21 @@ class FrequencyDialog(QDialog):
                     self.btn_vec_color.setStyleSheet(
                         f"background-color: {self.vector_color}; border: 1px solid gray; height: 20px;"
                     )
+                if "show_dipole" in settings:
+                    self.chk_dipole.setChecked(bool(settings["show_dipole"]))
+                if "dip_scale" in settings:
+                    self.spin_dip_scale.setValue(float(settings["dip_scale"]))
+                if "dip_res" in settings:
+                    self.spin_dip_res.setValue(int(settings["dip_res"]))
+                if "vec_alpha" in settings:
+                    self.spin_vec_alpha.setValue(float(settings["vec_alpha"]))
+                if "dip_alpha" in settings:
+                    self.spin_dip_alpha.setValue(float(settings["dip_alpha"]))
+                if "dip_color" in settings:
+                    self.dipole_color = settings["dip_color"]
+                    self.btn_dip_color.setStyleSheet(
+                        f"background-color: {self.dipole_color}; border: 1px solid gray; height: 20px;"
+                    )
                 if "amp" in settings:
                     self.spin_amp.setValue(float(settings["amp"]))
                 if "fps" in settings:
@@ -1395,6 +1587,12 @@ class FrequencyDialog(QDialog):
             "show_vec": self.chk_vector.isChecked(),
             "vec_res": self.spin_vec_res.value(),
             "vec_color": self.vector_color,
+            "show_dipole": self.chk_dipole.isChecked(),
+            "dip_scale": self.spin_dip_scale.value(),
+            "dip_res": self.spin_dip_res.value(),
+            "dip_color": self.dipole_color,
+            "vec_alpha": self.spin_vec_alpha.value(),
+            "dip_alpha": self.spin_dip_alpha.value(),
             "amp": self.spin_amp.value(),
             "fps": self.spin_fps.value(),
         }

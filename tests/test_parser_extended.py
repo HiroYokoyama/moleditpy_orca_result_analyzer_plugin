@@ -269,6 +269,25 @@ Mode   freq   mass   T^2    TX     TY     TZ
     5:  3754.93  1.089   3.456  0.00  0.00  1.86
 """
 
+# As ORCA 5 writes it: the transition dipole derivative in parentheses after
+# the intensity columns. 5.07^2 = 25.7049, matching the T**2 column.
+_FREQ_WITH_IR_DERIV = """\
+VIBRATIONAL FREQUENCIES
+-----------------------
+   0:         0.00 cm**-1
+   1:         0.00 cm**-1
+   2:         0.00 cm**-1
+   3:      1623.45 cm**-1
+
+IR SPECTRUM
+-----------
+
+ Mode   freq       eps      Int      T**2         TX        TY        TZ
+       cm**-1   L/(mol*cm) km/mol    a.u.
+----------------------------------------------------------------------------
+    3:  1623.45   0.005000   25.678  25.7049  ( 0.000000  0.000000  5.070000)
+"""
+
 _FREQ_WITH_RAMAN = """\
 VIBRATIONAL FREQUENCIES
 -----------------------
@@ -307,6 +326,48 @@ class TestParseFrequenciesIR(unittest.TestCase):
         p = _parse_method(_FREQ_WITH_RAMAN, "parse_frequencies")
         self.assertAlmostEqual(p.data["frequencies"][3]["raman"], 45.678, places=2)
         self.assertAlmostEqual(p.data["frequencies"][4]["raman"], 12.345, places=2)
+
+
+class TestParseDipoleDerivative(unittest.TestCase):
+    """The (TX TY TZ) group each IR row carries, in atomic units."""
+
+    def test_the_triple_is_read_from_the_parentheses(self):
+        line = "  10:    537.95   0.002935   14.83  0.001702  ( 0.040181 -0.009108  0.002223)"
+        self.assertEqual(
+            OrcaParser._parse_dipole_derivative(line),
+            (0.040181, -0.009108, 0.002223),
+        )
+
+    def test_a_row_without_the_group_is_not_an_error(self):
+        """Older ORCA prints the intensity columns and stops."""
+        self.assertIsNone(
+            OrcaParser._parse_dipole_derivative("    3:  1623.45  1.234  25.678")
+        )
+
+    def test_a_malformed_group_is_rejected_rather_than_guessed(self):
+        for bad in (
+            "  1:  100.0  ( 0.1 0.2 )",  # only two components
+            "  1:  100.0  ( 0.1 0.2 abc)",  # not a number
+        ):
+            with self.subTest(line=bad):
+                self.assertIsNone(OrcaParser._parse_dipole_derivative(bad))
+
+    def test_the_derivative_lands_on_the_mode(self):
+        p = _parse_method(_FREQ_WITH_IR_DERIV, "parse_frequencies")
+        self.assertEqual(p.data["frequencies"][3]["dipole_deriv"], (0.0, 0.0, 5.07))
+
+    def test_its_square_is_the_t2_column_orca_printed(self):
+        """ORCA's T**2 is |dmu/dQ|^2, so the parse can be checked against
+        the program's own arithmetic rather than against itself."""
+        p = _parse_method(_FREQ_WITH_IR_DERIV, "parse_frequencies")
+        mode = p.data["frequencies"][3]
+        self.assertAlmostEqual(
+            sum(c * c for c in mode["dipole_deriv"]), 25.7049, places=4
+        )
+
+    def test_modes_outside_the_ir_table_carry_no_derivative(self):
+        p = _parse_method(_FREQ_WITH_IR_DERIV, "parse_frequencies")
+        self.assertIsNone(p.data["frequencies"][0].get("dipole_deriv"))
 
 
 # ---------------------------------------------------------------------------
