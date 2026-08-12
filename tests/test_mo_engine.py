@@ -437,8 +437,8 @@ class TestSphericalShellNormalization(unittest.TestCase):
     def _eng(shell_type):
         return BasisSetEngine([{**_s_shell(alpha=1.0, coeff=1.0), "type": shell_type}])
 
-    def _component_norms(self, shell_type):
-        """<phi|phi> per component, on a spherical quadrature grid.
+    def _gram_matrix(self, shell_type):
+        """<phi_i|phi_j> for every pair of components in one shell.
 
         Gauss-Legendre in cos(theta), uniform in phi, and a fine trapezoid in
         r — the Gaussian decays fast enough that a plain radial grid is well
@@ -465,13 +465,16 @@ class TestSphericalShellNormalization(unittest.TestCase):
         weights = (R**2 * np.broadcast_to(wt[None, :, None], R.shape)).ravel()
         weights = weights * dr * dphi
 
-        norms = []
+        values = []
         for i in range(eng.n_basis):
             c = np.zeros(eng.n_basis)
             c[i] = 1.0
-            v = eng.evaluate_mo_on_grid(0, pts, c)
-            norms.append(float(np.sum(v * v * weights)))
-        return norms
+            values.append(eng.evaluate_mo_on_grid(0, pts, c))
+        values = np.array(values)
+        return (values * weights) @ values.T
+
+    def _component_norms(self, shell_type):
+        return list(np.diag(self._gram_matrix(shell_type)))
 
     def test_d_components_are_unit_normalized(self):
         for n in self._component_norms(2):
@@ -484,6 +487,35 @@ class TestSphericalShellNormalization(unittest.TestCase):
     def test_g_components_are_unit_normalized(self):
         for n in self._component_norms(4):
             self.assertAlmostEqual(n, 1.0, places=4)
+
+    def test_components_of_a_shell_are_mutually_orthogonal(self):
+        """Real solid harmonics of one l are orthogonal — so the Gram matrix
+        off-diagonal must vanish, not merely the diagonal be 1.
+
+        This is what catches a wrong *shape*. _build_sph_defs renormalizes
+        whatever polynomial it is handed, so a corrupted component still comes
+        back unit-norm and the tests above stay green; what it cannot fix is
+        the admixture of other harmonics the corruption introduces, which
+        shows up here as overlap with a sibling component. Verified by
+        perturbing g2's polynomial: the norms remained 1.0 while this
+        off-diagonal went from ~1e-16 to 7e-2.
+
+        Only the m=0 components (f z^3, g z^4) have their shape pinned
+        individually, by the nodal-cone tests below; this covers all of them.
+        """
+        for shell_type, letter in ((2, "d"), (3, "f"), (4, "g")):
+            with self.subTest(shell=letter):
+                gram = self._gram_matrix(shell_type)
+                off_diagonal = gram - np.diag(np.diag(gram))
+                worst = np.unravel_index(
+                    np.argmax(np.abs(off_diagonal)), off_diagonal.shape
+                )
+                self.assertLess(
+                    np.abs(off_diagonal).max(),
+                    1e-6,
+                    f"{letter} components {worst[0]} and {worst[1]} overlap by "
+                    f"{off_diagonal[worst]:.2e}; one of them has the wrong shape",
+                )
 
     def _first_node_deg(self, shell_type, component, lo=0.5, hi=89.5):
         eng = self._eng(shell_type)
