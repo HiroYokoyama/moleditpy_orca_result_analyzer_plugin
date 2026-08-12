@@ -253,6 +253,38 @@ class TestAxesCallback(unittest.TestCase):
         self.w._on_axes_changed(self.w.canvas.axes)
         self.w.range_changed.emit.assert_not_called()
 
+    @staticmethod
+    def _listener_count(widget):
+        registry = widget.canvas.axes.callbacks.callbacks
+        return sum(
+            len(registry.get(sig, {})) for sig in ("xlim_changed", "ylim_changed")
+        )
+
+    def test_replotting_leaves_exactly_one_listener_per_signal(self):
+        """Axes.clear() installs a fresh registry, so connections must not pile up."""
+        for _ in range(4):
+            self.w.plot_spectrum()
+        self.assertEqual(self._listener_count(self.w), 2)
+
+    def test_an_empty_replot_keeps_the_axes_wired(self):
+        """The "No Data" path returns early -- it must still leave listeners.
+
+        clear() drops the registry at the top of plot_spectrum, so returning
+        before reconnecting left the axes with nothing listening: the toolbar's
+        zoom stopped emitting range_changed and the host's range boxes silently
+        stopped tracking the view until the next non-empty plot.
+        """
+        self.w.plot_spectrum()
+        self.w.data_list = []
+        self.w.plot_spectrum()
+        self.assertEqual(self._listener_count(self.w), 2)
+
+        self.w._is_plotting = False
+        self.w._initial_plot_done = True
+        self.w.range_changed = MagicMock()
+        self.w.canvas.axes.set_xlim(300, 350)
+        self.w.range_changed.emit.assert_called()
+
 
 class TestStickExport(unittest.TestCase):
     def setUp(self):

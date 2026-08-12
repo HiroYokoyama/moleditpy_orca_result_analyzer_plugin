@@ -122,7 +122,7 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
     """
     try:
         from rdkit import Chem
-        from rdkit.Geometry import Point3D
+        from rdkit.Geometry import Point3D  # pylint: disable=no-name-in-module
         from rdkit.Chem import rdDetermineBonds
 
         conf = mol.GetConformer()
@@ -138,11 +138,11 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
             return  # nothing to do
 
         # Build sub-molecule with only real atoms
-        sub = Chem.RWMol()
-        sub_conf = Chem.Conformer(len(real_indices))
+        sub = Chem.RWMol()  # pylint: disable=no-member
+        sub_conf = Chem.Conformer(len(real_indices))  # pylint: disable=no-member
         for sub_i, orig_i in enumerate(real_indices):
             sym = mol.GetAtomWithIdx(orig_i).GetSymbol()
-            sub.AddAtom(Chem.Atom(sym))
+            sub.AddAtom(Chem.Atom(sym))  # pylint: disable=no-member
             pos = conf.GetAtomPosition(orig_i)
             sub_conf.SetAtomPosition(sub_i, Point3D(pos.x, pos.y, pos.z))
         sub.AddConformer(sub_conf)

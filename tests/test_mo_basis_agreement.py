@@ -277,9 +277,7 @@ class TestBasisSetAgreement(unittest.TestCase):
         engine, _, values = _regenerate(
             _CASES["qzvp"][0], self.grid, range(_OCCUPIED_MO - 2, _OCCUPIED_MO + 3)
         )
-        overlaps = {
-            mo: abs(_cosine(reference, v)) for mo, v in values.items()
-        }
+        overlaps = {mo: abs(_cosine(reference, v)) for mo, v in values.items()}
         best = max(overlaps, key=overlaps.get)
         self.assertEqual(best, _OCCUPIED_MO)
         others = [v for mo, v in overlaps.items() if mo != _OCCUPIED_MO]

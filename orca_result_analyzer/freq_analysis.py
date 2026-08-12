@@ -1209,7 +1209,7 @@ class FrequencyDialog(QDialog):
             if not vecs:
                 raise Exception("No vectors for this mode")
 
-            from rdkit.Geometry import Point3D
+            from rdkit.Geometry import Point3D  # pylint: disable=no-name-in-module
 
             mol = self.mw.current_mol
             conf = mol.GetConformer()

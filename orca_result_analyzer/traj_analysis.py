@@ -111,6 +111,7 @@ class TrajectoryResultDialog(QDialog):
         self.is_playing = False
         self.timer = QTimer()
         self.timer.timeout.connect(self.next_frame)
+        # pylint: disable-next=no-member
         self._periodic_table = Chem.GetPeriodicTable() if Chem else None
 
         self.current_unit = "kJ/mol"
@@ -711,8 +712,8 @@ class TrajectoryResultDialog(QDialog):
         # RDKit build
         if not Chem:
             return
-        mol = Chem.RWMol()
-        conf = Chem.Conformer()
+        mol = Chem.RWMol()  # pylint: disable=no-member
+        conf = Chem.Conformer()  # pylint: disable=no-member
         try:
             for i, sym in enumerate(atoms):
                 rdkit_sym = normalize_atom_symbol(sym)

@@ -41,7 +41,7 @@ except ImportError as e:
 try:
     from rdkit import Chem
 
-    _pt = Chem.GetPeriodicTable()
+    _pt = Chem.GetPeriodicTable()  # pylint: disable=no-member
     # Base VDW radii (scaled by 0.3 as in moledit core)
     VDW_RADII = {_pt.GetElementSymbol(i): _pt.GetRvdw(i) * 0.3 for i in range(1, 119)}
 except ImportError:

@@ -895,8 +895,8 @@ class ForceViewerDialog(QDialog):
         if not hasattr(self, "_pt"):
             self._pt = Chem.GetPeriodicTable()
 
-        mol = Chem.RWMol()
-        conf = Chem.Conformer()
+        mol = Chem.RWMol()  # pylint: disable=no-member
+        conf = Chem.Conformer()  # pylint: disable=no-member
         pt = self._pt
 
         try:

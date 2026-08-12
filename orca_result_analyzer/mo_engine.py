@@ -622,7 +622,7 @@ class CalcWorker(QThread):
                 self.progress_sig.emit(pct)
 
             # Write Cube
-            vol_data = result_flat.reshape(nx, ny, nz)
+            vol_data = result_flat.reshape(nx, ny, nz)  # pylint: disable=too-many-function-args
             vectors = np.diag([dx, dy, dz])
 
             # Safe handling of mo_idx for comment

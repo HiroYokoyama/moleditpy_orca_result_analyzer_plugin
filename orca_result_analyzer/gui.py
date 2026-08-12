@@ -675,7 +675,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             ratio = widget.devicePixelRatioF()
             px = x * ratio
             vtk_y = (widget.height() - y) * ratio
-            picker = vtk.vtkCellPicker()
+            picker = vtk.vtkCellPicker()  # pylint: disable=no-member
             picker.SetTolerance(0.005)
             picker.Pick(px, vtk_y, 0, plotter.renderer)
             if picker.GetActor() is not atom_actor:
@@ -1104,10 +1104,11 @@ class OrcaResultAnalyzerDialog(QDialog):
             return
 
         try:
-            mol = Chem.RWMol()
-            conf = Chem.Conformer(len(atoms))
+            mol = Chem.RWMol()  # pylint: disable=no-member
+            conf = Chem.Conformer(len(atoms))  # pylint: disable=no-member
 
             for i, sym in enumerate(atoms):
+                # pylint: disable-next=no-member
                 idx = mol.AddAtom(Chem.Atom(normalize_atom_symbol(sym)))
                 x, y, z = coords[i]
                 conf.SetAtomPosition(idx, Point3D(x, y, z))

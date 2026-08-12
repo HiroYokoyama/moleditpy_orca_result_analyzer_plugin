@@ -284,6 +284,16 @@ class SpectrumWidget(QWidget):
                 except (AttributeError, ValueError, NotImplementedError) as _e:
                     logging.warning("silenced: %s", _e)
 
+            # Re-connect straight after the clear that dropped them: clear()
+            # installs a fresh CallbackRegistry, and the "No Data" path below
+            # returns before the end of this method, which used to leave the
+            # axes with no listener at all — the toolbar's zoom then stopped
+            # emitting range_changed and the range boxes silently desynced
+            # until the next successful plot. _on_axes_changed no-ops while
+            # _is_plotting is set, so connecting this early costs nothing.
+            self.canvas.axes.callbacks.connect("xlim_changed", self._on_axes_changed)
+            self.canvas.axes.callbacks.connect("ylim_changed", self._on_axes_changed)
+
             if getattr(self, "scaling_factor", None) is None:
                 self.scaling_factor = 1.0
             if getattr(self, "use_dual_axis", None) is None:
@@ -626,10 +636,6 @@ class SpectrumWidget(QWidget):
                             H = 1.0
 
                         self.ax2.set_ylim(-H * zero_frac, H * (1 - zero_frac))
-
-            # Re-connect callbacks (ax.clear() removes them)
-            self.canvas.axes.callbacks.connect("xlim_changed", self._on_axes_changed)
-            self.canvas.axes.callbacks.connect("ylim_changed", self._on_axes_changed)
 
             # Set axis properties
             self.canvas.axes.set_xlabel(self.x_unit)
