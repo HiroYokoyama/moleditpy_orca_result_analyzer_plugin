@@ -11,14 +11,21 @@ _prepare_definitions/_precompute_shells end to end, from ORCA text through the
 parser to grid values, and pins the result against a stored reference. A basis
 mismatch, a dropped shell or a coefficient misalignment shows up here.
 
-What this does NOT cover: the *accuracy* of the f/g normalization. MO 21 is a
-benzene pi* orbital, ~88% p by coefficient weight, with g carrying 0.27%; a
-wrong g prefactor moves the grid by ~4e-5 relative, against a stored-cube text
-precision of ~1e-5. There is no headroom to assert on. Deliberately mangling a
-g polynomial leaves every assertion here green. The real guards for that are
-the unit-norm and nodal-cone tests in test_mo_engine.py, which probe the
-angular functions directly; an output whose frontier orbitals carry real f/g
-weight would be needed to add a system-level one.
+What this does NOT cover: the *accuracy* of the f/g normalization. No orbital
+of this molecule can. Benzene is all light atoms, so def2-QZVP's f and g
+functions are polarization functions carrying almost no weight -- 0.27% of MO
+21's coefficient weight, and at most 0.49% across all 21 occupied orbitals
+(MO 16, used here). Perturbing a g polynomial by 3% moves either orbital's
+grid by ~3e-6 relative, below the ~1e-5 text precision of the stored cubes:
+there is no headroom to assert on, and every assertion in this module stays
+green. A system-level f/g check needs a molecule whose occupied orbitals carry
+real high-l weight, not another orbital from this one.
+
+That accuracy is covered directly instead, in test_mo_engine.py, by three
+component-level tests that were verified against injected faults: a g0 shape
+error trips test_g_z4_nodal_cones, a g+-2 shape error trips
+test_components_of_a_shell_are_mutually_orthogonal, and a per-component scale
+error trips test_g_components_are_unit_normalized.
 
 Nothing is written to disk -- the grids are evaluated in memory. The stored
 cubes are read only for their grid definition and as regression references.
@@ -54,8 +61,13 @@ _CASES = {
     ),
 }
 
-_MO_KEY = "21_restricted"
-_MO_IDX = 21
+# MO 21 is the LUMO -- the orbital the stored reference cubes hold, so it is
+# the one that can be checked against them. MO 16 is added as the occupied
+# counterpart: an occupied valence orbital is described almost identically by
+# both bases (|cos| 0.9994 against MO 21's 0.979), which affords a far tighter
+# threshold, and it carries the largest g weight of any occupied orbital here.
+_REFERENCED_MO = 21
+_OCCUPIED_MO = 16
 
 
 def _load_module(name, filename):
@@ -135,8 +147,8 @@ def _grid_points(cube):
     return cube["origin"] + idx @ cube["vectors"]
 
 
-def _regenerate(out_name, grid):
-    """Evaluate MO 21 on `grid`, driving the same path the dialog drives."""
+def _regenerate(out_name, grid, mo_indices):
+    """Evaluate the given MOs on `grid`, driving the path the dialog drives."""
     path = os.path.join(_SAMPLES, out_name)
     parser = OrcaParser()
     with open(path, encoding="utf-8", errors="replace") as fh:
@@ -155,10 +167,17 @@ def _regenerate(out_name, grid):
         )
 
     engine = BasisSetEngine(shells)
-    coeffs = np.array(
-        [c["coeff"] for c in parser.data["mo_coeffs"][_MO_KEY]["coeffs"]], dtype=float
-    )
-    return engine, coeffs, engine.evaluate_mo_on_grid(_MO_IDX, grid, coeffs)
+    coeffs, values = {}, {}
+    for mo in mo_indices:
+        coeffs[mo] = np.array(
+            [
+                c["coeff"]
+                for c in parser.data["mo_coeffs"][f"{mo}_restricted"]["coeffs"]
+            ],
+            dtype=float,
+        )
+        values[mo] = engine.evaluate_mo_on_grid(mo, grid, coeffs[mo])
+    return engine, coeffs, values
 
 
 def _cosine(a, b):
@@ -166,7 +185,7 @@ def _cosine(a, b):
 
 
 class TestBasisSetAgreement(unittest.TestCase):
-    """MO 21 regenerated from def2-SVP and def2-QZVP outputs."""
+    """MOs 16 and 21 regenerated from def2-SVP and def2-QZVP outputs."""
 
     @classmethod
     def setUpClass(cls):
@@ -177,7 +196,9 @@ class TestBasisSetAgreement(unittest.TestCase):
         cls.grid = _grid_points(cls.cubes["svp"])
         cls.engines, cls.coeffs, cls.values = {}, {}, {}
         for tag, (out_name, _) in _CASES.items():
-            engine, coeffs, values = _regenerate(out_name, cls.grid)
+            engine, coeffs, values = _regenerate(
+                out_name, cls.grid, (_OCCUPIED_MO, _REFERENCED_MO)
+            )
             cls.engines[tag], cls.coeffs[tag], cls.values[tag] = engine, coeffs, values
 
     def test_both_jobs_share_one_grid(self):
@@ -202,15 +223,22 @@ class TestBasisSetAgreement(unittest.TestCase):
 
     def test_every_basis_function_gets_a_coefficient(self):
         for tag in _CASES:
-            with self.subTest(basis=tag):
-                self.assertEqual(len(self.coeffs[tag]), self.engines[tag].n_basis)
+            for mo in (_OCCUPIED_MO, _REFERENCED_MO):
+                with self.subTest(basis=tag, mo=mo):
+                    self.assertEqual(
+                        len(self.coeffs[tag][mo]), self.engines[tag].n_basis
+                    )
 
     def test_regeneration_reproduces_the_stored_cube(self):
         """Regression anchor, per basis, before the two are compared."""
         for tag in _CASES:
             with self.subTest(basis=tag):
                 self.assertAlmostEqual(
-                    _cosine(self.values[tag], self.cubes[tag]["values"]), 1.0, places=6
+                    _cosine(
+                        self.values[tag][_REFERENCED_MO], self.cubes[tag]["values"]
+                    ),
+                    1.0,
+                    places=6,
                 )
 
     def test_svp_and_qzvp_describe_the_same_orbital(self):
@@ -220,27 +248,58 @@ class TestBasisSetAgreement(unittest.TestCase):
         ORCA hands these two out with opposite signs. What must hold is that
         the orbitals are parallel, not that they point the same way.
 
-        Threshold sits below the measured 0.979: the residual is real basis-set
-        difference, not error, so this catches a gross break (wrong orbital,
-        shifted coefficients, mis-mapped shells) rather than small numerics.
+        The occupied orbital is held to a much tighter threshold than the
+        LUMO: both bases describe an occupied valence orbital almost
+        identically (measured 0.9994), whereas a virtual orbital is shaped
+        partly by whatever room the basis leaves it (0.979). Neither residual
+        is engine error, so both thresholds sit just below the measured value
+        -- tight enough to catch a mis-mapped shell or a shifted coefficient
+        vector, loose enough not to chase real basis-set difference.
         """
-        cosine = _cosine(self.values["svp"], self.values["qzvp"])
-        self.assertGreater(
-            abs(cosine),
-            0.97,
-            f"SVP and QZVP MO {_MO_IDX} disagree (|cos| = {abs(cosine):.4f}); "
-            "the two jobs should describe the same orbital",
+        for mo, floor in ((_OCCUPIED_MO, 0.999), (_REFERENCED_MO, 0.97)):
+            with self.subTest(mo=mo):
+                cosine = _cosine(self.values["svp"][mo], self.values["qzvp"][mo])
+                self.assertGreater(
+                    abs(cosine),
+                    floor,
+                    f"SVP and QZVP MO {mo} disagree (|cos| = {abs(cosine):.4f}); "
+                    "the two jobs should describe the same orbital",
+                )
+
+    def test_the_occupied_orbital_is_not_confused_with_its_neighbours(self):
+        """MO 16 must match MO 16, and nothing else.
+
+        Occupied orbitals can reorder between basis sets, which would make the
+        index-to-index comparison above meaningless while still passing if a
+        neighbour happened to look similar. Here the match is unambiguous.
+        """
+        reference = self.values["svp"][_OCCUPIED_MO]
+        engine, _, values = _regenerate(
+            _CASES["qzvp"][0], self.grid, range(_OCCUPIED_MO - 2, _OCCUPIED_MO + 3)
         )
+        overlaps = {
+            mo: abs(_cosine(reference, v)) for mo, v in values.items()
+        }
+        best = max(overlaps, key=overlaps.get)
+        self.assertEqual(best, _OCCUPIED_MO)
+        others = [v for mo, v in overlaps.items() if mo != _OCCUPIED_MO]
+        self.assertLess(max(others), 0.1, f"overlaps: {overlaps}")
 
     def test_the_orbitals_carry_comparable_weight_on_the_grid(self):
         """A prefactor slip can leave shape intact but change the scale."""
-        norms = {tag: float(np.linalg.norm(v)) for tag, v in self.values.items()}
-        self.assertAlmostEqual(norms["svp"], norms["qzvp"], delta=0.05 * norms["svp"])
+        for mo in (_OCCUPIED_MO, _REFERENCED_MO):
+            with self.subTest(mo=mo):
+                norms = {
+                    tag: float(np.linalg.norm(v[mo])) for tag, v in self.values.items()
+                }
+                self.assertAlmostEqual(
+                    norms["svp"], norms["qzvp"], delta=0.05 * norms["svp"]
+                )
 
     def test_no_cube_is_written_while_regenerating(self):
         """The engine evaluates in memory; only CubeWriter should touch disk."""
         before = set(os.listdir(os.path.join(_SAMPLES, "benzene-opt-eneQZ_cubes")))
-        _regenerate(_CASES["qzvp"][0], self.grid[:64])
+        _regenerate(_CASES["qzvp"][0], self.grid[:64], (_REFERENCED_MO,))
         after = set(os.listdir(os.path.join(_SAMPLES, "benzene-opt-eneQZ_cubes")))
         self.assertEqual(before, after)
 
