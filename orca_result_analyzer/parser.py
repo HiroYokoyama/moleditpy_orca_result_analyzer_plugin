@@ -204,13 +204,17 @@ class OrcaParser:
                 except (KeyError, IndexError, TypeError, ValueError) as _e:
                     logging.warning("silenced: %s", _e)
             if "TOTAL CHARGE" in uu:
-                # Could be "Total Charge 0" or "Total Charge ... 0"
+                # Could be "Total Charge 0" or "Total Charge ... 0".
+                # The phrase also heads a population-analysis column whose
+                # value is formatted "0.000000"; int() rejecting that is the
+                # intended way to skip it, so it is not worth a warning --
+                # the real line elsewhere in the file still sets the value.
                 try:
                     parts = line.split()
                     val = int(parts[-1])
                     self.data["charge"] = val
                 except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                    logging.debug("Not the charge line: %r (%s)", line.strip(), _e)
 
             if "MULTIPLICITY" in uu:
                 try:
@@ -218,7 +222,9 @@ class OrcaParser:
                     val = int(parts[-1])
                     self.data["mult"] = val
                 except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                    logging.debug(
+                        "Not the multiplicity line: %r (%s)", line.strip(), _e
+                    )
             if (
                 "SCF CONVERGED" in uu
                 or "OPTIMIZATION CONVERGED" in uu
@@ -1503,7 +1509,11 @@ class OrcaParser:
                         TypeError,
                         ValueError,
                     ) as _e:
-                        logging.warning("silenced: %s", _e)
+                        # The block is scanned line by line and the numeric
+                        # conversion is what separates data rows from the
+                        # headers and blank lines around them, so failing
+                        # here is the normal case, not a problem to report.
+                        logging.debug("Not a charge row: %r (%s)", line.strip(), _e)
                 curr += 1
             return res
 

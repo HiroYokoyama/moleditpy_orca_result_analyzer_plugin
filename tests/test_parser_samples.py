@@ -1714,5 +1714,47 @@ class TestEnergyComponentsAbsentForDft(unittest.TestCase):
         self.assertEqual(p.data["energy_components"], [])
 
 
+class TestValidOutputsParseQuietly(unittest.TestCase):
+    """A clean ORCA file should not make the parser complain.
+
+    Several blocks are scanned line by line with a numeric conversion used to
+    tell data rows from the headers and footers around them, so the resulting
+    ValueError is ordinary control flow. Reporting it at WARNING put ten lines
+    into the log for twenty perfectly good files, which is how a log stops
+    being worth reading -- and how a genuine warning goes unnoticed.
+    """
+
+    def test_no_warnings_are_logged_for_any_sample(self):
+        import glob
+        import logging
+
+        records = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record):
+                if record.levelno >= logging.WARNING:
+                    records.append(
+                        f"{os.path.basename(record.pathname)}:{record.lineno} "
+                        f"{record.getMessage()[:70]}"
+                    )
+
+        handler = _Capture()
+        root = logging.getLogger()
+        root.addHandler(handler)
+        previous = root.level
+        root.setLevel(logging.WARNING)
+        self.addCleanup(root.setLevel, previous)
+        self.addCleanup(root.removeHandler, handler)
+
+        samples = sorted(glob.glob(os.path.join(_SAMPLES, "*.out")))
+        self.assertGreater(len(samples), 10, "sample corpus went missing")
+        for path in samples:
+            _load(os.path.basename(path))
+
+        self.assertEqual(
+            records, [], "parser warned on valid input:\n" + "\n".join(records)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
