@@ -458,24 +458,24 @@ class TestForceAnalysis(unittest.TestCase):
             "termination_status": "Running",
         }
 
-        # Mock file reading inside reload_data
-        import builtins
-
-        original_open = builtins.open
-
-        # Helper mock for open
-        mock_open = MagicMock()
-        mock_open.__enter__.return_value.read.return_value = "dummy content"
-
-        # Stub os.path.exists
+        # reload_data re-reads the file through load_orca_parser; stand in for
+        # it with a parse result that repeats the same two steps.
         import os
+        import types
+        import orca_result_analyzer.force_analysis as fa
+
+        fresh = types.SimpleNamespace(
+            data=dict(mock_parser.data),
+            lines=[],
+            raw_content="",
+        )
+        original_loader = fa.load_orca_parser
+        fa.load_orca_parser = MagicMock(return_value=fresh)
 
         original_exists = os.path.exists
         os.path.exists = MagicMock(return_value=True)
 
         try:
-            builtins.open = MagicMock(return_value=mock_open)
-
             dlg = ForceViewerDialog(mock_parent, [], parser=mock_parser)
 
             # Mock UI slider
@@ -493,7 +493,39 @@ class TestForceAnalysis(unittest.TestCase):
             mock_slider.setValue.assert_called_with(0)
 
         finally:
-            builtins.open = original_open
+            fa.load_orca_parser = original_loader
+            os.path.exists = original_exists
+
+    def test_force_viewer_dialog_reload_cancelled_keeps_data(self):
+        """A cancelled reload leaves the shared parser untouched."""
+        from orca_result_analyzer.force_analysis import ForceViewerDialog
+
+        mock_parent = MagicMock()
+        mock_parent.context = MagicMock()
+
+        mock_parser = MagicMock()
+        mock_parser.filename = "dummy.out"
+        mock_parser.data = {
+            "gradients": [],
+            "scan_steps": [{"step": 1, "gradients": [], "atoms": [], "coords": []}],
+            "termination_status": "Running",
+        }
+
+        import os
+        import orca_result_analyzer.force_analysis as fa
+
+        original_loader = fa.load_orca_parser
+        fa.load_orca_parser = MagicMock(return_value=None)  # user hit Cancel
+        original_exists = os.path.exists
+        os.path.exists = MagicMock(return_value=True)
+
+        try:
+            dlg = ForceViewerDialog(mock_parent, [], parser=mock_parser)
+            dlg.reload_data()
+            self.assertEqual(len(mock_parser.data["scan_steps"]), 1)
+            self.assertFalse(dlg._reloading)
+        finally:
+            fa.load_orca_parser = original_loader
             os.path.exists = original_exists
 
     def test_force_viewer_dialog_modeless_graph(self):

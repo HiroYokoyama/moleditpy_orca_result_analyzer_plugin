@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
 )
 from PyQt6.QtCore import Qt, QTimer
+from .loading import load_orca_parser
 import logging
 
 try:
@@ -818,26 +819,15 @@ class ForceViewerDialog(QDialog):
             return
 
         try:
-            content = ""
-            encodings = ["utf-8", "utf-16", "latin-1", "cp1252"]
-            found = False
-            for enc in encodings:
-                try:
-                    with open(self.parser.filename, "r", encoding=enc) as f:
-                        content = f.read()
-                    found = True
-                    break
-                except UnicodeError:
-                    continue
+            fresh = load_orca_parser(self.parser.filename, self)
+            if fresh is None:  # cancelled by the user
+                return
 
-            if not found:
-                with open(
-                    self.parser.filename, "r", encoding="utf-8", errors="replace"
-                ) as f:
-                    content = f.read()
-
-            # Re-parse (using the already initialized parser)
-            self.parser.load_from_memory(content, self.parser.filename)
+            # Refresh in place — the other dialogs hold this parser object.
+            self.parser.data.clear()
+            self.parser.data.update(fresh.data)
+            self.parser.lines = fresh.lines
+            self.parser.raw_content = fresh.raw_content
 
             # Update local state
             self.gradients = self.parser.data.get("gradients", [])
