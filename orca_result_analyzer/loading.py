@@ -78,7 +78,7 @@ class LoadProgress:
         if self._cancelled:
             raise ParseCancelled(label)
         frac = _READ_FRACTION + (1.0 - _READ_FRACTION) * (done / max(total, 1))
-        self._pump(frac * 100, f"{label}...")
+        self._pump(frac * 100, label if done >= total else f"{label}...")
 
     def close(self):
         self._dlg.close()
