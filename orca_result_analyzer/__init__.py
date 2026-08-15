@@ -1,5 +1,5 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "3.14.0"
+PLUGIN_VERSION = "3.14.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
@@ -12,22 +12,10 @@ _context = None  # Stored from initialize() so run() can use the registry API
 
 def _read_orca_file(path, parent_widget):
     """Read an ORCA output file trying several encodings. Returns content string or None."""
-    encodings = ["utf-8", "utf-16", "latin-1", "cp1252"]
-    for enc in encodings:
-        try:
-            with open(path, "r", encoding=enc) as f:
-                return f.read()
-        except UnicodeError:
-            continue
-        except (OSError, ValueError) as e:
-            QMessageBox.critical(
-                parent_widget, "Error Reading File", f"Could not read file:\n{e}"
-            )
-            return None
-    # Fallback with error replace
+    from .loading import read_orca_text
+
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
+        return read_orca_text(path)
     except (OSError, ValueError) as e:
         QMessageBox.critical(
             parent_widget, "Error Reading File", f"Could not read file:\n{e}"
@@ -40,14 +28,15 @@ def _open_orca_file(path, context):
     QApplication.processEvents()
     mw = context.get_main_window()
 
-    content = _read_orca_file(path, mw)
-    if content is None:
+    from .loading import load_orca_parser
+
+    try:
+        parser = load_orca_parser(path, mw)
+    except (OSError, ValueError) as e:
+        QMessageBox.critical(mw, "Error Reading File", f"Could not read file:\n{e}")
         return
-
-    from .parser import OrcaParser
-
-    parser = OrcaParser()
-    parser.load_from_memory(content, path)
+    if parser is None:  # cancelled by the user
+        return
 
     # Close existing window if open
     existing = context.get_window("analyzer")
@@ -59,9 +48,10 @@ def _open_orca_file(path, context):
 
     # New result loaded — any atom colors applied to the previous molecule's
     # indices must not bleed onto this (possibly differently-indexed) one.
-    from .utils import clear_atom_color_overrides
+    from .utils import clear_atom_color_overrides, sync_main_window_file
 
     clear_atom_color_overrides(mw)
+    sync_main_window_file(mw, path, context)
 
     from .gui import OrcaResultAnalyzerDialog
 

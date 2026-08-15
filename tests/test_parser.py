@@ -1062,5 +1062,49 @@ class TestParseTerminationStatus(unittest.TestCase):
         self.assertEqual(p.data["termination_status"], "ERROR")
 
 
+class TestParseProgress(unittest.TestCase):
+    """parse_all reports its steps so a long load can show progress."""
+
+    CONTENT = "Program Version 5.0.4\n"
+
+    def _run(self, progress):
+        p = OrcaParser()
+        p.load_from_memory(self.CONTENT, "test.out", progress=progress)
+        return p
+
+    def test_every_step_is_reported(self):
+        seen = []
+        self._run(lambda done, total, label: seen.append((done, total, label)))
+        # one call per step, plus a final completion call
+        self.assertEqual(len(seen), len(OrcaParser.PARSE_STEPS) + 1)
+
+    def test_the_last_report_is_complete(self):
+        seen = []
+        self._run(lambda done, total, label: seen.append((done, total, label)))
+        done, total, _label = seen[-1]
+        self.assertEqual((done, total), (total, len(OrcaParser.PARSE_STEPS)))
+
+    def test_every_step_carries_a_label(self):
+        seen = []
+        self._run(lambda done, total, label: seen.append(label))
+        self.assertTrue(all(seen))
+
+    def test_the_steps_match_real_parse_methods(self):
+        p = OrcaParser()
+        for method, _label in OrcaParser.PARSE_STEPS:
+            self.assertTrue(callable(getattr(p, method, None)), method)
+
+    def test_a_cancelling_callback_stops_the_parse(self):
+        def cancel_after_two(done, _total, _label):
+            if done >= 2:
+                raise _parser_mod.ParseCancelled("stop")
+
+        with self.assertRaises(_parser_mod.ParseCancelled):
+            self._run(cancel_after_two)
+
+    def test_parsing_without_a_callback_still_works(self):
+        self.assertEqual(_parse(self.CONTENT).data["version"], "5.0.4")
+
+
 if __name__ == "__main__":
     unittest.main()

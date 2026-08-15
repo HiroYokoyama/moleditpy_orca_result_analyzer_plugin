@@ -10,6 +10,10 @@ AU_TO_DEBYE = 2.541746473
 IMAGINARY_FREQ_THRESHOLD = 10.0
 
 
+class ParseCancelled(Exception):
+    """Raised by a progress callback to abort ``parse_all`` between steps."""
+
+
 class OrcaParser:
     """Parser for ORCA quantum chemistry output files"""
 
@@ -158,34 +162,51 @@ class OrcaParser:
 
         return steps
 
-    def load_from_memory(self, content, filename=""):
+    #: (method name, label) in execution order. Gradients must be parsed
+    #: before the trajectory so they can be linked to it.
+    PARSE_STEPS = (
+        ("parse_basic", "Reading job information"),
+        ("parse_gradients", "Reading gradients"),
+        ("parse_trajectory", "Reading trajectory"),
+        ("parse_frequencies", "Reading vibrational frequencies"),
+        ("parse_thermal", "Reading thermochemistry"),
+        ("parse_mo_coeffs", "Reading MO coefficients"),
+        ("parse_orbital_energies", "Reading orbital energies"),
+        ("parse_charges", "Reading atomic charges"),
+        ("parse_mayer_bond_orders", "Reading Mayer bond orders"),
+        ("parse_nbo_orbitals", "Reading NBO orbitals"),
+        ("parse_nbo_hybrids", "Reading NBO hybrids"),
+        ("parse_nbo_perturbation", "Reading NBO perturbation analysis"),
+        ("parse_dipole", "Reading dipole moment"),
+        ("parse_spin_contamination", "Reading spin contamination"),
+        ("parse_dispersion", "Reading dispersion correction"),
+        ("parse_energy_components", "Reading energy components"),
+        ("parse_tddft", "Reading TD-DFT excitations"),
+        ("parse_nmr", "Reading NMR data"),
+        ("parse_basis_set", "Reading basis set"),
+        ("parse_scf_trace", "Reading SCF convergence"),
+        ("parse_scan_results_table", "Reading scan results"),
+    )
+
+    def load_from_memory(self, content, filename="", progress=None):
         self.filename = filename
         self.raw_content = content
         self.lines = content.splitlines()
-        self.parse_all()
+        self.parse_all(progress=progress)
 
-    def parse_all(self):
-        self.parse_basic()
-        self.parse_gradients()  # Must come before trajectory to link gradients!
-        self.parse_trajectory()
-        self.parse_frequencies()
-        self.parse_thermal()
-        self.parse_mo_coeffs()
-        self.parse_orbital_energies()
-        self.parse_charges()
-        self.parse_mayer_bond_orders()
-        self.parse_nbo_orbitals()
-        self.parse_nbo_hybrids()
-        self.parse_nbo_perturbation()
-        self.parse_dipole()
-        self.parse_spin_contamination()
-        self.parse_dispersion()
-        self.parse_energy_components()
-        self.parse_tddft()
-        self.parse_nmr()
-        self.parse_basis_set()
-        self.parse_scf_trace()
-        self.parse_scan_results_table()
+    def parse_all(self, progress=None):
+        """Run every parse step.
+
+        *progress* is called as ``progress(done, total, label)`` before each
+        step and once when finished; it may raise ``ParseCancelled`` to abort.
+        """
+        total = len(self.PARSE_STEPS)
+        for done, (method, label) in enumerate(self.PARSE_STEPS):
+            if progress is not None:
+                progress(done, total, label)
+            getattr(self, method)()
+        if progress is not None:
+            progress(total, total, "Finished")
 
     def parse_basic(self):
         """Parse basic info: SCF Energy, Convergence, Geometry."""

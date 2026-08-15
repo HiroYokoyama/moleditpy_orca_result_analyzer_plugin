@@ -18,12 +18,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
-from .parser import OrcaParser
+from .loading import load_orca_parser
 from .utils import (
     normalize_atom_symbol,
     determine_bonds_without_dummies,
     list_orca_output_files,
     clear_atom_color_overrides,
+    sync_main_window_file,
 )
 
 
@@ -194,10 +195,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         self._click_filter = None
         self._enable_plotter_picking()
 
-        # Update main window title to reflect ORCA result
-        mw = context.get_main_window() if context is not None else self.mw
-        if mw is not None and hasattr(mw, "init_manager"):
-            mw.init_manager.current_file_path = self.file_path
+        # Only for a real file: an empty analyzer must not blank out the
+        # name of whatever the main window already has open.
+        if self.file_path:
+            host = context.get_main_window() if context is not None else self.mw
+            sync_main_window_file(host, self.file_path, context)
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -827,24 +829,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         clear_atom_color_overrides(self.mw)
 
         try:
-            content = ""
-            encodings = ["utf-8", "utf-16", "latin-1", "cp1252"]
-            found = False
-            for enc in encodings:
-                try:
-                    with open(path, "r", encoding=enc) as f:
-                        content = f.read()
-                    found = True
-                    break
-                except UnicodeError:
-                    continue
-
-            if not found:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    content = f.read()
-
-            new_parser = OrcaParser()
-            new_parser.load_from_memory(content, path)
+            new_parser = load_orca_parser(path, self)
+            if new_parser is None:  # cancelled by the user
+                self.context.show_status_message("Loading cancelled", 3000)
+                return
 
             # --- Auto-load NEB Trajectory if present ---
             # Try to get explicit filename from parser first
@@ -894,8 +882,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.file_path = path
 
             # --- Sync with Main Window Title ---
-            if hasattr(self.mw, "init_manager"):
-                self.mw.init_manager.current_file_path = path
+            sync_main_window_file(self.mw, path, self.context)
 
             # Update File Info Labels
             self.update_file_info_labels()

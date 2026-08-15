@@ -108,6 +108,27 @@ class TestLoadFile(_LoadCase):
         self.dlg.load_file(path)
         self.assertEqual(self.mw.init_manager.current_file_path, path)
 
+    def test_the_main_window_title_is_actually_redrawn(self):
+        path = self._write("second.out", OUT_TEXT)
+        self.dlg.load_file(path)
+        self.context.refresh_ui.assert_called()
+
+    def test_cancelling_the_load_keeps_the_previous_result(self):
+        before = self.dlg.file_path
+        with patch.object(G, "load_orca_parser", return_value=None):
+            self.dlg.load_file(self._write("second.out", OUT_TEXT))
+        self.assertEqual(self.dlg.file_path, before)
+
+    def test_cancelling_the_load_is_reported(self):
+        with patch.object(G, "load_orca_parser", return_value=None):
+            self.dlg.load_file(self._write("second.out", OUT_TEXT))
+        self.assertTrue(
+            any(
+                "cancelled" in str(c.args[0]).lower()
+                for c in self.context.show_status_message.call_args_list
+            )
+        )
+
     def test_success_is_reported(self):
         self.dlg.load_file(self._write("second.out", OUT_TEXT))
         self.assertTrue(

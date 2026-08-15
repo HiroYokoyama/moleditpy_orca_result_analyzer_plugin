@@ -31,6 +31,7 @@ normalize_atom_symbol = _utils.normalize_atom_symbol
 determine_bonds_without_dummies = _utils.determine_bonds_without_dummies
 list_orca_output_files = _utils.list_orca_output_files
 clear_atom_color_overrides = _utils.clear_atom_color_overrides
+sync_main_window_file = _utils.sync_main_window_file
 save_json_atomic = _utils.save_json_atomic
 
 # ---------------------------------------------------------------------------
@@ -251,6 +252,77 @@ class _FakeV3D:
 class _FakeMW:
     def __init__(self, v3d):
         self.view_3d_manager = v3d
+
+
+class _FakeInit:
+    def __init__(self):
+        self.current_file_path = None
+
+
+class _FakeState:
+    def __init__(self):
+        self.title_updates = 0
+
+    def update_window_title(self):
+        self.title_updates += 1
+
+
+class _FakeHost:
+    def __init__(self):
+        self.init_manager = _FakeInit()
+        self.state_manager = _FakeState()
+
+
+class _FakeContext:
+    def __init__(self):
+        self.refreshes = 0
+
+    def refresh_ui(self):
+        self.refreshes += 1
+
+
+class TestSyncMainWindowFile(unittest.TestCase):
+    """The main window must name the loaded ORCA file, as it does its own."""
+
+    def setUp(self):
+        self.mw = _FakeHost()
+
+    def test_the_path_becomes_the_current_file(self):
+        sync_main_window_file(self.mw, "/tmp/job.out")
+        self.assertEqual(self.mw.init_manager.current_file_path, "/tmp/job.out")
+
+    def test_the_title_is_rebuilt(self):
+        sync_main_window_file(self.mw, "/tmp/job.out")
+        self.assertEqual(self.mw.state_manager.title_updates, 1)
+
+    def test_the_context_api_is_preferred_when_available(self):
+        ctx = _FakeContext()
+        sync_main_window_file(self.mw, "/tmp/job.out", ctx)
+        self.assertEqual((ctx.refreshes, self.mw.state_manager.title_updates), (1, 0))
+
+    def test_a_context_without_refresh_falls_back(self):
+        class _Old:
+            pass
+
+        sync_main_window_file(self.mw, "/tmp/job.out", _Old())
+        self.assertEqual(self.mw.state_manager.title_updates, 1)
+
+    def test_a_failing_refresh_does_not_break_the_load(self):
+        class _Broken:
+            def refresh_ui(self):
+                raise RuntimeError("wrapped C/C++ object deleted")
+
+        sync_main_window_file(self.mw, "/tmp/job.out", _Broken())
+        self.assertEqual(self.mw.init_manager.current_file_path, "/tmp/job.out")
+
+    def test_no_main_window_is_a_noop(self):
+        sync_main_window_file(None, "/tmp/job.out")
+
+    def test_a_host_without_managers_is_a_noop(self):
+        class _Bare:
+            pass
+
+        sync_main_window_file(_Bare(), "/tmp/job.out")
 
 
 class TestClearAtomColorOverrides(unittest.TestCase):

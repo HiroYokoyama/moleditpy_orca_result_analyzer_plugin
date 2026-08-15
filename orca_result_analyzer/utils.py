@@ -184,6 +184,30 @@ def clear_atom_color_overrides(mw) -> None:
             logging.warning("clear_atom_color_overrides: %s", exc)
 
 
+def sync_main_window_file(mw, path: str, context=None) -> None:
+    """Show *path* as the main window's current file.
+
+    The host titles its window from ``current_file_path`` but only rebuilds
+    the title on demand, so setting the path alone changes nothing on screen.
+    """
+    if mw is None:
+        return
+    im = getattr(mw, "init_manager", None)
+    if im is None:
+        return
+    im.current_file_path = path
+
+    refresh = getattr(context, "refresh_ui", None) if context is not None else None
+    if not callable(refresh):
+        sm = getattr(mw, "state_manager", None)
+        refresh = getattr(sm, "update_window_title", None) if sm is not None else None
+    if callable(refresh):
+        try:
+            refresh()
+        except (AttributeError, RuntimeError) as exc:
+            logging.warning("sync_main_window_file: %s", exc)
+
+
 def list_orca_output_files(directory: str) -> list[str]:
     """Return a sorted list of ``*.out`` filenames found in *directory*.
 
