@@ -89,6 +89,12 @@ class FakeProgressDialog:
     def close(self):
         self.closed = True
 
+    def hide(self):
+        pass
+
+    def deleteLater(self):
+        pass
+
 
 class _LoadingCase(unittest.TestCase):
     def setUp(self):

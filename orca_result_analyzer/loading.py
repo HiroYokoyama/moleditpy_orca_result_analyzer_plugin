@@ -81,6 +81,11 @@ class LoadProgress:
         self._pump(frac * 100, label if done >= total else f"{label}...")
 
     def close(self):
+        try:
+            self._dlg.hide()
+            self._dlg.deleteLater()
+        except (AttributeError, RuntimeError):
+            pass
         self._dlg.close()
 
 
