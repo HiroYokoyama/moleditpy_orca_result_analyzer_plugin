@@ -295,24 +295,28 @@ class TestSyncMainWindowFile(unittest.TestCase):
         sync_main_window_file(self.mw, "/tmp/job.out")
         self.assertEqual(self.mw.state_manager.title_updates, 1)
 
-    def test_the_context_api_is_preferred_when_available(self):
+    def test_only_the_title_is_touched_when_the_host_can_do_it(self):
         ctx = _FakeContext()
         sync_main_window_file(self.mw, "/tmp/job.out", ctx)
-        self.assertEqual((ctx.refreshes, self.mw.state_manager.title_updates), (1, 0))
+        self.assertEqual((self.mw.state_manager.title_updates, ctx.refreshes), (1, 0))
 
-    def test_a_context_without_refresh_falls_back(self):
-        class _Old:
+    def test_a_host_without_a_title_call_falls_back_to_the_context(self):
+        class _Bare:
             pass
 
-        sync_main_window_file(self.mw, "/tmp/job.out", _Old())
-        self.assertEqual(self.mw.state_manager.title_updates, 1)
+        mw = _FakeHost()
+        mw.state_manager = _Bare()
+        ctx = _FakeContext()
+        sync_main_window_file(mw, "/tmp/job.out", ctx)
+        self.assertEqual(ctx.refreshes, 1)
 
     def test_a_failing_refresh_does_not_break_the_load(self):
         class _Broken:
-            def refresh_ui(self):
+            def update_window_title(self):
                 raise RuntimeError("wrapped C/C++ object deleted")
 
-        sync_main_window_file(self.mw, "/tmp/job.out", _Broken())
+        self.mw.state_manager = _Broken()
+        sync_main_window_file(self.mw, "/tmp/job.out")
         self.assertEqual(self.mw.init_manager.current_file_path, "/tmp/job.out")
 
     def test_no_main_window_is_a_noop(self):

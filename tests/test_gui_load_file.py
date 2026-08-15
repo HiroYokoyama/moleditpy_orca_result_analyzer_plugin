@@ -111,7 +111,7 @@ class TestLoadFile(_LoadCase):
     def test_the_main_window_title_is_actually_redrawn(self):
         path = self._write("second.out", OUT_TEXT)
         self.dlg.load_file(path)
-        self.context.refresh_ui.assert_called()
+        self.mw.state_manager.update_window_title.assert_called()
 
     def test_cancelling_the_load_keeps_the_previous_result(self):
         before = self.dlg.file_path

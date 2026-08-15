@@ -189,6 +189,9 @@ def sync_main_window_file(mw, path: str, context=None) -> None:
 
     The host titles its window from ``current_file_path`` but only rebuilds
     the title on demand, so setting the path alone changes nothing on screen.
+    ``update_window_title`` is what the host itself calls after running a
+    plugin file opener; ``context.refresh_ui()`` is only the fallback, as it
+    also recomputes the 2D formula label we have no business touching.
     """
     if mw is None:
         return
@@ -197,10 +200,10 @@ def sync_main_window_file(mw, path: str, context=None) -> None:
         return
     im.current_file_path = path
 
-    refresh = getattr(context, "refresh_ui", None) if context is not None else None
+    sm = getattr(mw, "state_manager", None)
+    refresh = getattr(sm, "update_window_title", None) if sm is not None else None
     if not callable(refresh):
-        sm = getattr(mw, "state_manager", None)
-        refresh = getattr(sm, "update_window_title", None) if sm is not None else None
+        refresh = getattr(context, "refresh_ui", None) if context is not None else None
     if callable(refresh):
         try:
             refresh()
