@@ -849,13 +849,13 @@ class TestScfTraceOrca6(unittest.TestCase):
     def test_scf_opt_cycle_labels(self):
         labels = [t["step"] for t in self.p_opt.data["scf_traces"]]
         cycle_labels = [
-            l
-            for l in labels
-            if "Cycle" in l
-            or "Initial" in l
-            or "Final" in l
-            or "Post" in l
-            or "Property" in l
+            lbl
+            for lbl in labels
+            if "Cycle" in lbl
+            or "Initial" in lbl
+            or "Final" in lbl
+            or "Post" in lbl
+            or "Property" in lbl
         ]
         self.assertGreater(len(cycle_labels), 0)
 
@@ -903,13 +903,13 @@ class TestScfTraceOrca5(unittest.TestCase):
     def test_scf_opt_cycle_labels(self):
         labels = [t["step"] for t in self.p_opt.data["scf_traces"]]
         cycle_labels = [
-            l
-            for l in labels
-            if "Cycle" in l
-            or "Initial" in l
-            or "Final" in l
-            or "Post" in l
-            or "Property" in l
+            lbl
+            for lbl in labels
+            if "Cycle" in lbl
+            or "Initial" in lbl
+            or "Final" in lbl
+            or "Post" in lbl
+            or "Property" in lbl
         ]
         self.assertGreater(len(cycle_labels), 0)
 

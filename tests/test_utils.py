@@ -202,7 +202,7 @@ class TestDetermineBondsWithoutDummies(unittest.TestCase):
         self.assertEqual(mol.GetNumBonds(), 2)
 
 
-import tempfile
+import tempfile  # noqa: E402
 
 
 class TestListOrcaOutputFiles(unittest.TestCase):

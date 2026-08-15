@@ -260,10 +260,10 @@ def _install_stubs():
         def setAlignment(self, *a):
             pass
 
-    existing_widgets = sys.modules.get("PyQt6.QtWidgets")
-    existing_core = sys.modules.get("PyQt6.QtCore")
-    existing_gui = sys.modules.get("PyQt6.QtGui")
-    existing_pyqt6 = sys.modules.get("PyQt6")
+    sys.modules.get("PyQt6.QtWidgets")
+    sys.modules.get("PyQt6.QtCore")
+    sys.modules.get("PyQt6.QtGui")
+    sys.modules.get("PyQt6")
 
     _WIDGET_MOCKS = [
         "QVBoxLayout",

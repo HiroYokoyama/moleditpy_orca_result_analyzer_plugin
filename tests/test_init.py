@@ -373,7 +373,6 @@ class TestOpenAnalyzerEmpty(unittest.TestCase):
         fake_win = MagicMock()
         ctx.register_window("analyzer", fake_win)
 
-        original = _init_mod._open_orca_analyzer_empty
         # Call the real function — it should detect the existing window and raise it
         _init_mod._open_orca_analyzer_empty(ctx)
 

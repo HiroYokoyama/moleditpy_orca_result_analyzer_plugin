@@ -65,7 +65,7 @@ if "orca_result_analyzer" in sys.modules:
     if not hasattr(_mod, "initialize") or getattr(_mod, "__file__", None) is None:
         sys.modules.pop("orca_result_analyzer")
 
-from orca_result_analyzer import initialize, PLUGIN_NAME, PLUGIN_VERSION
+from orca_result_analyzer import initialize, PLUGIN_NAME, PLUGIN_VERSION  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ Usage:
     python run_tests.py -k parser      # forward any args to pytest
     python run_tests.py tests/test_parser.py -v
 """
+
 import os
 import subprocess
 import sys
