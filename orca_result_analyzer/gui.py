@@ -101,6 +101,7 @@ from .nmr_analysis import NMRDialog  # noqa: E402
 from .tddft_analysis import TDDFTDialog  # noqa: E402
 from .thermal_analysis import ThermalTableDialog  # noqa: E402
 from .scf_analysis import SCFTraceDialog  # noqa: E402
+from .nics_bridge import nics_analyzer_available, open_nics_analyzer  # noqa: E402
 
 from . import PLUGIN_VERSION  # noqa: E402
 import logging  # noqa: E402
@@ -319,6 +320,14 @@ class OrcaResultAnalyzerDialog(QDialog):
             act = QAction(label, self)
             act.triggered.connect(slot)
             analysis_menu.addAction(act)
+
+        # NICS lives in a separate plugin; the entry hides while it is absent.
+        analysis_menu.addSeparator()
+        self.nics_action = QAction("NICS Analysis...", self)
+        self.nics_action.triggered.connect(self.show_nics_analysis)
+        analysis_menu.addAction(self.nics_action)
+        analysis_menu.aboutToShow.connect(self._refresh_nics_action)
+        self._refresh_nics_action()
         help_menu = menu_bar.addMenu("&Help")
         about_action = QAction("&About ORCA Result Analyzer", self)
         about_action.triggered.connect(self.show_about)
@@ -1350,6 +1359,28 @@ class OrcaResultAnalyzerDialog(QDialog):
             self, data, couplings=couplings, file_path=self.file_path
         )
         self.nmr_dlg.show()
+
+    def _nics_host(self):
+        """Main window to search for the NICS Analyzer plugin."""
+        if self.context is not None:
+            try:
+                return self.context.get_main_window()
+            except (AttributeError, RuntimeError):
+                logging.debug("get_main_window failed", exc_info=True)
+        return self.mw
+
+    def _refresh_nics_action(self):
+        """Show the NICS entry only while that plugin is installed."""
+        action = getattr(self, "nics_action", None)
+        if action is None:
+            return
+        action.setVisible(nics_analyzer_available(self._nics_host()))
+
+    def show_nics_analysis(self):
+        ok, message = open_nics_analyzer(self._nics_host(), self.file_path)
+        if not ok:
+            QMessageBox.information(self, "NICS Analysis", message)
+        self._refresh_nics_action()
 
     def show_scf_trace(self):
         self.load_structure_3d()

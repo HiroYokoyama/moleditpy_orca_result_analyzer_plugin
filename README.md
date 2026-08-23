@@ -105,6 +105,11 @@ Comprehensive bonding and orbital analysis:
 - **Post-HF Energy Components**: Separate panel displaying Reference Energy, Correlation Energy (MP2, CCSD), and Triples Correction (CCSD(T)) components.
 - **Properties**: Parse and display physical parameters such as spin contamination expectation values (\(\langle S^2 \rangle\)) and dispersion corrections.
 
+### 13. NICS (optional)
+Hand the open output straight to the **ORCA NICS Analyzer** plugin via **Analysis > NICS Analysis...**.
+- **Only when installed**: the menu entry appears only while that plugin is loaded, and hides again when it is not.
+- **File hand-off**: the file already open in the analyzer is passed over, so no second file dialog is needed.
+
 ## Interface & Usability
 - **MoleditPy v4 Ready**: Fully integrated with the new `PluginContext` architecture for stable window management and safe main-window interaction.
 - **Standalone Launch**: Open the analyzer at any time via **Extensions > ORCA Result Analyzer** without selecting a file first.

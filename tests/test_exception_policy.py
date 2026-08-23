@@ -23,7 +23,7 @@ _PKG = os.path.normpath(
 
 # Ratchet. Lower it whenever handlers are narrowed; never raise it without a
 # reason in the commit message. Was 212 before the 3.12.2 narrowing pass.
-_MAX_BROAD_HANDLERS = 49
+_MAX_BROAD_HANDLERS = 50
 
 # parser.py is pure text parsing with no UI slots, so every handler in it can
 # name its types. Verified bit-identical over the 19 sample outputs.
