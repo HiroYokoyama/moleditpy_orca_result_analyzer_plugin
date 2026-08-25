@@ -205,18 +205,16 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Open to the right of the main window instead of the WM's default
-        # center-on-parent placement; only on first show so a later
-        # existing.show() (re-raising an already-open window) doesn't
-        # snap it back after the user has dragged it elsewhere.
+        # Shift right of the WM's default center-on-parent placement; only
+        # on first show so a later existing.show() (re-raising an
+        # already-open window) doesn't snap it back after the user has
+        # dragged it elsewhere.
         if not self._positioned:
             self._positioned = True
-            if self.mw is not None:
-                try:
-                    p = self.mw.frameGeometry()
-                    self.move(p.x() + p.width() + 10, p.y())
-                except (RuntimeError, AttributeError) as _e:
-                    logging.warning("silenced: %s", _e)
+            try:
+                self.move(self.x() + 300, self.y())
+            except (RuntimeError, AttributeError) as _e:
+                logging.warning("silenced: %s", _e)
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
