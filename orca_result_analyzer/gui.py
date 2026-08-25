@@ -212,7 +212,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         if not self._positioned:
             self._positioned = True
             try:
-                self.move(self.x() + 300, self.y())
+                self.move(self.x() + 600, self.y())
             except (RuntimeError, AttributeError) as _e:
                 logging.warning("silenced: %s", _e)
 
