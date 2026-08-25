@@ -190,6 +190,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.setWindowTitle(f"ORCA Result Analyzer (v{PLUGIN_VERSION})")
         self.resize(450, 600)
         self.setAcceptDrops(True)  # enable folder/file drag-and-drop
+        self._positioned = False
         self.init_ui()
 
         # Install global picking logic
@@ -201,6 +202,21 @@ class OrcaResultAnalyzerDialog(QDialog):
         if self.file_path:
             host = context.get_main_window() if context is not None else self.mw
             sync_main_window_file(host, self.file_path, context)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Open offset from the main window instead of the WM's default
+        # center-on-parent placement; only on first show so a later
+        # existing.show() (re-raising an already-open window) doesn't
+        # snap it back after the user has dragged it elsewhere.
+        if not self._positioned:
+            self._positioned = True
+            if self.mw is not None:
+                try:
+                    p = self.mw.frameGeometry()
+                    self.move(p.x() + 40, p.y() + 40)
+                except (RuntimeError, AttributeError) as _e:
+                    logging.warning("silenced: %s", _e)
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
