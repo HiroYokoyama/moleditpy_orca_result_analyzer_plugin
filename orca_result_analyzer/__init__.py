@@ -1,8 +1,10 @@
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "3.15.4"
+PLUGIN_VERSION = "3.15.5"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
+PLUGIN_DEPENDENCIES = ["rdkit", "PyQt6", "matplotlib", "Pillow"]
+PLUGIN_OPTIONAL_DEPENDENCIES = ["nmrsim"]
 
 from PyQt6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 import logging  # noqa: E402
