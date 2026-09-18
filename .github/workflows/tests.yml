@@ -45,6 +45,14 @@ jobs:
         run: >-
           python -m pytest tests/ -v --tb=short
           --cov=orca_result_analyzer --cov-report=term-missing
+          --cov-report=xml
+
+      # One upload per commit: the matrix legs all cover the same source.
+      - name: Upload coverage reports to Codecov
+        if: ${{ matrix.python-version == '3.12' }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # -------------------------------------------------------------------------
   # Integration tests — clones the main MoleditPy app to enable real
