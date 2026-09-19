@@ -156,6 +156,8 @@ class TrajectoryResultDialog(QDialog):
 
     def run_auto_load(self):
         """Attempts to auto-load TRJ if structure is missing."""
+        if getattr(self, "_is_closing", False):
+            return
         # Strict check: Only auto-load if it looks like an NEB calculation (Path Summary)
         # parser.py tags NEB path summary items with type='neb_image'
         if not self.steps:
@@ -687,6 +689,8 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw_idle()
 
     def on_step_changed(self, idx):
+        if getattr(self, "_is_closing", False):
+            return
         # Bounds check to prevent IndexError during mode transitions
         if idx < 0 or idx >= len(self.steps) or idx >= len(self.display_energies):
             return
@@ -765,6 +769,8 @@ class TrajectoryResultDialog(QDialog):
             self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
 
     def load_mep_trj(self):
+        if getattr(self, "_is_closing", False):
+            return
         start_path = self.base_dir if self.base_dir else ""
 
         # Try to suggest a filename if available
@@ -1280,6 +1286,7 @@ class TrajectoryResultDialog(QDialog):
 
     def closeEvent(self, event):
         """Stop animation, push final structure with full bond orders, then clean up."""
+        self._is_closing = True
         if getattr(self, "timer", None) is not None and self.timer.isActive():
             self.timer.stop()
         self.is_playing = False  # ensure bond orders run in update_structure below
