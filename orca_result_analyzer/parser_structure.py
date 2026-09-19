@@ -66,16 +66,16 @@ class _StructureParsingMixin:
             if e_match:
                 try:
                     energy = float(e_match.group(1))
-                except (IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (IndexError, TypeError, ValueError) as e:
+                    logging.debug("XYZ: could not parse the energy label from comment %r: %s", comment, e)
             else:
                 # Fallback: Just take the last float (usually energy)
                 floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
                 if floats:
                     try:
                         energy = float(floats[-1])
-                    except (IndexError, TypeError, ValueError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (IndexError, TypeError, ValueError) as e:
+                        logging.debug("XYZ: could not parse a fallback energy value from comment %r: %s", comment, e)
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
             d_match = re.search(
@@ -86,8 +86,8 @@ class _StructureParsingMixin:
             if d_match:
                 try:
                     dist_val = float(d_match.group(1))
-                except (IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (IndexError, TypeError, ValueError) as e:
+                    logging.debug("XYZ: could not parse the scan coordinate from comment %r: %s", comment, e)
 
             i += 1
 
@@ -129,16 +129,16 @@ class _StructureParsingMixin:
             if "Program Version" in line:
                 try:
                     self.data["version"] = line.split("Version")[-1].strip().split()[0]
-                except (KeyError, IndexError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (KeyError, IndexError) as e:
+                    logging.warning("Could not parse the ORCA version from %r: %s", line, e)
 
             line = line.strip()
             uu = line.upper()
             if "FINAL SINGLE POINT ENERGY" in uu:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
-                except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (KeyError, IndexError, TypeError, ValueError) as e:
+                    logging.warning("Could not parse the final single-point energy from %r: %s", line, e)
             if "TOTAL CHARGE" in uu:
                 # Could be "Total Charge 0" or "Total Charge ... 0".
                 # The phrase also heads a population-analysis column whose
@@ -186,8 +186,8 @@ class _StructureParsingMixin:
                     # Fallback
                     try:
                         self.data["neb_trj_file"] = line.split()[-1].strip()
-                    except (KeyError, IndexError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (KeyError, IndexError) as e:
+                        logging.warning("Could not parse the NEB trajectory filename from %r: %s", line, e)
 
             if "CARTESIAN COORDINATES (ANGSTROEM)" in uu:
                 # Read geometry
@@ -331,8 +331,8 @@ class _StructureParsingMixin:
                                 IndexError,
                                 TypeError,
                                 ValueError,
-                            ) as _e:
-                                logging.warning("silenced: %s", _e)
+                            ) as e:
+                                logging.warning("Trajectory: could not parse the NEB path-summary row %r: %s", l_row, e)
                         curr += 1
 
             # Scan Step Header
@@ -359,27 +359,40 @@ class _StructureParsingMixin:
                         try:
                             # Format: Actual scan coordinate      ...   1.500000
                             coord_val = float(self.lines[k].split()[-1])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the scan coordinate at step %d from %r: %s",
+                                step_idx,
+                                self.lines[k],
+                                e,
+                            )
                     if "FINAL SINGLE POINT ENERGY" in uu:
                         try:
                             en = float(self.lines[k].split()[-1])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the final single-point energy at scan step %d: %s",
+                                step_idx,
+                                e,
+                            )
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         # For ORCA 6: Total Energy       :        -79.79102291629319 Eh
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the total energy at scan step %d: %s", step_idx, e
+                            )
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the current energy at scan step %d: %s", step_idx, e
+                            )
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -481,20 +494,32 @@ class _StructureParsingMixin:
                     if "FINAL SINGLE POINT ENERGY" in uu:
                         try:
                             en = float(self.lines[k].split()[-1])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the final single-point energy at optimization cycle %d: %s",
+                                cycle_idx,
+                                e,
+                            )
                     elif "TOTAL ENERGY" in uu and ":" in uu and "EH" in uu:
                         try:
                             parts = self.lines[k].split(":")
                             en = float(parts[1].split()[0])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the total energy at optimization cycle %d: %s",
+                                cycle_idx,
+                                e,
+                            )
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         try:
                             parts = self.lines[k].split("....")
                             en = float(parts[1].split()[0])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the current energy at optimization cycle %d: %s",
+                                cycle_idx,
+                                e,
+                            )
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
                         while c_idx < next_marker and c_idx < k + 30:
@@ -581,8 +606,10 @@ class _StructureParsingMixin:
                     if "FINAL SINGLE POINT ENERGY" in uu_k:
                         try:
                             final_en = float(self.lines[k].split()[-1])
-                        except (IndexError, TypeError, ValueError) as _e:
-                            logging.warning("[parser.py] silenced: %s", _e)
+                        except (IndexError, TypeError, ValueError) as e:
+                            logging.warning(
+                                "Trajectory: could not parse the final stationary-point energy: %s", e
+                            )
                         break
                 f_atoms, f_coords, f_found = read_coords_from(i)
                 if f_found:
@@ -690,8 +717,8 @@ class _StructureParsingMixin:
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
-                        logging.warning("silenced: %s", _e)
+                    ) as e:
+                        logging.warning("Gradients: could not parse the gradient row %r: %s", line, e)
                 curr += 1
 
             if block_grads:
