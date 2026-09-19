@@ -31,6 +31,7 @@ NMRDialog = N.NMRDialog
 # Minimal stand-in for the dialog state _NMRPlotMixin reads
 # ------------------------------------------------------------------
 
+
 def _data():
     return [
         {"atom_idx": 0, "atom_sym": "C", "shielding": 150.0},
@@ -50,6 +51,7 @@ def _couplings():
 class _DialogBase(unittest.TestCase):
     def setUp(self):
         import tempfile
+
         self._tmpdir = tempfile.TemporaryDirectory()
         self.tmp = self._tmpdir.name
         self.addCleanup(self._tmpdir.cleanup)
@@ -166,7 +168,7 @@ class TestCalculatePeakSelectionFromAtoms(_DialogBase):
     def _metadata(self):
         return [
             (100.0, 1.0, False, [0]),
-            (1.8,   3.0, True,  [1, 2, 3]),
+            (1.8, 3.0, True, [1, 2, 3]),
         ]
 
     def test_empty_peaks_metadata_returns_empty_set(self):
@@ -211,7 +213,7 @@ class TestRemapSelectionToNewPeaks(_DialogBase):
     def _meta(self):
         return [
             (100.0, 1.0, False, [0]),
-            (1.8,   1.0, True,  [1, 2, 3]),
+            (1.8, 1.0, True, [1, 2, 3]),
         ]
 
     def test_remap_empty_selection_is_noop(self):
@@ -302,7 +304,7 @@ class TestSelectPeaksByAtomIndices(_DialogBase):
         super().setUp()
         self.dlg.peaks_metadata = [
             (100.0, 1.0, False, [0]),
-            (1.8,   3.0, True,  [1, 2, 3]),
+            (1.8, 3.0, True, [1, 2, 3]),
         ]
         self.dlg.selected_peak_indices = set()
         self.dlg.highlight_selected_peaks = MagicMock()
@@ -343,7 +345,7 @@ class TestCheckExternalSelection(_DialogBase):
         super().setUp()
         self.dlg.peaks_metadata = [
             (100.0, 1.0, False, [0]),
-            (1.8,   3.0, True,  [1, 2, 3]),
+            (1.8, 3.0, True, [1, 2, 3]),
         ]
         self.dlg.selected_peak_indices = set()
         self.dlg._last_synced_mw_selection = None
@@ -487,6 +489,7 @@ class TestToggleAllLabels(_DialogBase):
 class TestPlotSpectrumSmoke(_DialogBase):
     def _figure(self):
         import matplotlib.figure as mf
+
         return mf.Figure()
 
     def setUp(self):
@@ -602,18 +605,21 @@ class TestOnPeakClick(_DialogBase):
     def test_ctrl_click_adds_to_selection(self):
         self.dlg.selected_peak_indices = {0}
         ctrl = self._NP.Qt.KeyboardModifier.ControlModifier
-        with patch.object(self._NP.QApplication, "keyboardModifiers", return_value=ctrl):
+        with patch.object(
+            self._NP.QApplication, "keyboardModifiers", return_value=ctrl
+        ):
             self.dlg.on_peak_click(self._event(xdata=3.0))
         self.assertIn(1, self.dlg.selected_peak_indices)
 
     def test_ctrl_click_on_selected_peak_removes_it(self):
         self.dlg.selected_peak_indices = {0, 1}
         ctrl = self._NP.Qt.KeyboardModifier.ControlModifier
-        with patch.object(self._NP.QApplication, "keyboardModifiers", return_value=ctrl):
+        with patch.object(
+            self._NP.QApplication, "keyboardModifiers", return_value=ctrl
+        ):
             self.dlg.on_peak_click(self._event(xdata=5.0))
         self.assertNotIn(0, self.dlg.selected_peak_indices)
 
 
 if __name__ == "__main__":
     unittest.main()
-

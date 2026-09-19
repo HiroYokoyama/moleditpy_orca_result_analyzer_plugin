@@ -239,7 +239,9 @@ FINAL SINGLE POINT ENERGY      -76.0
         self.assertTrue(p.data.get("converged", False))
 
     def test_neb_trajectory_file_is_captured(self):
-        text = self._BASE + "\nCurrent trajectory will be written to ..... orca_neb.trj\n"
+        text = (
+            self._BASE + "\nCurrent trajectory will be written to ..... orca_neb.trj\n"
+        )
         p = _parse(text)
         self.assertIn("neb_trj_file", p.data)
 
@@ -273,7 +275,9 @@ class TestParseNMR(unittest.TestCase):
     def test_shielding_values_extracted(self):
         text = _NMR_SHIELDING_BLOCK + "\n****ORCA TERMINATED NORMALLY****"
         p = _parse(text)
-        shields = {e["atom_idx"]: e["shielding"] for e in p.data.get("nmr_shielding", [])}
+        shields = {
+            e["atom_idx"]: e["shielding"] for e in p.data.get("nmr_shielding", [])
+        }
         self.assertIn(0, shields)
         self.assertAlmostEqual(shields[0], 150.12, places=2)
 
@@ -448,4 +452,3 @@ class TestParseGradient(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

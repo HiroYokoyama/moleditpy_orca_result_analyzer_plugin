@@ -18,13 +18,13 @@ N = gui_harness.load_isolated("nmr_analysis")
 NMRDialog = N.NMRDialog
 
 # The export mixin is loaded as a sibling package member
-import importlib
 NE = sys.modules[f"{N.__package__}.nmr_export"]
 
 
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------
+
 
 def _data():
     return [
@@ -55,9 +55,7 @@ class _FakeTable:
     def __init__(self, rows=2):
         self._rows = rows
         self._cells = {
-            (r, c): _FakeItem(f"r{r}c{c}")
-            for r in range(rows)
-            for c in range(5)
+            (r, c): _FakeItem(f"r{r}c{c}") for r in range(rows) for c in range(5)
         }
 
     def rowCount(self):
@@ -79,6 +77,7 @@ class _FakeTable:
 class _ExportCase(unittest.TestCase):
     def setUp(self):
         import tempfile
+
         self._tmpdir = tempfile.TemporaryDirectory()
         self.tmp = self._tmpdir.name
         self.addCleanup(self._tmpdir.cleanup)
@@ -111,7 +110,9 @@ class TestExportSpectrum(_ExportCase):
     def test_savefig_is_called_with_chosen_path(self):
         path = os.path.join(self.tmp, "spec.png")
         with patch.object(self.dlg.figure, "savefig") as mock_save:
-            with patch.object(NE.QFileDialog, "getSaveFileName", return_value=(path, "")):
+            with patch.object(
+                NE.QFileDialog, "getSaveFileName", return_value=(path, "")
+            ):
                 self.dlg.export_spectrum()
         mock_save.assert_called_once()
         self.assertEqual(mock_save.call_args[0][0], path)
@@ -125,7 +126,9 @@ class TestExportSpectrum(_ExportCase):
     def test_oserror_on_save_shows_critical_dialog(self):
         path = os.path.join(self.tmp, "spec.png")
         with patch.object(self.dlg.figure, "savefig", side_effect=OSError("disk full")):
-            with patch.object(NE.QFileDialog, "getSaveFileName", return_value=(path, "")):
+            with patch.object(
+                NE.QFileDialog, "getSaveFileName", return_value=(path, "")
+            ):
                 with patch.object(NE.QMessageBox, "critical") as crit:
                     self.dlg.export_spectrum()
         crit.assert_called_once()
@@ -141,7 +144,7 @@ class TestExportSpectrumCsvStick(_ExportCase):
         super().setUp()
         self.dlg.peaks_metadata = [
             (1.8, 1.0, False, [1]),
-            (1.3, 3.0, True,  [0, 1, 2]),
+            (1.3, 3.0, True, [0, 1, 2]),
         ]
         self.dlg.displayed_data = list(_data())
         # stick mode
@@ -209,11 +212,16 @@ class TestExportSpectrumCsvReal(_ExportCase):
 
     def _make_figure_with_line(self, marker="None", color="b", linestyle="-"):
         import matplotlib.figure as mf
+
         fig = mf.Figure()
         ax = fig.add_subplot(111)
-        import numpy as np
-        ax.plot([0.0, 1.0, 2.0], [0.0, 0.5, 0.0], marker=marker,
-                color=color, linestyle=linestyle)
+        ax.plot(
+            [0.0, 1.0, 2.0],
+            [0.0, 0.5, 0.0],
+            marker=marker,
+            color=color,
+            linestyle=linestyle,
+        )
         return fig
 
     def test_real_mode_writes_xy_header(self):
@@ -228,6 +236,7 @@ class TestExportSpectrumCsvReal(_ExportCase):
 
     def test_real_mode_no_plot_writes_error_line(self):
         import matplotlib.figure as mf
+
         self.dlg.figure = mf.Figure()  # no axes
         path = os.path.join(self.tmp, "real2.csv")
         with patch.object(NE.QFileDialog, "getSaveFileName", return_value=(path, "")):
@@ -317,7 +326,6 @@ class TestGetJCouplingString(_ExportCase):
             {"atom_idx1": 0, "atom_idx2": 1, "coupling": 7.0},
         ]
         result = self.dlg.get_j_coupling_string([0])
-        parts = result.split(", ")
         # partner 1 before partner 2
         self.assertLess(result.index("H1"), result.index("H2"))
 
