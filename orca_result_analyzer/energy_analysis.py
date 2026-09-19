@@ -16,6 +16,8 @@ from .bond_analysis import _make_table
 
 
 class EnergyComponentsDialog(QDialog):
+    """Dialog listing post-HF correlation energy components (MP2, CCSD(T), T1)."""
+
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Energy Components")

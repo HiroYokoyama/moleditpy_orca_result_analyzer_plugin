@@ -1,3 +1,5 @@
+"""Dipole Moment dialog: magnitude/vector display plus a 3D arrow overlay."""
+
 import numpy as np
 import os
 import pyvista as pv
@@ -19,6 +21,8 @@ import logging
 
 
 class DipoleDialog(QDialog):
+    """Dialog showing the dipole magnitude/vector with a 3D arrow overlay."""
+
     def __init__(self, parent_dlg, dipole_data):
         super().__init__(parent_dlg)
         self.setWindowTitle("Dipole Moment")
@@ -127,6 +131,7 @@ class DipoleDialog(QDialog):
         self.load_settings()
 
     def update_view(self):
+        """Redraw the dipole arrow in 3D from the current settings, or hide it."""
         # Clear old
         if self.arrow_actor:
             try:
@@ -191,6 +196,7 @@ class DipoleDialog(QDialog):
             logging.warning("Error drawing dipole: %s", e)
 
     def pick_color(self):
+        """Open a color picker and apply the chosen color to the arrow."""
         color = QColorDialog.getColor(
             QColor(self.arrow_color), self, "Select Arrow Color"
         )
@@ -200,14 +206,17 @@ class DipoleDialog(QDialog):
             self.update_view()
 
     def on_res_changed(self, val):
+        """Update the arrow's tessellation resolution and redraw it."""
         self.arrow_res = val
         self.update_view()
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Remove the 3D arrow, clear the parent's reference and save settings."""
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
@@ -225,6 +234,7 @@ class DipoleDialog(QDialog):
         event.accept()
 
     def load_settings(self):
+        """Restore the arrow resolution, color, opacity and toggle state."""
         if os.path.exists(self.settings_file):
             settings = load_section(self.settings_file, "dipole_settings")
             try:
@@ -250,6 +260,7 @@ class DipoleDialog(QDialog):
                 logging.warning("Error loading dipole settings: %s", e)
 
     def save_settings(self):
+        """Persist the arrow resolution, color, opacity and toggle state."""
         dipole_settings = {
             # "scale": self.spin_scale.value(),
             "res": self.spin_res.value(),
