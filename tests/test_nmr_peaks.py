@@ -294,6 +294,32 @@ class TestReferences(_NMRCase):
         saved = json.load(open(self.dlg.settings_file, encoding="utf-8"))
         self.assertEqual(saved["mo_settings"], {"last_preset": "Default"})
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        others = {
+            "mo_settings": {"iso": 0.02},
+            "dipole_settings": {"res": 20},
+            "thermal_settings": {"show_details": True},
+        }
+        with open(self.dlg.settings_file, "w", encoding="utf-8") as fh:
+            json.dump(others, fh)
+
+        self.dlg.linewidth = 2.5
+        self.dlg.save_settings()
+
+        with open(self.dlg.settings_file, encoding="utf-8") as fh:
+            on_disk = json.load(fh)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertAlmostEqual(on_disk["nmr_settings"]["spectrum_linewidth"], 2.5)
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        self.dlg.linewidth = 3.5
+        self.dlg.save_settings()
+
+        section = S.load_section(self.dlg.settings_file, "nmr_settings")
+        self.assertAlmostEqual(section["spectrum_linewidth"], 3.5)
+
 
 # ---------------------------------------------------------------------------
 # Selection and labels

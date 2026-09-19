@@ -1411,6 +1411,33 @@ class TestSettingsPersistence(_CompareCase):
         cmp_dlg = self._blank_compare()
         self.assertAlmostEqual(cmp_dlg.slots[1].spin_iso.value(), 0.02)
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        import json
+
+        others = {
+            "mo_settings": {"iso": 0.02},
+            "nmr_settings": {"ref": "TMS"},
+            "thermal_settings": {"show_details": True},
+        }
+        with open(os.path.join(self.tmp, "settings.json"), "w", encoding="utf-8") as fh:
+            json.dump(others, fh)
+
+        self._blank_compare().closeEvent(MagicMock())
+
+        on_disk = self._settings()
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertIn("mo_compare", on_disk)
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        cmp_dlg = self._blank_compare()
+        cmp_dlg.slots[0].spin_iso.setValue(0.077)
+        cmp_dlg.save_settings()
+
+        section = S.load_section(os.path.join(self.tmp, "settings.json"), "mo_compare")
+        self.assertAlmostEqual(section["slots"][0]["iso"], 0.077)
+
     def test_an_unwritable_settings_path_does_not_break_closing(self):
         cmp_dlg = self._blank_compare()
         CMP.__file__ = os.path.join(self.tmp, "job.out", "mo_compare.py")

@@ -325,5 +325,56 @@ def _patch_savedialog(return_path):
     return restore
 
 
+# ---------------------------------------------------------------------------
+# settings.py helper round-trip (Task A conversion)
+# ---------------------------------------------------------------------------
+
+
+class TestChargeSettingsHelpers(unittest.TestCase):
+    def setUp(self):
+        import json
+
+        self._json = json
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        saved = _C.__file__
+        _C.__file__ = os.path.join(self._tmp.name, "charge_analysis.py")
+        self.addCleanup(lambda: setattr(_C, "__file__", saved))
+        self.path = os.path.join(self._tmp.name, "settings.json")
+
+    def test_save_preserves_several_other_dialogs_sections(self):
+        others = {
+            "mo_settings": {"iso": 0.02},
+            "nmr_settings": {"ref": "TMS"},
+            "thermal_settings": {"show_details": True},
+        }
+        with open(self.path, "w", encoding="utf-8") as fh:
+            self._json.dump(others, fh)
+
+        host = _make_host(COORDS, 3)
+        dlg = ChargeDialog(host, _charges())
+        dlg.on_scheme_change(
+            "Blue(-) - White - Red(+)"
+        )  # saves via save_custom_schemes
+
+        with open(self.path, encoding="utf-8") as fh:
+            on_disk = self._json.load(fh)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertIn("charge_settings", on_disk)
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        host = _make_host(COORDS, 3)
+        dlg = ChargeDialog(host, _charges())
+        dlg.save_settings()
+
+        section = S.load_section(self.path, "charge_settings")
+        self.assertEqual(section["last_charge_scheme"], dlg.current_scheme)
+
+        fresh = ChargeDialog(_make_host(COORDS, 3), _charges())
+        self.assertEqual(fresh.current_scheme, dlg.current_scheme)
+
+
 if __name__ == "__main__":
     unittest.main()

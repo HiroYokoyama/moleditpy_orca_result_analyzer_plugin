@@ -443,6 +443,32 @@ class TestSettings(_TDDFTCase):
         self.dlg.save_settings()
         self.context.show_status_message.assert_called()
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        others = {
+            "mo_settings": {"iso": 0.02},
+            "nmr_settings": {"ref": "TMS"},
+            "thermal_settings": {"show_details": True},
+        }
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump(others, fh)
+
+        self.dlg.spin_sigma.setValue(999.0)
+        self.dlg.save_settings()
+
+        with open(self.settings_path, encoding="utf-8") as fh:
+            on_disk = json.load(fh)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertEqual(on_disk["tddft_settings"]["sigma"], 999.0)
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        self.dlg.spin_sigma.setValue(555.0)
+        self.dlg.save_settings()
+
+        section = S.load_section(self.settings_path, "tddft_settings")
+        self.assertEqual(section["sigma"], 555.0)
+
     def test_close_persists_settings(self):
         self.dlg.spin_sigma.setValue(4321.0)
         self.dlg.closeEvent(MagicMock())

@@ -332,6 +332,43 @@ class TestForceViewer(_ForceCase):
         warn.assert_called_once()
         graph.assert_not_called()
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        import json
+
+        others = {
+            "mo_settings": {"iso": 0.02},
+            "nmr_settings": {"ref": "TMS"},
+            "thermal_settings": {"show_details": True},
+        }
+        with open(self.dlg.settings_file, "w", encoding="utf-8") as fh:
+            json.dump(others, fh)
+
+        self.dlg.force_color = "#abcdef"
+        self.dlg.save_settings()
+
+        with open(self.dlg.settings_file, encoding="utf-8") as fh:
+            on_disk = json.load(fh)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertEqual(on_disk["force_settings"]["force_color"], "#abcdef")
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        self.dlg.force_color = "#112233"
+        self.dlg.save_settings()
+
+        section = S.load_section(self.dlg.settings_file, "force_settings")
+        self.assertEqual(section["force_color"], "#112233")
+
+    def test_update_vectors_noops_once_closing(self):
+        """QTimer.singleShot(100, self.update_vectors) can fire after the
+        dialog is closed; the guard must return before touching the plotter."""
+        self.dlg._is_closing = True
+        with patch.object(self.dlg, "clear_vectors") as clear:
+            self.dlg.update_vectors()
+        clear.assert_not_called()
+        self.plotter.remove_actor.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
