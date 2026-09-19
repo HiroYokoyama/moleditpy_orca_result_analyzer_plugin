@@ -85,8 +85,6 @@ class LoadProgress:
             self._dlg.hide()
             self._dlg.deleteLater()
         except (AttributeError, RuntimeError) as exc:
-            import logging
-
             logging.debug("LoadProgress: hide/delete failed — %s", exc)
         self._dlg.close()
 

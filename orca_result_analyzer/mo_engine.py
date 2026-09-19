@@ -607,7 +607,7 @@ class CalcWorker(QThread):
             chunk_size = 50000
             result_flat = np.zeros(n_total)
 
-            for i, start in enumerate(range(0, n_total, chunk_size)):
+            for start in range(0, n_total, chunk_size):
                 if self._is_cancelled:
                     return
                 end = min(start + chunk_size, n_total)

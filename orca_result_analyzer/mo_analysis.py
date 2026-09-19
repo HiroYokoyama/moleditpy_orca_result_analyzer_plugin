@@ -375,9 +375,9 @@ class MODialog(QDialog):
         # *count* - 1: fractional-occupation output (FOD, natural orbitals)
         # leaves gaps, and counting labelled a mid-manifold orbital HOMO.
         spin_homo_idx = {}
-        for s in spin_mos:
+        for s, mos in spin_mos.items():
             occupied = []
-            for i, mo in enumerate(spin_mos[s]):
+            for i, mo in enumerate(mos):
                 if mo.get("occ", mo.get("occupation", 0.0)) <= 0.1:
                     continue
                 try:

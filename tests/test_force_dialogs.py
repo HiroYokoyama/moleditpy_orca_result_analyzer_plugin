@@ -69,12 +69,13 @@ class _ConvCase(unittest.TestCase):
         self.dlg = F.ConvergenceGraphDialog(self.host, _steps(), current_idx=1)
 
     def _export(self, path):
-        """export_csv imports Qt lazily inside the method body."""
+        """QFileDialog is imported lazily in the method; QMessageBox at module level."""
         file_dialog = MagicMock()
         file_dialog.getSaveFileName.return_value = (path, "")
         message_box = MagicMock()
-        with gui_harness.qt_available(QFileDialog=file_dialog, QMessageBox=message_box):
-            self.dlg.export_csv()
+        with gui_harness.qt_available(QFileDialog=file_dialog):
+            with patch.object(F, "QMessageBox", message_box):
+                self.dlg.export_csv()
         return message_box
 
 

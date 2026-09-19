@@ -78,17 +78,7 @@ class _ElectronicParsingMixin:
                     continue
 
                 # Header check: Integers? "0   1   2..."
-                is_header = False
-                try:
-                    # Check first few items
-                    if all(p.isdigit() for p in parts):
-                        [int(p) for p in parts]
-                        is_header = True
-                except (IndexError, TypeError, ValueError) as e:
-                    logging.debug(
-                        "MO coefficients: could not check line for an MO-index header: %s",
-                        e,
-                    )
+                is_header = all(p.isdigit() for p in parts)
 
                 if is_header:
                     current_mos = [int(p) for p in parts]
@@ -96,7 +86,7 @@ class _ElectronicParsingMixin:
                     # Detect spin switch (Index Reset) logic for implicit UHF
                     if current_mos[0] <= last_first_mo_idx and last_first_mo_idx != -1:
                         # If we were in alpha/restricted and index dropped, assume beta
-                        if current_spin == "alpha" or current_spin == "restricted":
+                        if current_spin in ("alpha", "restricted"):
                             current_spin = "beta"
 
                     last_first_mo_idx = current_mos[0]

@@ -1386,7 +1386,7 @@ class FrequencyDialog(QDialog):
             # Generate 20 frames (1 cycle)
             vecs = self.frequencies[self.current_mode_idx].get("vector", [])
             if not vecs:
-                raise Exception("No vectors for this mode")
+                raise ValueError("No vectors for this mode")
 
             from rdkit.Geometry import Point3D  # pylint: disable=no-name-in-module
 

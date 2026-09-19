@@ -122,8 +122,6 @@ class ConvergenceGraphDialog(QDialog):
             rows.append(row)
 
         if not rows:
-            from PyQt6.QtWidgets import QMessageBox
-
             QMessageBox.warning(self, "No Data", "No convergence data to export.")
             return
 
@@ -138,12 +136,8 @@ class ConvergenceGraphDialog(QDialog):
                 writer = csv.DictWriter(f, fieldnames=rows[0].keys())
                 writer.writeheader()
                 writer.writerows(rows)
-            from PyQt6.QtWidgets import QMessageBox
-
             QMessageBox.information(self, "Exported", f"Saved to:\n{path}")
         except (ImportError, OSError, IndexError, ValueError) as e:
-            from PyQt6.QtWidgets import QMessageBox
-
             QMessageBox.critical(self, "Export Error", str(e))
 
     def plot_data(self, traj_steps, current_idx, selection="All"):
@@ -882,7 +876,6 @@ class ForceViewerDialog(QDialog):
         try:
             from rdkit import Chem
             from rdkit.Geometry import Point3D
-            from rdkit.Chem import rdDetermineBonds
             from .utils import normalize_atom_symbol, determine_bonds_without_dummies
         except ImportError:
             return
@@ -908,15 +901,14 @@ class ForceViewerDialog(QDialog):
         mol.AddConformer(conf)
 
         # Determine bonds and bond orders on every load (no animation in this view).
-        if rdDetermineBonds:
-            try:
-                charge = self.parser.data.get("charge", 0) if self.parser else 0
-                determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
-            except (RuntimeError, AttributeError, ValueError) as e:
-                logging.warning(
-                    "Force analysis: could not determine bonds/bond orders for the trajectory frame: %s",
-                    e,
-                )
+        try:
+            charge = self.parser.data.get("charge", 0) if self.parser else 0
+            determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
+        except (RuntimeError, AttributeError, ValueError) as e:
+            logging.warning(
+                "Force analysis: could not determine bonds/bond orders for the trajectory frame: %s",
+                e,
+            )
 
         final_mol = mol.GetMol()
 

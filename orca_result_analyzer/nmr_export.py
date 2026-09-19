@@ -99,7 +99,7 @@ class _NMRExportMixin:
                         for (
                             shift,
                             intensity,
-                            is_merged,
+                            _is_merged,
                             atom_indices,
                         ) in self.peaks_metadata:
                             indices_str = ";".join(str(i) for i in atom_indices)

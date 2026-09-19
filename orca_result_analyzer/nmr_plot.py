@@ -74,7 +74,7 @@ class _NMRPlotMixin:
             max(0.5, (max_shift - min_shift) * 0.15) if max_shift > min_shift else 5.0
         )
 
-        markerline, stemlines, baseline = ax.stem(
+        _markerline, stemlines, baseline = ax.stem(
             shifts, intensities, linefmt="b-", markerfmt="None", basefmt="k-"
         )
         stemlines.set_linewidth(2.5)
@@ -158,7 +158,7 @@ class _NMRPlotMixin:
                 # Add text label above the peak
                 if idx < len(self.peaks_metadata):
                     # Get peak metadata
-                    _, _, is_merged, atom_indices = self.peaks_metadata[idx]
+                    _, _, _is_merged, atom_indices = self.peaks_metadata[idx]
 
                     # Build label text from all atoms in this peak
                     label_parts = []
@@ -516,7 +516,7 @@ class _NMRPlotMixin:
         }
         all_multiplets = []
 
-        for shift, intensity, is_merged, atom_indices in peaks_to_simulate:
+        for shift, intensity, _is_merged, atom_indices in peaks_to_simulate:
             peak_atoms_set = set(atom_indices)
             rep_item = next(
                 (d for d in self.data if d.get("atom_idx", None) == atom_indices[0]),

@@ -84,11 +84,9 @@ class ElidedLabel(QLabel):
 try:
     from rdkit import Chem
     from rdkit.Geometry import Point3D
-    from rdkit.Chem import rdDetermineBonds
 except ImportError:
     Chem = None
     Point3D = None
-    rdDetermineBonds = None
 
 # Imported Modules for Analysis
 from .mo_analysis import MODialog  # noqa: E402
@@ -870,7 +868,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 potential_paths.append(os.path.join(base_dir, parsed_trj))
 
             # Fallback: Standard naming
-            base, ext = os.path.splitext(path)
+            base, _ext = os.path.splitext(path)
             potential_paths.append(base + "_MEP_trj.xyz")
 
             trj_path = None

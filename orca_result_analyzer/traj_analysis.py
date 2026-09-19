@@ -36,11 +36,9 @@ import logging
 try:
     from rdkit import Chem
     from rdkit.Geometry import Point3D
-    from rdkit.Chem import rdDetermineBonds
 except ImportError:
     Chem = None
     Point3D = None
-    rdDetermineBonds = None
 
 try:
     from PIL import Image
