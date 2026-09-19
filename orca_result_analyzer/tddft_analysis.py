@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 import os
-import json
 
 try:
     from .spectrum_widget import SpectrumWidget
@@ -28,7 +27,8 @@ except ImportError:
         from spectrum_widget import SpectrumWidget
     except ImportError:
         SpectrumWidget = None
-from .utils import get_default_export_path, save_json_atomic
+from .utils import get_default_export_path
+from .settings import load_section, save_section
 import datetime
 import logging
 
@@ -512,12 +512,8 @@ class TDDFTDialog(QDialog):
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "tddft_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("tddft_settings", {})
-
                 self.spin_sigma.blockSignals(True)
                 self.combo_sigma_unit.blockSignals(True)
 
@@ -581,18 +577,6 @@ class TDDFTDialog(QDialog):
         self.switch_spectrum_type()
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "TD-DFT: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         tddft_settings = {
             "sigma": self.spin_sigma.value(),
             "sigma_unit_idx": self.combo_sigma_unit.currentIndex(),
@@ -600,16 +584,15 @@ class TDDFTDialog(QDialog):
             "physical": self.chk_physical.isChecked(),
         }
 
-        all_settings["tddft_settings"] = tddft_settings
-
         try:
             os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-            save_json_atomic(self.settings_file, all_settings)
-
-            if self.parent() and self.parent().context:
-                self.parent().context.show_status_message("TDDFT settings saved.", 3000)
         except OSError as e:
             logging.warning("[tddft_analysis.py:save_settings] Error: %s", e)
+            return
+
+        if save_section(self.settings_file, "tddft_settings", tddft_settings):
+            if self.parent() and self.parent().context:
+                self.parent().context.show_status_message("TDDFT settings saved.", 3000)
 
     def toggle_auto_y(self):
         is_auto = self.chk_auto_y.isChecked()

@@ -5,7 +5,6 @@ and style, and renders into its own namespaced pair of actors so all four
 isosurfaces coexist in the host's 3D view.
 """
 
-import json
 import logging
 import os
 
@@ -34,9 +33,9 @@ except ImportError:
         CubeVisualizer = None
 
 try:
-    from .utils import save_json_atomic
+    from .settings import load_section, save_section
 except ImportError:
-    from utils import save_json_atomic
+    from settings import load_section, save_section
 
 
 SLOT_COUNT = 4
@@ -449,12 +448,7 @@ class MOCompareDialog(QDialog):
         path = self.settings_path()
         if not os.path.exists(path):
             return
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                saved = json.load(fh).get("mo_compare", {})
-        except (OSError, ValueError) as e:
-            logging.warning("Error loading compare settings: %s", e)
-            return
+        saved = load_section(path, "mo_compare")
         slots = saved.get("slots") if isinstance(saved, dict) else None
         if not isinstance(slots, list):
             return
@@ -463,25 +457,9 @@ class MOCompareDialog(QDialog):
 
     def save_settings(self):
         path = self.settings_path()
-        all_settings = {}
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    all_settings = json.load(fh)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "MO compare: could not read existing settings from %s: %s", path, e
-                )
-        if not isinstance(all_settings, dict):
-            all_settings = {}
-
-        all_settings["mo_compare"] = {
-            "slots": [slot.to_settings() for slot in self.slots]
-        }
-        try:
-            save_json_atomic(path, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving compare settings: %s", e)
+        save_section(
+            path, "mo_compare", {"slots": [slot.to_settings() for slot in self.slots]}
+        )
 
     def _parent_color(self, which):
         try:

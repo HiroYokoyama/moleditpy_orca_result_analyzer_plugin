@@ -389,7 +389,7 @@ def _load_sibling(name):
 
 def _load_nmr():
     _install_nmr_stubs()
-    for _name in ("nmr_merge", "nmr_plot", "nmr_export"):
+    for _name in ("settings", "nmr_merge", "nmr_plot", "nmr_export"):
         _load_sibling(_name)
     path = os.path.join(_SRC_DIR, "orca_result_analyzer", "nmr_analysis.py")
     spec = importlib.util.spec_from_file_location("nmr_analysis_fix_mod", path)

@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import logging
 from PyQt6.QtWidgets import (
     QDialog,
@@ -21,7 +20,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer
-from .utils import save_json_atomic, notify
+from .utils import notify
+from .settings import load_section, save_section
 
 try:
     import nmrsim
@@ -311,11 +311,8 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
     def load_settings(self):
         """Load NMR settings from JSON"""
         if os.path.exists(self.settings_file):
+            nmr_settings = load_section(self.settings_file, "nmr_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    settings = json.load(f)
-
-                nmr_settings = settings.get("nmr_settings", {})
                 self.linewidth = nmr_settings.get("spectrum_linewidth", 1.0)
                 self.peak_intensity = nmr_settings.get("peak_intensity", 1.0)
 
@@ -333,19 +330,6 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
 
     def save_settings(self):
         """Save NMR settings to JSON"""
-        all_settings = {}
-        # Load the existing settings so unrelated keys (e.g. MO) survive
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "NMR: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         # Extract custom references only (non-default)
         default_standards = DEFAULT_REFERENCE_STANDARDS
 
@@ -374,12 +358,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         }
 
         # Update only the 'nmr_settings' key of the whole settings file
-        all_settings["nmr_settings"] = current_nmr_settings
-
-        try:
-            save_json_atomic(self.settings_file, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving NMR settings: %s", e)
+        save_section(self.settings_file, "nmr_settings", current_nmr_settings)
 
     def setup_ui(self):
         main_layout = QVBoxLayout(self)

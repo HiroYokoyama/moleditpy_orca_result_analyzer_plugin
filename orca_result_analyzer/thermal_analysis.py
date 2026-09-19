@@ -11,9 +11,9 @@ from PyQt6.QtWidgets import (
     QFileDialog,
 )
 import os
-import json
 import csv
 import logging
+from .settings import load_section, save_section
 
 
 class ThermalTableDialog(QDialog):
@@ -68,16 +68,12 @@ class ThermalTableDialog(QDialog):
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "thermal_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("thermal_settings", {})
                 if "show_details" in settings:
                     self.chk_details.setChecked(bool(settings["show_details"]))
 
             except (
-                OSError,
                 RuntimeError,
                 AttributeError,
                 KeyError,
@@ -87,28 +83,8 @@ class ThermalTableDialog(QDialog):
                 logging.warning("Error loading thermal settings: %s", e)
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "Thermal analysis: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         thermal_settings = {"show_details": self.chk_details.isChecked()}
-
-        all_settings["thermal_settings"] = thermal_settings
-
-        try:
-            from .utils import save_json_atomic
-
-            save_json_atomic(self.settings_file, all_settings)
-        except ImportError as e:
-            logging.warning("Error saving thermal settings: %s", e)
+        save_section(self.settings_file, "thermal_settings", thermal_settings)
 
     def update_table(self):
         show_details = self.chk_details.isChecked()

@@ -29,10 +29,10 @@ from PyQt6.QtGui import QColor
 import math
 import numpy as np
 import os
-import json
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
-from .utils import get_default_export_path, save_json_atomic
+from .utils import get_default_export_path
+from .settings import load_section, save_section
 import logging
 
 try:
@@ -84,10 +84,8 @@ class FreqSpectrumWindow(QWidget):
             return
         settings_file = self.freq_dialog.settings_file
         if os.path.exists(settings_file):
+            settings = load_section(settings_file, "freq_settings")
             try:
-                with open(settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-                settings = all_settings.get("freq_settings", {})
                 if "spec_sigma" in settings:
                     self.spin_sigma.setValue(float(settings["spec_sigma"]))
                 if "spec_sticks" in settings:
@@ -98,7 +96,7 @@ class FreqSpectrumWindow(QWidget):
                     self.chk_auto_x.setChecked(bool(settings["spec_auto_x"]))
                 if "spec_auto_y" in settings:
                     self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
-            except (OSError, KeyError, TypeError, ValueError) as e:
+            except (KeyError, TypeError, ValueError) as e:
                 logging.warning(
                     "Frequency analysis: could not load spectrum display settings: %s",
                     e,
@@ -1536,12 +1534,8 @@ class FrequencyDialog(QDialog):
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "freq_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("freq_settings", {})
-
                 if "sf_a" in settings:
                     self.spin_sf_a.setValue(float(settings["sf_a"]))
                 elif "sf" in settings:
@@ -1592,18 +1586,6 @@ class FrequencyDialog(QDialog):
                 logging.warning("Error loading freq settings: %s", e)
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "Frequency analysis: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         freq_settings = {
             "sf_a": self.spin_sf_a.value(),
             "sf_b": self.spin_sf_b.value(),
@@ -1633,18 +1615,10 @@ class FrequencyDialog(QDialog):
                     "spec_auto_y": self.spectrum_win.chk_auto_y.isChecked(),
                 }
             )
-        elif "freq_settings" in all_settings:
+        else:
             # Preserve spectrum settings if window is not currently open
-            prev_spec = {
-                k: v
-                for k, v in all_settings["freq_settings"].items()
-                if k.startswith("spec_")
-            }
+            prev = load_section(self.settings_file, "freq_settings")
+            prev_spec = {k: v for k, v in prev.items() if k.startswith("spec_")}
             freq_settings.update(prev_spec)
 
-        all_settings["freq_settings"] = freq_settings
-
-        try:
-            save_json_atomic(self.settings_file, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving freq settings: %s", e)
+        save_section(self.settings_file, "freq_settings", freq_settings)

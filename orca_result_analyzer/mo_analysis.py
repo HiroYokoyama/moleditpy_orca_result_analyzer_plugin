@@ -29,8 +29,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
-import json
-from .utils import get_default_export_path, save_json_atomic
+from .utils import get_default_export_path
+from .settings import load_section, save_section
 import logging
 
 try:
@@ -1026,60 +1026,40 @@ class MODialog(QDialog):
         }
 
         if os.path.exists(self.settings_file):
+            mo_settings = load_section(self.settings_file, "mo_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-                    mo_settings = all_settings.get("mo_settings", {})
+                # Load presets
+                saved_presets = mo_settings.get("presets", {})
+                for name, data in saved_presets.items():
+                    self.presets[name] = data
 
-                    # Load presets
-                    saved_presets = mo_settings.get("presets", {})
-                    for name, data in saved_presets.items():
-                        self.presets[name] = data
+                # Last used
+                last_preset = mo_settings.get("last_preset", "Default")
 
-                    # Last used
-                    last_preset = mo_settings.get("last_preset", "Default")
+                # Populate combo
+                self.combo_presets.blockSignals(True)
+                self.combo_presets.clear()
+                self.combo_presets.addItems(list(self.presets.keys()))
 
-                    # Populate combo
-                    self.combo_presets.blockSignals(True)
-                    self.combo_presets.clear()
-                    self.combo_presets.addItems(list(self.presets.keys()))
+                if last_preset in self.presets:
+                    self.combo_presets.setCurrentText(last_preset)
+                    self.apply_preset(last_preset)
+                else:
+                    self.combo_presets.setCurrentText("Default")
+                    self.apply_preset("Default")
 
-                    if last_preset in self.presets:
-                        self.combo_presets.setCurrentText(last_preset)
-                        self.apply_preset(last_preset)
-                    else:
-                        self.combo_presets.setCurrentText("Default")
-                        self.apply_preset("Default")
-
-                    self.combo_presets.blockSignals(False)
+                self.combo_presets.blockSignals(False)
             except Exception as e:
                 logging.warning("Error loading settings: %s", e)
 
     def save_settings(self):
         # Save current presets and selection
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "MO: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         mo_settings = {
             "presets": {k: v for k, v in self.presets.items() if k != "Default"},
             "last_preset": self.combo_presets.currentText(),
             "smooth_shading": self.check_smooth.isChecked(),
         }
-        all_settings["mo_settings"] = mo_settings
-
-        try:
-            save_json_atomic(self.settings_file, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving settings: %s", e)
+        save_section(self.settings_file, "mo_settings", mo_settings)
 
     def save_preset(self):
         name, ok = QInputDialog.getText(self, "Save Preset", "Preset Name:")
