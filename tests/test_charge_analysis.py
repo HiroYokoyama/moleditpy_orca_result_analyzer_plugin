@@ -184,6 +184,14 @@ class TestChargeDialog(unittest.TestCase):
         self.assertEqual(host.mw.view_3d_manager._plugin_color_overrides, {})
         host.context.show_status_message.assert_called()
 
+    def test_reset_colors_notifies_host_status_bar(self):
+        dlg, host = self._dialog()
+        dlg.apply_colors()
+        dlg.reset_colors()
+        host.context.show_status_message.assert_called_with(
+            "Colors reset to CPK default.", 5000
+        )
+
     def test_toggle_labels_on_then_off(self):
         dlg, host = self._dialog()
         dlg.chk_show_labels = _Check(True)
@@ -216,6 +224,31 @@ class TestChargeDialog(unittest.TestCase):
             with open(out, encoding="utf-8") as f:
                 head = f.readline()
         self.assertIn("Charge", head)
+
+    def test_export_csv_notifies_host_status_bar(self):
+        dlg, host = self._dialog()
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "charges.csv")
+            saved = _patch_savedialog(out)
+            try:
+                dlg.export_csv()
+            finally:
+                saved()
+        host.context.show_status_message.assert_called_with(
+            f"Data exported to {out}", 5000
+        )
+
+    def test_export_csv_without_host_does_not_raise(self):
+        dlg, host = self._dialog()
+        host.context = None
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "charges.csv")
+            saved = _patch_savedialog(out)
+            try:
+                dlg.export_csv()  # must not raise even with no host reachable
+            finally:
+                saved()
+            self.assertTrue(os.path.exists(out))
 
     def test_export_csv_cancelled(self):
         dlg, _ = self._dialog()

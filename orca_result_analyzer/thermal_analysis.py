@@ -14,6 +14,7 @@ import os
 import csv
 import logging
 from .settings import load_section, save_section
+from .utils import notify
 
 
 class ThermalTableDialog(QDialog):
@@ -190,9 +191,6 @@ class ThermalTableDialog(QDialog):
                         p = self.table.item(r, 0).text()
                         v = self.table.item(r, 1).text()
                         writer.writerow([p, v])
-                if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(
-                        f"Data exported to {path}", 5000
-                    )
+                notify(self, f"Data exported to {path}", 5000)
             except (OSError, IndexError, ValueError):
                 logging.debug("Thermochemistry export failed", exc_info=True)

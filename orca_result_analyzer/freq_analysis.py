@@ -31,7 +31,7 @@ import numpy as np
 import os
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
-from .utils import get_default_export_path
+from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import logging
 
@@ -410,12 +410,7 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                if self.freq_dialog and self.freq_dialog.context:
-                    self.freq_dialog.context.show_status_message(
-                        f"Data saved to: {os.path.basename(path)}", 5000
-                    )
-                else:
-                    logging.info("Data saved to: %s", path)
+                notify(self, f"Data saved to: {os.path.basename(path)}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
@@ -431,12 +426,7 @@ class FreqSpectrumWindow(QWidget):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                if self.freq_dialog and self.freq_dialog.context:
-                    self.freq_dialog.context.show_status_message(
-                        f"Stick data saved to: {os.path.basename(path)}", 5000
-                    )
-                else:
-                    logging.info("Stick data saved to: %s", path)
+                notify(self, f"Stick data saved to: {os.path.basename(path)}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
@@ -1460,12 +1450,7 @@ class FrequencyDialog(QDialog):
                     loop=0,
                     disposal=2,
                 )
-                if self.context:
-                    self.context.show_status_message(
-                        f"GIF saved to: {os.path.basename(path)}", 5000
-                    )
-                else:
-                    logging.info("GIF saved to: %s", path)
+                notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")

@@ -30,6 +30,7 @@ from .utils import (
     get_default_export_path,
     normalize_atom_symbol,
     determine_bonds_without_dummies,
+    notify,
 )
 import logging
 
@@ -1063,12 +1064,7 @@ class TrajectoryResultDialog(QDialog):
         )
         if path:
             self.canvas.fig.savefig(path, dpi=300)
-            if self.context:
-                self.context.show_status_message(
-                    f"Graph saved to: {os.path.basename(path)}", 5000
-                )
-            else:
-                pass
+            notify(self, f"Graph saved to: {os.path.basename(path)}", 5000)
 
         # Restore annotation visibility
         self.annot.set_visible(was_visible)
@@ -1132,10 +1128,7 @@ class TrajectoryResultDialog(QDialog):
                                 cv = step.get("dist")
                             row.insert(1, cv if cv is not None else "")
                         writer.writerow(row)
-                if self.context:
-                    self.context.show_status_message(
-                        f"Data saved to: {os.path.basename(path)}", 5000
-                    )
+                notify(self, f"Data saved to: {os.path.basename(path)}", 5000)
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -1263,10 +1256,7 @@ class TrajectoryResultDialog(QDialog):
                     loop=0,
                     disposal=2,
                 )
-                if self.context:
-                    self.context.show_status_message(
-                        f"GIF saved to: {os.path.basename(path)}", 5000
-                    )
+                notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")

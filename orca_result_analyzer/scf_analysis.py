@@ -15,7 +15,7 @@ from matplotlib.backends.backend_qtagg import (
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import csv
-from .utils import get_default_export_path
+from .utils import get_default_export_path, notify
 import logging
 
 
@@ -254,9 +254,6 @@ class SCFTraceDialog(QDialog):
                     writer.writerow(["Iteration", "Energy (Eh)"])
                     for d in trace.get("iterations", []):
                         writer.writerow([d["iter"], d["energy"]])
-            if self.parent() and self.parent().context:
-                self.parent().context.show_status_message(
-                    f"Data exported to {path}", 5000
-                )
+            notify(self, f"Data exported to {path}", 5000)
         except Exception as e:
             logging.warning("Error exporting CSV: %s", e)

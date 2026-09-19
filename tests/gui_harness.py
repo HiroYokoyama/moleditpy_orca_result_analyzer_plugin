@@ -74,6 +74,12 @@ def _noop(self, *a, **k):
 ABSENT_ATTRS = {
     "scaling_factor",
     "context",  # utils.notify() needs this absent when unset, not a MagicMock
+    # utils.notify()'s owner-chain hops: a dialog that doesn't set one of
+    # these must see it as absent, not get a phantom MagicMock that hijacks
+    # the walk before it reaches a real self.parent().
+    "parent_dlg",
+    "freq_dialog",
+    "parent_dialog",
 }
 
 

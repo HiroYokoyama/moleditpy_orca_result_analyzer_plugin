@@ -27,7 +27,7 @@ except ImportError:
         from spectrum_widget import SpectrumWidget
     except ImportError:
         SpectrumWidget = None
-from .utils import get_default_export_path
+from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import datetime
 import logging
@@ -591,8 +591,7 @@ class TDDFTDialog(QDialog):
             return
 
         if save_section(self.settings_file, "tddft_settings", tddft_settings):
-            if self.parent() and self.parent().context:
-                self.parent().context.show_status_message("TDDFT settings saved.", 3000)
+            notify(self, "TDDFT settings saved.", 3000)
 
     def toggle_auto_y(self):
         is_auto = self.chk_auto_y.isChecked()
@@ -650,10 +649,7 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_csv(path)
             if success:
-                if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(
-                        f"Data saved to {path}", 5000
-                    )
+                notify(self, f"Data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
@@ -669,10 +665,7 @@ class TDDFTDialog(QDialog):
         if path:
             success = self.spectrum.save_sticks_csv(path)
             if success:
-                if self.parent() and self.parent().context:
-                    self.parent().context.show_status_message(
-                        f"Stick data saved to {path}", 5000
-                    )
+                notify(self, f"Stick data saved to {path}", 5000)
             else:
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
@@ -757,11 +750,7 @@ class TDDFTDialog(QDialog):
 
                     f.write("\n")
 
-            if self.parent() and self.parent().context:
-                self.parent().context.show_status_message(
-                    f"Report saved to {path}", 5000
-                )
-            else:
+            if not notify(self, f"Report saved to {path}", 5000):
                 QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
 
         except Exception as e:

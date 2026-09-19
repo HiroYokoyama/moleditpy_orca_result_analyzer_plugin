@@ -25,6 +25,7 @@ from .utils import (
     list_orca_output_files,
     clear_atom_color_overrides,
     sync_main_window_file,
+    notify,
 )
 
 
@@ -855,7 +856,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         try:
             new_parser = load_orca_parser(path, self)
             if new_parser is None:  # cancelled by the user
-                self.context.show_status_message("Loading cancelled", 3000)
+                notify(self, "Loading cancelled", 3000)
                 return
 
             # --- Auto-load NEB Trajectory if present ---
@@ -895,7 +896,8 @@ class OrcaResultAnalyzerDialog(QDialog):
                             new_parser.data["atoms"] = trj_steps[-1]["atoms"]
                             new_parser.data["coords"] = trj_steps[-1]["coords"]
 
-                        self.context.show_status_message(
+                        notify(
+                            self,
                             f"Loaded NEB Trajectory from {os.path.basename(trj_path)}",
                             5000,
                         )
@@ -918,9 +920,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_structure_3d(fit_camera=True)
             self.update_button_states()
 
-            self.context.show_status_message(
-                f"Successfully loaded: {os.path.basename(path)}", 5000
-            )
+            notify(self, f"Successfully loaded: {os.path.basename(path)}", 5000)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")

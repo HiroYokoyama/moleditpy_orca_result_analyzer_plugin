@@ -25,7 +25,7 @@ from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
-from .utils import get_default_export_path
+from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import logging
 
@@ -387,9 +387,7 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, "plotter"):
                 self.parent_dlg.mw.plotter.render()
 
-            self.parent_dlg.context.show_status_message(
-                "Colors reset to CPK default.", 5000
-            )
+            notify(self, "Colors reset to CPK default.", 5000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
@@ -637,9 +635,7 @@ class ChargeDialog(QDialog):
             if hasattr(self.parent_dlg.mw, "plotter"):
                 self.parent_dlg.mw.plotter.render()
 
-            self.parent_dlg.context.show_status_message(
-                f"Applied '{self.current_scheme}' coloring to 3D view.", 5000
-            )
+            notify(self, f"Applied '{self.current_scheme}' coloring to 3D view.", 5000)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
@@ -727,9 +723,7 @@ class ChargeDialog(QDialog):
                         row.append(item.get(k, ""))
                     writer.writerow(row)
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
-            self.parent_dlg.context.show_status_message(
-                f"Data exported to {filename}", 5000
-            )
+            notify(self, f"Data exported to {filename}", 5000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
         finally:
