@@ -14,6 +14,9 @@ import sys
 import importlib.util
 import unittest
 
+sys.path.insert(0, os.path.dirname(__file__))
+from _parser_loader import load_standalone_parser  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -25,9 +28,6 @@ _CUBE_FILE = os.path.join(
 )
 _ENE_FILE = os.path.join(_SAMPLES, "benzene-opt-ene.out")
 
-_PARSER_SRC = os.path.normpath(
-    os.path.join(_HERE, "..", "orca_result_analyzer", "parser.py")
-)
 _VIS_SRC = os.path.normpath(os.path.join(_HERE, "..", "orca_result_analyzer", "vis.py"))
 
 # ---------------------------------------------------------------------------
@@ -36,11 +36,7 @@ _VIS_SRC = os.path.normpath(os.path.join(_HERE, "..", "orca_result_analyzer", "v
 
 
 def _load_parser():
-    spec = importlib.util.spec_from_file_location("orca_parser_cube_mo", _PARSER_SRC)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["orca_parser_cube_mo"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return load_standalone_parser("orca_parser_cube_mo")
 
 
 _parser_mod = _load_parser()

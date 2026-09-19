@@ -40,6 +40,9 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(__file__))
+from _parser_loader import load_standalone_parser  # noqa: E402
+
 _HERE = os.path.dirname(__file__)
 _SAMPLES = os.path.join(_HERE, "sample_outputs")
 _PKG = os.path.normpath(os.path.join(_HERE, "..", "orca_result_analyzer"))
@@ -107,7 +110,7 @@ def _load_module(name, filename):
                 sys.modules[key] = value
 
 
-_parser_mod = _load_module("orca_parser_basis_agreement", "parser.py")
+_parser_mod = load_standalone_parser("orca_parser_basis_agreement")
 _engine_mod = _load_module("orca_mo_engine_basis_agreement", "mo_engine.py")
 OrcaParser = _parser_mod.OrcaParser
 BasisSetEngine = _engine_mod.BasisSetEngine

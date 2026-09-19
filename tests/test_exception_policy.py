@@ -27,7 +27,13 @@ _MAX_BROAD_HANDLERS = 50
 
 # parser.py is pure text parsing with no UI slots, so every handler in it can
 # name its types. Verified bit-identical over the 19 sample outputs.
-_FULLY_NARROWED = {"parser.py"}
+_FULLY_NARROWED = {
+    "parser.py",
+    "parser_structure.py",
+    "parser_electronic.py",
+    "parser_properties.py",
+    "parser_spectra.py",
+}
 
 
 def _handlers():
