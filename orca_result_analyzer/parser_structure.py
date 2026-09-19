@@ -1,3 +1,5 @@
+"""Parsing mixin for geometry, trajectory, gradients and relaxed-scan steps."""
+
 import re
 import logging
 

@@ -47,6 +47,7 @@ def find_nics_module(main_window):
 
 
 def nics_analyzer_available(main_window) -> bool:
+    """Return whether the NICS Analyzer plugin is loaded in the host."""
     return find_nics_module(main_window) is not None
 
 

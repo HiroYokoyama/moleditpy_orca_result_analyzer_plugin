@@ -1,3 +1,5 @@
+"""Parsing mixin for dipole, atomic charges, NBO, Mayer bonds and energy components."""
+
 import math
 import re
 import logging
@@ -9,6 +11,7 @@ AU_TO_DEBYE = 2.541746473
 
 class _PropertyParsingMixin:
     def parse_dipole(self):
+        """Extract the total dipole moment (and per-origin dipoles) into self.data."""
         # Look for "Total Dipole Moment"
         self.data["dipoles"] = None
         self.data["dipole"] = None
@@ -444,6 +447,7 @@ class _PropertyParsingMixin:
             orb["hybrids"] = hybrids.get(orb["index"], [])
 
     def parse_charges(self):
+        """Extract every available atomic-charge scheme into self.data["charges"]."""
         self.data["charges"] = {}  # type -> list of {atom_idx, atom_sym, charge}
 
         # Section Markers

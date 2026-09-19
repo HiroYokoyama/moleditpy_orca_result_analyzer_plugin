@@ -1,3 +1,5 @@
+"""Parsing mixin for NMR, TD-DFT, thermochemistry and vibrational frequencies."""
+
 import re
 import logging
 
@@ -9,6 +11,7 @@ IMAGINARY_FREQ_THRESHOLD = 10.0
 
 class _SpectraParsingMixin:
     def parse_nmr(self):
+        """Extract NMR shielding and spin-spin coupling values into self.data."""
         self.data[
             "nmr_shielding"
         ] = []  # List of {atom_idx, atom_sym, shielding, shift=None}
@@ -458,6 +461,7 @@ class _SpectraParsingMixin:
         self.data["tddft"] = valid_items
 
     def parse_thermal(self):
+        """Extract the thermochemistry block (enthalpy, entropy, free energy) into self.data."""
         self.data["thermal"] = {}
         # ORCA Thermochem block
         # Look for "THERMOCHEMISTRY AT 298.15 K"
@@ -598,6 +602,7 @@ class _SpectraParsingMixin:
                     )
 
     def parse_frequencies(self):
+        """Extract vibrational frequencies with their IR/Raman intensities and vectors."""
         self.data["frequencies"] = []
 
         # 1. Frequencies

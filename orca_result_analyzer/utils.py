@@ -1,3 +1,5 @@
+"""Shared helpers: atomic JSON save, default export paths and host status-bar notify."""
+
 import json
 import logging
 import os

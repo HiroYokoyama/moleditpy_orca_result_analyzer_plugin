@@ -1,3 +1,5 @@
+"""OrcaParser: assembles the parsing mixins and drives parse_all's step order."""
+
 from .parser_structure import _StructureParsingMixin
 from .parser_electronic import _ElectronicParsingMixin
 from .parser_properties import _PropertyParsingMixin, AU_TO_DEBYE
@@ -75,6 +77,7 @@ class OrcaParser(
     )
 
     def load_from_memory(self, content, filename="", progress=None):
+        """Store the ORCA output text and run parse_all on it."""
         self.filename = filename
         self.raw_content = content
         self.lines = content.splitlines()

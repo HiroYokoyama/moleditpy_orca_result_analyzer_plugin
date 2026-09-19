@@ -1,9 +1,12 @@
+"""Parsing mixin for MO coefficients, orbital energies, basis set and SCF trace."""
+
 import re
 import logging
 
 
 class _ElectronicParsingMixin:
     def parse_mo_coeffs(self):
+        """Extract per-orbital coefficients, energy, occupancy and spin into self.data."""
         self.data[
             "mo_coeffs"
         ] = {}  # mo_idx -> { 'coeffs': list, 'energy': float, 'occ': float, 'spin': 'alpha'/'beta' }
