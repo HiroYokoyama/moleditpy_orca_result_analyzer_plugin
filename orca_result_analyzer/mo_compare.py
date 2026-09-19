@@ -102,11 +102,13 @@ class MOSlot:
 
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("Iso:"))
+        # pylint: disable=duplicate-code  # isovalue spinbox setup mirrors mo_analysis; unrelated dialogs
         self.spin_iso = QDoubleSpinBox()
         self.spin_iso.setRange(0.001, 1.0)
         self.spin_iso.setSingleStep(0.005)
         self.spin_iso.setDecimals(3)
         self.spin_iso.setValue(0.02)
+        # pylint: enable=duplicate-code
         row3.addWidget(self.spin_iso)
 
         row3.addWidget(QLabel("Opacity:"))

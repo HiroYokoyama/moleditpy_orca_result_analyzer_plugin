@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from .parser import OrcaParser
+from .gif_export import Image, HAS_PIL, encode_frames_to_gif
 from .utils import (
     get_default_export_path,
     normalize_atom_symbol,
@@ -40,13 +41,6 @@ try:
 except ImportError:
     Chem = None
     Point3D = None
-
-try:
-    from PIL import Image
-
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -1136,6 +1130,7 @@ class TrajectoryResultDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
+    # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PyQt6-free
     def save_gif(self):
         if not HAS_PIL:
             QMessageBox.warning(self, "Error", "PIL (Pillow) not installed.")
@@ -1223,43 +1218,7 @@ class TrajectoryResultDialog(QDialog):
 
             # Save GIF
             if images:
-                duration = int(1000 / fps)
-                processed_images = []
-                for img in images:
-                    if use_hq:
-                        if transparent:
-                            # Alpha preservation with adaptive palette
-                            alpha = img.split()[3]
-                            img_rgb = img.convert("RGB")
-                            # Quantize to 255 colors to leave room for transparency
-                            img_p = img_rgb.convert(
-                                "P", palette=Image.Palette.ADAPTIVE, colors=255
-                            )
-                            # Set transparency
-                            mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
-                            img_p.paste(255, mask)
-                            img_p.info["transparency"] = 255
-                            processed_images.append(img_p)
-                        else:
-                            processed_images.append(
-                                img.convert(
-                                    "P", palette=Image.Palette.ADAPTIVE, colors=256
-                                )
-                            )
-                    else:
-                        if transparent:
-                            processed_images.append(img.convert("RGBA"))
-                        else:
-                            processed_images.append(img.convert("RGB"))
-
-                processed_images[0].save(
-                    path,
-                    save_all=True,
-                    append_images=processed_images[1:],
-                    duration=duration,
-                    loop=0,
-                    disposal=2,
-                )
+                encode_frames_to_gif(images, path, fps, transparent, use_hq)
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
@@ -1272,6 +1231,8 @@ class TrajectoryResultDialog(QDialog):
             self.slider.setValue(original_idx)
             if was_playing:
                 self.toggle_play()
+
+    # pylint: enable=duplicate-code
 
     def reject(self):
         # Esc must run closeEvent cleanup (QDialog.reject only hides)

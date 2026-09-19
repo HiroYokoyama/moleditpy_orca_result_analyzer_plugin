@@ -31,6 +31,7 @@ import numpy as np
 import os
 import pyvista as pv
 from .spectrum_widget import SpectrumWidget
+from .gif_export import Image, HAS_PIL, encode_frames_to_gif
 from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import logging
@@ -39,13 +40,6 @@ try:
     from rdkit.Geometry import Point3D
 except ImportError:
     Point3D = None
-
-try:
-    from PIL import Image
-
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
 
 
 class ResetSlider(QSlider):
@@ -1302,6 +1296,7 @@ class FrequencyDialog(QDialog):
         except (RuntimeError, AttributeError, TypeError, ValueError) as e:
             logging.warning("Error in reset_geometry: %s", e)
 
+    # pylint: disable=duplicate-code  # Qt setup mirrors traj_analysis.save_gif; gif_export.py stays PyQt6-free
     def save_gif(self):
         if not HAS_PIL:
             QMessageBox.warning(self, "Error", "PIL (Pillow) not installed.")
@@ -1417,43 +1412,7 @@ class FrequencyDialog(QDialog):
                     images.append(img)
 
             if images:
-                duration = int(1000 / fps)
-                processed_images = []
-                for img in images:
-                    if use_hq:
-                        if transparent:
-                            # Alpha preservation with adaptive palette
-                            alpha = img.split()[3]
-                            img_rgb = img.convert("RGB")
-                            # Quantize to 255 colors to leave room for transparency
-                            img_p = img_rgb.convert(
-                                "P", palette=Image.Palette.ADAPTIVE, colors=255
-                            )
-                            # Set transparency
-                            mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
-                            img_p.paste(255, mask)
-                            img_p.info["transparency"] = 255
-                            processed_images.append(img_p)
-                        else:
-                            processed_images.append(
-                                img.convert(
-                                    "P", palette=Image.Palette.ADAPTIVE, colors=256
-                                )
-                            )
-                    else:
-                        if transparent:
-                            processed_images.append(img.convert("RGBA"))
-                        else:
-                            processed_images.append(img.convert("RGB"))
-
-                processed_images[0].save(
-                    path,
-                    save_all=True,
-                    append_images=processed_images[1:],
-                    duration=duration,
-                    loop=0,
-                    disposal=2,
-                )
+                encode_frames_to_gif(images, path, fps, transparent, use_hq)
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
@@ -1466,6 +1425,8 @@ class FrequencyDialog(QDialog):
             self.reset_geometry()
             if was_playing:
                 self.start_animation()
+
+    # pylint: enable=duplicate-code
 
     def pick_color(self):
         color = QColorDialog.getColor(
