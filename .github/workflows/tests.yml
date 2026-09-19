@@ -87,3 +87,33 @@ jobs:
         env:
           CI_MAIN_APP_SRC: ${{ github.workspace }}/../python_molecular_editor/moleditpy/src
         run: python -m pytest tests/test_plugin_integration.py tests/test_api.py -v
+
+  # -------------------------------------------------------------------------
+  # Static analysis — pylint against .pylintrc.
+  #
+  # The score is a ratchet, not a gate on individual messages: --fail-under
+  # lets it rise freely and fails the build if it drops. Nothing enforced
+  # pylint before, which is how 795 messages accumulated unnoticed.
+  #
+  # The runtime dependencies are installed so the score here matches what a
+  # developer sees locally; without them pylint reports import-error for
+  # every third-party module and the number is not comparable.
+  # -------------------------------------------------------------------------
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pylint and the runtime dependencies
+        run: pip install pylint rdkit PyQt6 matplotlib Pillow numpy pyvista
+
+      - name: Run pylint
+        run: >-
+          python -m pylint orca_result_analyzer/
+          --rcfile=.pylintrc
+          --fail-under=9.2
