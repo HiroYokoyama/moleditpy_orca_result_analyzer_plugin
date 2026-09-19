@@ -408,6 +408,16 @@ class TestChargeSettingsHelpers(unittest.TestCase):
         fresh = ChargeDialog(_make_host(COORDS, 3), _charges())
         self.assertEqual(fresh.current_scheme, dlg.current_scheme)
 
+    def test_malformed_custom_schemes_do_not_crash_construction(self):
+        # A non-dict entry makes scheme_data.get(...) raise AttributeError;
+        # the narrowed handler in __init__ must swallow it, not crash.
+        with open(self.path, "w", encoding="utf-8") as fh:
+            self._json.dump(
+                {"charge_settings": {"custom_color_schemes": ["not_a_dict"]}}, fh
+            )
+        dlg = ChargeDialog(_make_host(COORDS, 3), _charges())
+        self.assertEqual(dlg.current_scheme, "Red(-) - White - Blue(+)")
+
 
 if __name__ == "__main__":
     unittest.main()

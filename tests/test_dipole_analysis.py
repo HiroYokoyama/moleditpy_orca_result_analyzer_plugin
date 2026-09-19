@@ -295,6 +295,20 @@ class TestSettings(unittest.TestCase):
             self.assertEqual(section["res"], 17)
             self.assertEqual(section["color"], "#123456")
 
+    def test_non_numeric_res_does_not_crash_load(self):
+        # int(settings["res"]) raises ValueError; the narrowed handler must
+        # swallow it instead of crashing the dialog.
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump({"dipole_settings": {"res": "not_a_number"}}, f)
+
+            dlg = _bare_dialog({"vector": [1, 0, 0]}, coords=[[0, 0, 0]])
+            dlg.btn_color = MagicMock()
+            dlg.settings_file = settings
+            dlg.load_settings()  # must not raise
+            self.assertEqual(dlg.spin_res.value(), 20)
+
 
 if __name__ == "__main__":
     unittest.main()

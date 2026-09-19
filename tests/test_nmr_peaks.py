@@ -320,6 +320,13 @@ class TestReferences(_NMRCase):
         section = S.load_section(self.dlg.settings_file, "nmr_settings")
         self.assertAlmostEqual(section["spectrum_linewidth"], 3.5)
 
+    def test_malformed_custom_references_do_not_crash_load(self):
+        # A non-dict value for a nucleus's refs makes refs.items() raise
+        # AttributeError; the narrowed handler must swallow it, not crash.
+        with open(self.dlg.settings_file, "w", encoding="utf-8") as fh:
+            json.dump({"nmr_settings": {"custom_references": {"1H": "not_a_dict"}}}, fh)
+        self.dlg.load_settings()  # must not raise
+
 
 # ---------------------------------------------------------------------------
 # Selection and labels

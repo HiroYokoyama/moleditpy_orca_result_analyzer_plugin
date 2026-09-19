@@ -469,6 +469,15 @@ class TestSettings(_TDDFTCase):
         section = S.load_section(self.settings_path, "tddft_settings")
         self.assertEqual(section["sigma"], 555.0)
 
+    def test_non_numeric_sigma_does_not_crash_load(self):
+        # float(settings["sigma"]) raises ValueError; the narrowed handler
+        # must swallow it (and still unblock the spinbox signals), not crash.
+        with open(self.settings_path, "w", encoding="utf-8") as fh:
+            json.dump({"tddft_settings": {"sigma": "not_a_number"}}, fh)
+        self.dlg.spin_sigma.setValue(777.0)
+        self.dlg.load_settings()  # must not raise
+        self.assertEqual(self.dlg.spin_sigma.value(), 777.0)
+
     def test_close_persists_settings(self):
         self.dlg.spin_sigma.setValue(4321.0)
         self.dlg.closeEvent(MagicMock())
