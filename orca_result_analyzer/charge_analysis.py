@@ -1,6 +1,5 @@
 import csv
 import os
-import json
 import numpy as np
 import pyvista as pv
 from PyQt6.QtWidgets import (
@@ -26,7 +25,8 @@ from PyQt6.QtGui import QColor, QPainter, QLinearGradient
 from PyQt6.QtCore import Qt
 import matplotlib.colors as mcolors
 from matplotlib.colors import LinearSegmentedColormap
-from .utils import get_default_export_path, save_json_atomic
+from .utils import get_default_export_path
+from .settings import load_section, save_section
 import logging
 
 
@@ -81,16 +81,13 @@ class ChargeDialog(QDialog):
         }
 
         # Load custom schemes from settings.json
-        settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+        self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.current_scheme = "Red(-) - White - Blue(+)"
 
-        if os.path.exists(settings_file):
+        if os.path.exists(self.settings_file):
             try:
-                with open(settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
                 # Load from "charge_settings" key
-                settings_data = all_settings.get("charge_settings", {})
+                settings_data = load_section(self.settings_file, "charge_settings")
 
                 # Load custom schemes
                 if "custom_color_schemes" in settings_data:
@@ -269,21 +266,6 @@ class ChargeDialog(QDialog):
 
     def save_settings(self):
         """Save all settings to settings.json"""
-        settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
-
-        # Load existing settings or create new
-        all_settings = {}
-        if os.path.exists(settings_file):
-            try:
-                with open(settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "Charge analysis: could not read existing settings from %s: %s",
-                    settings_file,
-                    e,
-                )
-
         # Prepare charge-specific data
         charge_data = {}
 
@@ -298,13 +280,7 @@ class ChargeDialog(QDialog):
         charge_data["custom_color_schemes"] = custom_schemes
         charge_data["last_charge_scheme"] = self.current_scheme
 
-        # Update main settings dict
-        all_settings["charge_settings"] = charge_data
-
-        try:
-            save_json_atomic(settings_file, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving settings: %s", e)
+        save_section(self.settings_file, "charge_settings", charge_data)
 
     def toggle_labels(self):
         """Toggle charge value labels in 3D view"""

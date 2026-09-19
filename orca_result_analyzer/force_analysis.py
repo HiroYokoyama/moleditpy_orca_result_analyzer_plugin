@@ -1,5 +1,4 @@
 import os
-import json
 import math
 import numpy as np
 import pyvista as pv
@@ -21,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from .loading import load_orca_parser
+from .settings import load_section, save_section
 import logging
 
 try:
@@ -978,6 +978,8 @@ class ForceViewerDialog(QDialog):
 
     def update_vectors(self):
         """Update the force vectors in the 3D visualizer"""
+        if getattr(self, "_is_closing", False):
+            return
         try:
             mw = None
             if hasattr(self.parent_dlg, "context") and self.parent_dlg.context:
@@ -1089,6 +1091,7 @@ class ForceViewerDialog(QDialog):
 
     def closeEvent(self, event):
         """Clean up when dialog closes"""
+        self._is_closing = True
         self.clear_vectors()
         self.save_settings()
         if getattr(self, "graph_dlg", None) is not None:
@@ -1106,44 +1109,21 @@ class ForceViewerDialog(QDialog):
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "force_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("force_settings", {})
-
                 # Note: 'scale' is intentionally NOT loaded to allow auto-scaling based on specific molecule data
 
                 if "force_color" in settings:
                     self.force_color = settings["force_color"]
 
-            except (OSError, KeyError, IndexError, ValueError) as e:
+            except (KeyError, IndexError, ValueError) as e:
                 logging.warning("Error loading force settings: %s", e)
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as e:
-                logging.warning(
-                    "Force analysis: could not read existing settings from %s: %s",
-                    self.settings_file,
-                    e,
-                )
-
         force_settings = {
             # "scale": self.spin_scale.value(), # Do not save scale
             # "reverse_vector": self.chk_reverse.isChecked() if hasattr(self, 'chk_reverse') else True,
             "force_color": self.force_color
         }
 
-        all_settings["force_settings"] = force_settings
-
-        try:
-            from .utils import save_json_atomic
-
-            save_json_atomic(self.settings_file, all_settings)
-        except ImportError as e:
-            logging.warning("Error saving force settings: %s", e)
+        save_section(self.settings_file, "force_settings", force_settings)

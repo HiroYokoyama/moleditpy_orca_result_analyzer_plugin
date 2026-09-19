@@ -1,6 +1,5 @@
 import numpy as np
 import os
-import json
 import pyvista as pv
 from PyQt6.QtWidgets import (
     QDialog,
@@ -15,6 +14,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
 )
 from PyQt6.QtGui import QColor
+from .settings import load_section, save_section
 import logging
 
 
@@ -225,12 +225,8 @@ class DipoleDialog(QDialog):
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "dipole_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("dipole_settings", {})
-
                 if "res" in settings:
                     self.spin_res.setValue(int(settings["res"]))
 
@@ -253,17 +249,6 @@ class DipoleDialog(QDialog):
                 logging.warning("Error loading dipole settings: %s", e)
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError):
-                # settings file may be empty or corrupt; start fresh
-                logging.debug(
-                    "Could not read settings file; starting fresh", exc_info=True
-                )
-
         dipole_settings = {
             # "scale": self.spin_scale.value(),
             "res": self.spin_res.value(),
@@ -273,11 +258,4 @@ class DipoleDialog(QDialog):
             "reverse": self.chk_reverse.isChecked(),
         }
 
-        all_settings["dipole_settings"] = dipole_settings
-
-        try:
-            from .utils import save_json_atomic
-
-            save_json_atomic(self.settings_file, all_settings)
-        except ImportError as e:
-            logging.warning("Error saving dipole settings: %s", e)
+        save_section(self.settings_file, "dipole_settings", dipole_settings)
