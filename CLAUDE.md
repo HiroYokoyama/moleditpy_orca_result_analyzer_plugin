@@ -17,22 +17,45 @@ as a zip of that directory.
 - `__init__.py` — plugin entry points (`initialize`, `run`) and the
   `PLUGIN_VERSION` constant. Registers windows through the host's context
   registry rather than holding references itself.
-- `parser.py` — all ORCA text parsing. `load_from_memory(content, filename)`
-  runs `parse_all()`, filling a single `self.data` dict; every dialog reads from
-  that dict. Adding support for a new ORCA block means a new `parse_*` method
-  called from `parse_all()`, writing one more key. Ordering matters there —
-  gradients are parsed before the trajectory so they can be linked to it.
+- `parser.py` — `OrcaParser` itself: `__init__`, `load_from_memory`, `parse_all`.
+  The ~30 `parse_*` methods live in four mixins it inherits —
+  `parser_structure.py` (geometry, trajectory, gradients, scans),
+  `parser_electronic.py` (MO coefficients, orbital energies, basis, SCF trace),
+  `parser_properties.py` (dipole, charges, NBO, Mayer, energy components) and
+  `parser_spectra.py` (NMR, TD-DFT, thermochemistry, frequencies). They all
+  fill one `self.data` dict; every dialog reads from that dict. A new ORCA
+  block means a new `parse_*` method in the matching mixin, called from
+  `parse_all()`. Ordering there matters — gradients are parsed before the
+  trajectory so they can be linked to it. All five modules are listed in
+  `tests/test_exception_policy.py`'s `_FULLY_NARROWED`: no broad `except` is
+  allowed in any of them.
 - `gui.py` — `OrcaResultAnalyzerDialog`, the main window. Owns the file loading,
   the 3D structure, atom picking, and one `show_*` launcher per analysis dialog.
-- One module per analysis type (`nmr_analysis.py`, `mo_analysis.py`, …), each a
-  self-contained `QDialog`.
+- One module per analysis type (`freq_analysis.py`, `mo_analysis.py`, …), each a
+  self-contained `QDialog`. `NMRDialog` is split the same way `OrcaParser` is:
+  `nmr_analysis.py` holds the dialog and its UI, with `nmr_merge.py` (peak
+  merging and its persistence), `nmr_plot.py` (stick and simulated spectra,
+  highlighting, 3D labels) and `nmr_export.py` as mixins.
 - `mo_engine.py` — basis-set evaluation for MO cubes. Read
   `docs/MO_CALCULATION.md` before changing it: a mis-normalized basis function
   still renders as a plausible orbital, so changes there must be verified
   numerically (spherical-harmonic similarity, unit norm, nodal angles) rather
-  than by looking at the picture.
-- `utils.py` — shared helpers, notably `save_json_atomic` and
-  `get_default_export_path`.
+  than by looking at the picture. The same caution applies to the index/spin
+  bookkeeping in `mo_analysis.py` — resolving the wrong orbital also produces a
+  plausible picture. Keep the explanatory comments in the MO modules; the usual
+  minimum-comment rule does not apply there.
+- `settings.py` — the shared read-merge-atomic-write for the single
+  `settings.json` beside the package. Every dialog owns one top-level key, so a
+  save must merge rather than replace. Call `load_section(path, key)` /
+  `save_section(path, key, values)` and pass the dialog's own `settings_file`;
+  the path is deliberately a parameter, because the dialog tests redirect each
+  module's `__file__` at a temp dir to keep the suite from writing into the
+  package source tree.
+- `utils.py` — shared helpers: `save_json_atomic`, `get_default_export_path`,
+  and `notify(owner, message, timeout)`. `notify` is the only supported way to
+  reach the host's status bar; it walks `self.context` / `parent_dlg` /
+  `freq_dialog` / `parent()` itself, logs when there is no host, and survives an
+  already-deleted Qt window. Do not call `context.show_status_message` directly.
 
 ## Version bumping
 
@@ -137,3 +160,29 @@ Match what `parser.py` actually produces, or tests pass against fiction:
 Error handling policy is in `CONTRIBUTING.md` and is enforced in review: never
 hide errors, never crash. UI slots and callbacks catch, log, and tell the user;
 internal helpers propagate. Empty `except` blocks are not acceptable.
+
+Two tests enforce that mechanically rather than leaving it to review:
+
+- `tests/test_exception_policy.py` — a broad `except Exception` is allowed only
+  where it is justified, and the five parser modules permit none at all. The
+  count is a ratchet: it may fall freely, and raising it has to change that file.
+- `tests/test_log_messages.py` — a caught exception must be logged with the
+  operation that failed. **Never write `logging.warning("silenced: %s", e)`** or
+  any placeholder like it; there were 135 of these and they made every log
+  unactionable, since a user reporting "nothing happened" produced a line that
+  named neither the operation nor the object. Say what was being attempted and
+  interpolate the identifying detail: `logging.warning("NMR: reading merged
+  peaks from %s failed: %s", path, e)`. No f-strings in logging calls.
+
+Comments are minimal — one short line only where the logic is genuinely
+non-obvious, with the failure scenario in the commit message rather than the
+code. Docstrings are the exception to that and are expected: one line, saying
+what the function does, never restating the signature. The MO modules
+(`mo_analysis.py`, `mo_engine.py`, `mo_compare.py`) are exempt from the
+minimum-comment rule entirely — see the note in Layout.
+
+`pylint` runs in CI (`.github/workflows/tests.yml`, the `lint` job) as a score
+ratchet via `--fail-under`, so the score may rise but not fall. Treat its
+advice as advice: its `unnecessary-lambda` reports are wrong here, because
+`connect(lambda: self.method())` deliberately stops Qt feeding a signal's
+argument into a method's first parameter.
