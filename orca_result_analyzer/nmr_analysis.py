@@ -325,7 +325,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
                         self.reference_standards[nucleus] = {}
                     for ref_name, ref_val in refs.items():
                         self.reference_standards[nucleus][ref_name] = ref_val
-            except Exception as e:
+            except AttributeError as e:
                 logging.warning("Error loading NMR settings: %s", e)
 
     def save_settings(self):
@@ -1267,6 +1267,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         self.sel_timer.stop()
         try:
             self.clear_peak_selection()
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.warning(
                 "NMR: could not clear the peak selection on document reset: %s", e

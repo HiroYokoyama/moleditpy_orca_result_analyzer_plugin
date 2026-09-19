@@ -186,6 +186,7 @@ class DipoleDialog(QDialog):
             )
             mw.plotter.render()
 
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error drawing dipole: %s", e)
 
@@ -245,7 +246,7 @@ class DipoleDialog(QDialog):
                 if "reverse" in settings:
                     self.chk_reverse.setChecked(bool(settings["reverse"]))
 
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logging.warning("Error loading dipole settings: %s", e)
 
     def save_settings(self):

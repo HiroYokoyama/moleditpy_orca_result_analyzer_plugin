@@ -328,6 +328,7 @@ class ConvergenceGraphDialog(QDialog):
                         markersize=7,
                         zorder=5,
                     )
+                # C++ library boundary: matplotlib rendering exceptions do not map to Python types
                 except Exception as e:
                     logging.warning("Failed to draw threshold marker on axis: %s", e)
 
@@ -510,6 +511,7 @@ class ForceViewerDialog(QDialog):
                 # If currently visualizing, update
                 if self.btn_visualize.isChecked():
                     self.update_vectors()
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.warning(
                 "Force analysis: could not auto-scale the gradient vector display: %s",
@@ -866,6 +868,7 @@ class ForceViewerDialog(QDialog):
             if self.btn_visualize.isChecked():
                 self.update_vectors()
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reload data: {e}")
         finally:
@@ -1052,6 +1055,7 @@ class ForceViewerDialog(QDialog):
 
             mw.plotter.render()
 
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error drawing force vectors: %s", e)
 

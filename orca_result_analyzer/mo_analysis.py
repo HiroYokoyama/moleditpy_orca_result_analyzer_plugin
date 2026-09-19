@@ -464,6 +464,7 @@ class MODialog(QDialog):
                 path = self.get_cube_path(label_id)
                 if path and os.path.exists(path):
                     bg_color = QColor(240, 255, 240)  # Light Green
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
             except Exception as e:
                 logging.warning(
                     "MO: could not check for an existing cube file for %s: %s",
@@ -531,6 +532,7 @@ class MODialog(QDialog):
             path = self.get_cube_path(display_id)
             if path and os.path.exists(path):
                 self.show_cube(path)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.warning(
                 "MO: could not auto-load the cached cube for %s: %s", display_id, e
@@ -626,6 +628,7 @@ class MODialog(QDialog):
             # "Engine Init Failed".
             QMessageBox.warning(self, "Unsupported basis set", str(e))
             return None
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
@@ -1049,6 +1052,7 @@ class MODialog(QDialog):
                     self.apply_preset("Default")
 
                 self.combo_presets.blockSignals(False)
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
             except Exception as e:
                 logging.warning("Error loading settings: %s", e)
 
@@ -1281,6 +1285,7 @@ class MODialog(QDialog):
                     logging.info("Data exported to %s", filename)
             else:
                 logging.info("Data exported to %s", filename)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
 

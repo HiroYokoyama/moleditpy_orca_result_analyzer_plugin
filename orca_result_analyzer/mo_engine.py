@@ -656,6 +656,7 @@ class CalcWorker(QThread):
 
             self.finished_sig.emit(True, self.output_path)
 
+        # worker-thread top level: an escaping exception would kill the thread silently
         except Exception as e:
             logging.exception("MO: cube generation failed for MO %s", self.mo_idx)
             self.finished_sig.emit(False, str(e))

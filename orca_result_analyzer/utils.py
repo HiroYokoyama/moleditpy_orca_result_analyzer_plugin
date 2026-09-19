@@ -150,6 +150,7 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
             orig_j = real_indices[bond.GetEndAtomIdx()]
             mol.AddBond(orig_i, orig_j, bond.GetBondType())
 
+    # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
     except Exception as exc:  # noqa: BLE001
         logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
 

@@ -185,6 +185,7 @@ class TrajectoryResultDialog(QDialog):
                         self.load_external_trj(path, silent=True)
                         loaded = True
                         break
+                    # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
                     except Exception as e:
                         logging.warning(
                             "Trajectory: could not auto-load candidate trajectory file %s: %s",
@@ -900,6 +901,7 @@ class TrajectoryResultDialog(QDialog):
                         self.context.set_3d_features_enabled(True)
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
+                    # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
                     except Exception as e:
                         logging.warning(
                             "Trajectory: could not enable 3D features / minimize the 2D panel: %s",
@@ -933,6 +935,7 @@ class TrajectoryResultDialog(QDialog):
 
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             if not silent:
                 QMessageBox.critical(self, "Error", f"Failed to load TRJ:\n{e}")
@@ -1129,6 +1132,7 @@ class TrajectoryResultDialog(QDialog):
                             row.insert(1, cv if cv is not None else "")
                         writer.writerow(row)
                 notify(self, f"Data saved to: {os.path.basename(path)}", 5000)
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
 
@@ -1258,6 +1262,7 @@ class TrajectoryResultDialog(QDialog):
                 )
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:

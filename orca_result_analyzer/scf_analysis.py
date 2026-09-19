@@ -255,5 +255,6 @@ class SCFTraceDialog(QDialog):
                     for d in trace.get("iterations", []):
                         writer.writerow([d["iter"], d["energy"]])
             notify(self, f"Data exported to {path}", 5000)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.warning("Error exporting CSV: %s", e)

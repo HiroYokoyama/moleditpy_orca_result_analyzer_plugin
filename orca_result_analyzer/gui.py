@@ -712,6 +712,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             pick_pos = picker.GetPickPosition()
             diffs = atom_positions - np.array(pick_pos)
             return int(np.argmin((diffs**2).sum(axis=1)))
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.error("GUI _pick_atom_at error: %s", e)
             return None
@@ -723,6 +724,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             if best_idx is None:
                 return
             self._pending_click_atom = best_idx
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.error("GUI press handler error: %s", e)
 
@@ -760,6 +762,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             if hasattr(e3d, "update_selection_visuals"):
                 e3d.update_selection_visuals()
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             logging.error("GUI click handler error: %s", e)
 
@@ -901,6 +904,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                             f"Loaded NEB Trajectory from {os.path.basename(trj_path)}",
                             5000,
                         )
+                # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
                 except Exception as e:
                     logging.warning(
                         "Could not load the NEB trajectory from %s: %s", trj_path, e
@@ -922,6 +926,7 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             notify(self, f"Successfully loaded: {os.path.basename(path)}", 5000)
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")
 
@@ -1190,6 +1195,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                     self.mw.view_3d_manager.plotter.render()
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
                     logging.warning("3D render update failed: %s", e)
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",

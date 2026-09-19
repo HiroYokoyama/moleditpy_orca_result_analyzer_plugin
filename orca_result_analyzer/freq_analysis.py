@@ -1014,6 +1014,7 @@ class FrequencyDialog(QDialog):
             )
 
             self.mw.plotter.render()
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error in FrequencyDialog.update_view: %s", e)
 
@@ -1152,6 +1153,7 @@ class FrequencyDialog(QDialog):
                         )
                     self.vector_actor = None
 
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error in apply_manual_displacement: %s", e)
 
@@ -1225,6 +1227,7 @@ class FrequencyDialog(QDialog):
             if self.chk_vector.isChecked():
                 self.update_vectors_at_displaced_position()
 
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error in animate_frame: %s", e)
 
@@ -1282,6 +1285,7 @@ class FrequencyDialog(QDialog):
                     opacity=self.spin_vec_alpha.value(),
                     name="vib_vectors",
                 )
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning("Error updating vectors: %s", e)
 
@@ -1452,6 +1456,7 @@ class FrequencyDialog(QDialog):
                 )
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
@@ -1568,6 +1573,7 @@ class FrequencyDialog(QDialog):
                 if "fps" in settings:
                     self.spin_fps.setValue(int(settings["fps"]))
 
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
             except Exception as e:
                 logging.warning("Error loading freq settings: %s", e)
 

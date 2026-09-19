@@ -100,8 +100,8 @@ class ChargeDialog(QDialog):
                 # Load last used scheme
                 if "last_charge_scheme" in settings_data:
                     self.current_scheme = settings_data["last_charge_scheme"]
-            except Exception as e:
-                logging.warning("Error loading settings: %s", e)
+            except (TypeError, AttributeError) as e:
+                logging.warning("Error loading charge settings: %s", e)
 
         main_layout = QVBoxLayout(self)
 
@@ -333,6 +333,7 @@ class ChargeDialog(QDialog):
                 self._charge_labels.append(actor)
 
             self.parent_dlg.mw.plotter.render()
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not add labels: {e}")
             self.chk_show_labels.setChecked(False)
@@ -388,6 +389,7 @@ class ChargeDialog(QDialog):
                 self.parent_dlg.mw.plotter.render()
 
             notify(self, "Colors reset to CPK default.", 5000)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
@@ -628,6 +630,7 @@ class ChargeDialog(QDialog):
                         "color": "white",
                     },
                 )
+            # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
             except Exception as e:
                 logging.warning("Error adding scalar bar: %s", e)
 
@@ -637,6 +640,7 @@ class ChargeDialog(QDialog):
 
             notify(self, f"Applied '{self.current_scheme}' coloring to 3D view.", 5000)
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
 
@@ -724,6 +728,7 @@ class ChargeDialog(QDialog):
                     writer.writerow(row)
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
             notify(self, f"Data exported to {filename}", 5000)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
         finally:

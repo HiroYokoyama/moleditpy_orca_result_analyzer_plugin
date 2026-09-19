@@ -585,6 +585,7 @@ class _NMRPlotMixin:
                     m = Multiplet(shift * spectrometer_freq, intensity, couplings_list)
                     m.w = width_hz
                     all_multiplets.append(m)
+                # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
                 except Exception as e:
                     logging.error(
                         "NMR: Multiplet creation failed for shift=%.3f: %s", shift, e
@@ -623,6 +624,7 @@ class _NMRPlotMixin:
                 y_total = np.interp(x_hz_grid, x_sim, y_sim, left=0, right=0)
                 if np.max(y_total) >= 1e-9:
                     nmrsim_success = True
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
             except Exception as e:
                 logging.error("NMR: nmrsim Spectrum simulation failed: %s", e)
 
@@ -832,6 +834,7 @@ class _NMRPlotMixin:
             )
             self._atom_labels.append(actor)
             self._nmr_label_names.append(label_name)
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning(
                 "NMR: could not add the shift label for atom %d to the 3D view: %s",
@@ -1020,6 +1023,7 @@ class _NMRPlotMixin:
             self._nmr_sphere_actors.append(actor)
             plotter.render()
 
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
         except Exception as e:
             logging.warning(
                 "NMR: could not draw selection-highlight spheres for atoms %s: %s",

@@ -112,6 +112,7 @@ class _NMRExportMixin:
                 self, f"Spectrum data exported to: {os.path.basename(filename)}", 5000
             )
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
@@ -149,6 +150,7 @@ class _NMRExportMixin:
                     f.write(",".join(cols) + "\n")
 
             notify(self, f"Table data exported to: {os.path.basename(filename)}", 5000)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 

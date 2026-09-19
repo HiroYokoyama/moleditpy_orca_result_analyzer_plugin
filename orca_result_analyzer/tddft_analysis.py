@@ -535,7 +535,7 @@ class TDDFTDialog(QDialog):
                 self.spin_sigma.blockSignals(False)
                 self.combo_sigma_unit.blockSignals(False)
 
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 self.spin_sigma.blockSignals(False)
                 self.combo_sigma_unit.blockSignals(False)
                 logging.warning("[tddft_analysis.py] Error loading settings: %s", e)
@@ -753,6 +753,7 @@ class TDDFTDialog(QDialog):
             if not notify(self, f"Report saved to {path}", 5000):
                 QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
 
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
 
