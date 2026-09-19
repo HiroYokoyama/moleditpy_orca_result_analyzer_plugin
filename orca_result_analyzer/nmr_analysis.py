@@ -340,7 +340,11 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except (OSError, ValueError) as e:
-                logging.warning("NMR: could not read existing settings from %s: %s", self.settings_file, e)
+                logging.warning(
+                    "NMR: could not read existing settings from %s: %s",
+                    self.settings_file,
+                    e,
+                )
 
         # Extract custom references only (non-default)
         default_standards = DEFAULT_REFERENCE_STANDARDS
@@ -1285,7 +1289,9 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         try:
             self.clear_peak_selection()
         except Exception as e:
-            logging.warning("NMR: could not clear the peak selection on document reset: %s", e)
+            logging.warning(
+                "NMR: could not clear the peak selection on document reset: %s", e
+            )
         self._last_synced_mw_selection = frozenset()
         self.sel_timer.start(200)
 

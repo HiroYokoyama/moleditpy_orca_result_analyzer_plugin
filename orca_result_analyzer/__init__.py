@@ -119,7 +119,9 @@ def _on_document_reset(context):
         try:
             win.close()
         except (RuntimeError, AttributeError) as e:
-            logging.warning("Could not close the analyzer window on document reset: %s", e)
+            logging.warning(
+                "Could not close the analyzer window on document reset: %s", e
+            )
 
     from .utils import clear_atom_color_overrides
 
@@ -147,7 +149,11 @@ def initialize(context):
                     _open_orca_file(path, context)
                     return True
             except (OSError, ValueError) as e:
-                logging.warning("Could not read dropped file %s to check for an ORCA header: %s", path, e)
+                logging.warning(
+                    "Could not read dropped file %s to check for an ORCA header: %s",
+                    path,
+                    e,
+                )
         return False
 
     context.register_file_opener(".out", open_orca_file, priority=100)

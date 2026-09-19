@@ -67,7 +67,11 @@ class _StructureParsingMixin:
                 try:
                     energy = float(e_match.group(1))
                 except (IndexError, TypeError, ValueError) as e:
-                    logging.debug("XYZ: could not parse the energy label from comment %r: %s", comment, e)
+                    logging.debug(
+                        "XYZ: could not parse the energy label from comment %r: %s",
+                        comment,
+                        e,
+                    )
             else:
                 # Fallback: Just take the last float (usually energy)
                 floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
@@ -75,7 +79,11 @@ class _StructureParsingMixin:
                     try:
                         energy = float(floats[-1])
                     except (IndexError, TypeError, ValueError) as e:
-                        logging.debug("XYZ: could not parse a fallback energy value from comment %r: %s", comment, e)
+                        logging.debug(
+                            "XYZ: could not parse a fallback energy value from comment %r: %s",
+                            comment,
+                            e,
+                        )
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
             d_match = re.search(
@@ -87,7 +95,11 @@ class _StructureParsingMixin:
                 try:
                     dist_val = float(d_match.group(1))
                 except (IndexError, TypeError, ValueError) as e:
-                    logging.debug("XYZ: could not parse the scan coordinate from comment %r: %s", comment, e)
+                    logging.debug(
+                        "XYZ: could not parse the scan coordinate from comment %r: %s",
+                        comment,
+                        e,
+                    )
 
             i += 1
 
@@ -130,7 +142,9 @@ class _StructureParsingMixin:
                 try:
                     self.data["version"] = line.split("Version")[-1].strip().split()[0]
                 except (KeyError, IndexError) as e:
-                    logging.warning("Could not parse the ORCA version from %r: %s", line, e)
+                    logging.warning(
+                        "Could not parse the ORCA version from %r: %s", line, e
+                    )
 
             line = line.strip()
             uu = line.upper()
@@ -138,7 +152,11 @@ class _StructureParsingMixin:
                 try:
                     self.data["scf_energy"] = float(line.split()[-1])
                 except (KeyError, IndexError, TypeError, ValueError) as e:
-                    logging.warning("Could not parse the final single-point energy from %r: %s", line, e)
+                    logging.warning(
+                        "Could not parse the final single-point energy from %r: %s",
+                        line,
+                        e,
+                    )
             if "TOTAL CHARGE" in uu:
                 # Could be "Total Charge 0" or "Total Charge ... 0".
                 # The phrase also heads a population-analysis column whose
@@ -187,7 +205,11 @@ class _StructureParsingMixin:
                     try:
                         self.data["neb_trj_file"] = line.split()[-1].strip()
                     except (KeyError, IndexError) as e:
-                        logging.warning("Could not parse the NEB trajectory filename from %r: %s", line, e)
+                        logging.warning(
+                            "Could not parse the NEB trajectory filename from %r: %s",
+                            line,
+                            e,
+                        )
 
             if "CARTESIAN COORDINATES (ANGSTROEM)" in uu:
                 # Read geometry
@@ -332,7 +354,11 @@ class _StructureParsingMixin:
                                 TypeError,
                                 ValueError,
                             ) as e:
-                                logging.warning("Trajectory: could not parse the NEB path-summary row %r: %s", l_row, e)
+                                logging.warning(
+                                    "Trajectory: could not parse the NEB path-summary row %r: %s",
+                                    l_row,
+                                    e,
+                                )
                         curr += 1
 
             # Scan Step Header
@@ -382,7 +408,9 @@ class _StructureParsingMixin:
                             en = float(parts[1].split()[0])
                         except (IndexError, TypeError, ValueError) as e:
                             logging.warning(
-                                "Trajectory: could not parse the total energy at scan step %d: %s", step_idx, e
+                                "Trajectory: could not parse the total energy at scan step %d: %s",
+                                step_idx,
+                                e,
                             )
                     elif "CURRENT ENERGY" in uu and "...." in uu:
                         # For ORCA relaxation blocks: Current Energy                          ....   -79.800115921 Eh
@@ -391,7 +419,9 @@ class _StructureParsingMixin:
                             en = float(parts[1].split()[0])
                         except (IndexError, TypeError, ValueError) as e:
                             logging.warning(
-                                "Trajectory: could not parse the current energy at scan step %d: %s", step_idx, e
+                                "Trajectory: could not parse the current energy at scan step %d: %s",
+                                step_idx,
+                                e,
                             )
                     elif "GEOMETRY CONVERGENCE" in uu or "CONVERGENCE CRITERIA" in uu:
                         c_idx = k + 1
@@ -608,7 +638,8 @@ class _StructureParsingMixin:
                             final_en = float(self.lines[k].split()[-1])
                         except (IndexError, TypeError, ValueError) as e:
                             logging.warning(
-                                "Trajectory: could not parse the final stationary-point energy: %s", e
+                                "Trajectory: could not parse the final stationary-point energy: %s",
+                                e,
                             )
                         break
                 f_atoms, f_coords, f_found = read_coords_from(i)
@@ -718,7 +749,11 @@ class _StructureParsingMixin:
                         TypeError,
                         ValueError,
                     ) as e:
-                        logging.warning("Gradients: could not parse the gradient row %r: %s", line, e)
+                        logging.warning(
+                            "Gradients: could not parse the gradient row %r: %s",
+                            line,
+                            e,
+                        )
                 curr += 1
 
             if block_grads:

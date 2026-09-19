@@ -76,7 +76,9 @@ class _PropertyParsingMixin:
                     }
                     self.data["dipole"] = self.data["dipoles"]
             except (AttributeError, KeyError, IndexError, TypeError, ValueError) as e:
-                logging.warning("Dipole moment: could not parse the dipole vector block: %s", e)
+                logging.warning(
+                    "Dipole moment: could not parse the dipole vector block: %s", e
+                )
 
     def parse_spin_contamination(self):
         """Extract the UHF/UKS spin expectation value <S**2>.
@@ -97,12 +99,20 @@ class _PropertyParsingMixin:
                 try:
                     actual = float(line.split(":")[1].strip().split()[0])
                 except (IndexError, TypeError, ValueError) as e:
-                    logging.warning("Spin contamination: could not parse the actual <S**2> value from %r: %s", line, e)
+                    logging.warning(
+                        "Spin contamination: could not parse the actual <S**2> value from %r: %s",
+                        line,
+                        e,
+                    )
             elif "Ideal value" in line and "S*(S+1)" in line and ":" in line:
                 try:
                     ideal = float(line.split(":")[1].strip().split()[0])
                 except (IndexError, TypeError, ValueError) as e:
-                    logging.warning("Spin contamination: could not parse the ideal S*(S+1) value from %r: %s", line, e)
+                    logging.warning(
+                        "Spin contamination: could not parse the ideal S*(S+1) value from %r: %s",
+                        line,
+                        e,
+                    )
         if actual is not None:
             self.data["spin_s2"] = {
                 "actual": actual,
@@ -126,7 +136,11 @@ class _PropertyParsingMixin:
                 try:
                     self.data["dispersion"] = float(m.group(1))
                 except (KeyError, IndexError, TypeError, ValueError) as e:
-                    logging.warning("Dispersion correction: could not parse value from %r: %s", m.group(1), e)
+                    logging.warning(
+                        "Dispersion correction: could not parse value from %r: %s",
+                        m.group(1),
+                        e,
+                    )
 
     def parse_energy_components(self):
         """Parse post-HF correlation energy components (MP2 / CCSD(T) / ...).
@@ -608,7 +622,11 @@ class _PropertyParsingMixin:
                         TypeError,
                         ValueError,
                     ) as e:
-                        logging.warning("Mayer charges: could not parse the valency row for atom %r: %s", sym, e)
+                        logging.warning(
+                            "Mayer charges: could not parse the valency row for atom %r: %s",
+                            sym,
+                            e,
+                        )
                 curr += 1
             if mayer_res:
                 self.data["charges"]["Mayer"] = mayer_res
@@ -682,7 +700,11 @@ class _PropertyParsingMixin:
                             TypeError,
                             ValueError,
                         ) as e:
-                            logging.warning("NBO charges: could not parse the summary row %r: %s", line, e)
+                            logging.warning(
+                                "NBO charges: could not parse the summary row %r: %s",
+                                line,
+                                e,
+                            )
                     curr += 1
 
             # 2. Fallback if no summary found (or parsing failed), try simple block near nbo_start
@@ -719,7 +741,11 @@ class _PropertyParsingMixin:
                                 {"atom_idx": idx - 1, "atom_sym": sym, "charge": chg}
                             )
                         except (IndexError, TypeError, ValueError) as e:
-                            logging.warning("NBO charges: could not parse the fallback-format row %r: %s", line, e)
+                            logging.warning(
+                                "NBO charges: could not parse the fallback-format row %r: %s",
+                                line,
+                                e,
+                            )
                     curr += 1
 
             if nbo_charges:
@@ -797,7 +823,11 @@ class _PropertyParsingMixin:
                             TypeError,
                             ValueError,
                         ) as e:
-                            logging.warning("FMO charges: could not parse the HOMO/LUMO row %r: %s", line, e)
+                            logging.warning(
+                                "FMO charges: could not parse the HOMO/LUMO row %r: %s",
+                                line,
+                                e,
+                            )
                     curr += 1
 
                 if fmo_data:

@@ -587,7 +587,11 @@ class TDDFTDialog(QDialog):
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except (OSError, ValueError) as e:
-                logging.warning("TD-DFT: could not read existing settings from %s: %s", self.settings_file, e)
+                logging.warning(
+                    "TD-DFT: could not read existing settings from %s: %s",
+                    self.settings_file,
+                    e,
+                )
 
         tddft_settings = {
             "sigma": self.spin_sigma.value(),

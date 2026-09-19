@@ -278,7 +278,11 @@ class ChargeDialog(QDialog):
                 with open(settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
             except (OSError, ValueError) as e:
-                logging.warning("Charge analysis: could not read existing settings from %s: %s", settings_file, e)
+                logging.warning(
+                    "Charge analysis: could not read existing settings from %s: %s",
+                    settings_file,
+                    e,
+                )
 
         # Prepare charge-specific data
         charge_data = {}
@@ -312,7 +316,10 @@ class ChargeDialog(QDialog):
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                    logging.debug("Charge analysis: could not remove an old charge label actor: %s", e)
+                    logging.debug(
+                        "Charge analysis: could not remove an old charge label actor: %s",
+                        e,
+                    )
             self._charge_labels = []
 
         if not show:
@@ -378,7 +385,10 @@ class ChargeDialog(QDialog):
                     self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     delattr(self, "_charge_scalar_bar")
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                    logging.debug("Charge analysis: could not remove the charge scalar bar actor: %s", e)
+                    logging.debug(
+                        "Charge analysis: could not remove the charge scalar bar actor: %s",
+                        e,
+                    )
 
             # Remove labels if exist
             if getattr(self, "_charge_labels", None) is not None:
@@ -386,7 +396,10 @@ class ChargeDialog(QDialog):
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(actor)
                     except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                        logging.debug("Charge analysis: could not remove an old charge label actor: %s", e)
+                        logging.debug(
+                            "Charge analysis: could not remove an old charge label actor: %s",
+                            e,
+                        )
                 self._charge_labels = []
                 self.chk_show_labels.setChecked(False)
 
@@ -576,7 +589,8 @@ class ChargeDialog(QDialog):
                                 ValueError,
                             ) as e:
                                 logging.debug(
-                                    "Charge analysis: could not remove an old charge label actor: %s", e
+                                    "Charge analysis: could not remove an old charge label actor: %s",
+                                    e,
                                 )
 
                     self._charge_labels = []
@@ -610,7 +624,10 @@ class ChargeDialog(QDialog):
                     try:
                         self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
                     except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                        logging.debug("Charge analysis: could not remove the old charge scalar bar actor: %s", e)
+                        logging.debug(
+                            "Charge analysis: could not remove the old charge scalar bar actor: %s",
+                            e,
+                        )
 
                 # Create dummy mesh for scalar bar
                 dummy = pv.Box()
@@ -753,7 +770,10 @@ class ChargeDialog(QDialog):
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self._charge_scalar_bar)
             except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                logging.debug("Charge analysis: could not remove the charge scalar bar actor on close: %s", e)
+                logging.debug(
+                    "Charge analysis: could not remove the charge scalar bar actor on close: %s",
+                    e,
+                )
 
         # Remove labels
         if getattr(self, "_charge_labels", None) is not None:
@@ -761,7 +781,10 @@ class ChargeDialog(QDialog):
                 try:
                     self.parent_dlg.mw.plotter.remove_actor(actor)
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                    logging.debug("Charge analysis: could not remove a charge label actor on close: %s", e)
+                    logging.debug(
+                        "Charge analysis: could not remove a charge label actor on close: %s",
+                        e,
+                    )
 
         if hasattr(self.parent_dlg.mw, "plotter"):
             self.parent_dlg.mw.plotter.render()

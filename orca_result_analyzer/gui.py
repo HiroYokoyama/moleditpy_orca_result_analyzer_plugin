@@ -214,7 +214,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             try:
                 self.move(self.x() + 600, self.y())
             except (RuntimeError, AttributeError) as e:
-                logging.warning("Could not shift the analyzer window position on first show: %s", e)
+                logging.warning(
+                    "Could not shift the analyzer window position on first show: %s", e
+                )
 
     def get_icon(self, name):
         """Helper to load icon from icon directory"""
@@ -671,7 +673,10 @@ class OrcaResultAnalyzerDialog(QDialog):
             if plotter and self._click_filter:
                 plotter.removeEventFilter(self._click_filter)
         except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-            logging.debug("Could not remove the atom-picking event filter from the 3D plotter: %s", e)
+            logging.debug(
+                "Could not remove the atom-picking event filter from the 3D plotter: %s",
+                e,
+            )
         self._click_filter = None
 
     def _pick_atom_at(self, x, y, widget):
@@ -784,7 +789,11 @@ class OrcaResultAnalyzerDialog(QDialog):
                     try:
                         dlg.close()
                     except (RuntimeError, AttributeError) as e:
-                        logging.warning("Could not close the %s dialog while resetting the document: %s", attr, e)
+                        logging.warning(
+                            "Could not close the %s dialog while resetting the document: %s",
+                            attr,
+                            e,
+                        )
                 setattr(self, attr, None)
 
     def reject(self):
@@ -893,7 +902,9 @@ class OrcaResultAnalyzerDialog(QDialog):
                             5000,
                         )
                 except Exception as e:
-                    logging.warning("Could not load the NEB trajectory from %s: %s", trj_path, e)
+                    logging.warning(
+                        "Could not load the NEB trajectory from %s: %s", trj_path, e
+                    )
 
             self.parser = new_parser
             self.file_path = path
@@ -934,7 +945,9 @@ class OrcaResultAnalyzerDialog(QDialog):
                 dt = datetime.fromtimestamp(os.path.getmtime(self.file_path))
                 mtime_str = dt.strftime("%Y-%m-%d %H:%M:%S")
             except OSError as e:
-                logging.warning("Could not read the modification time of %s: %s", self.file_path, e)
+                logging.warning(
+                    "Could not read the modification time of %s: %s", self.file_path, e
+                )
 
         if getattr(self, "lbl_updated", None) is not None:
             self.lbl_updated.setText(f"Updated: {mtime_str}")
@@ -1432,7 +1445,9 @@ class OrcaResultAnalyzerDialog(QDialog):
             try:
                 self.bond_dlg.close()
             except (RuntimeError, AttributeError) as e:
-                logging.warning("Could not close the existing bond-analysis dialog: %s", e)
+                logging.warning(
+                    "Could not close the existing bond-analysis dialog: %s", e
+                )
         self.bond_dlg = BondAnalysisDialog(self, data)
         self.bond_dlg.show()
 
@@ -1450,6 +1465,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             try:
                 self.energy_dlg.close()
             except (RuntimeError, AttributeError) as e:
-                logging.warning("Could not close the existing energy-components dialog: %s", e)
+                logging.warning(
+                    "Could not close the existing energy-components dialog: %s", e
+                )
         self.energy_dlg = EnergyComponentsDialog(self, self.parser.data)
         self.energy_dlg.show()

@@ -281,7 +281,9 @@ class BondAnalysisDialog(QDialog):
         try:
             plotter.render()
         except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-            logging.debug("Could not render the plotter after clearing bond highlights: %s", e)
+            logging.debug(
+                "Could not render the plotter after clearing bond highlights: %s", e
+            )
 
     def _highlight_atoms(self, indices):
         self._clear_highlight()
@@ -303,7 +305,11 @@ class BondAnalysisDialog(QDialog):
                     )
             plotter.render()
         except (ImportError, RuntimeError, AttributeError, IndexError) as e:
-            logging.warning("Bond analysis: could not highlight atoms %s in the 3D view: %s", indices, e)
+            logging.warning(
+                "Bond analysis: could not highlight atoms %s in the 3D view: %s",
+                indices,
+                e,
+            )
 
     def _highlight_bond(self, i, j):
         self._clear_highlight()
@@ -327,7 +333,12 @@ class BondAnalysisDialog(QDialog):
                 )
             plotter.render()
         except (ImportError, RuntimeError, AttributeError, IndexError) as e:
-            logging.warning("Bond analysis: could not highlight the bond %d-%d in the 3D view: %s", i, j, e)
+            logging.warning(
+                "Bond analysis: could not highlight the bond %d-%d in the 3D view: %s",
+                i,
+                j,
+                e,
+            )
 
     @staticmethod
     def _single_selected_row(table):

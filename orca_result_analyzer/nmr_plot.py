@@ -118,7 +118,9 @@ class _NMRPlotMixin:
                 try:
                     artist.remove()
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                    logging.debug("NMR: could not remove a peak-highlight artist: %s", e)
+                    logging.debug(
+                        "NMR: could not remove a peak-highlight artist: %s", e
+                    )
             self.highlight_artists = []
             self.canvas.draw_idle()
             return
@@ -424,7 +426,10 @@ class _NMRPlotMixin:
             try:
                 artist.remove()
             except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                logging.debug("NMR: could not remove a peak-highlight artist while clearing selection: %s", e)
+                logging.debug(
+                    "NMR: could not remove a peak-highlight artist while clearing selection: %s",
+                    e,
+                )
         self.highlight_artists = []
 
         # Clear 3D labels
@@ -439,7 +444,10 @@ class _NMRPlotMixin:
                 try:
                     e3d.update_3d_selection_display()
                 except (AttributeError, RuntimeError) as e:
-                    logging.warning("NMR: could not update the 3D selection display after clearing peaks: %s", e)
+                    logging.warning(
+                        "NMR: could not update the 3D selection display after clearing peaks: %s",
+                        e,
+                    )
 
         # Redraw spectrum
         if getattr(self, "canvas", None) is not None:
@@ -746,7 +754,10 @@ class _NMRPlotMixin:
                     try:
                         e3d.update_3d_selection_display()
                     except (AttributeError, RuntimeError) as e:
-                        logging.warning("NMR: could not sync the 3D selection display to the main window: %s", e)
+                        logging.warning(
+                            "NMR: could not sync the 3D selection display to the main window: %s",
+                            e,
+                        )
 
             # Draw yellow highlights for NMR selection
             self.draw_custom_nmr_highlights_3d(all_peak_indices)
@@ -822,7 +833,11 @@ class _NMRPlotMixin:
             self._atom_labels.append(actor)
             self._nmr_label_names.append(label_name)
         except Exception as e:
-            logging.warning("NMR: could not add the shift label for atom %d to the 3D view: %s", atom_idx, e)
+            logging.warning(
+                "NMR: could not add the shift label for atom %d to the 3D view: %s",
+                atom_idx,
+                e,
+            )
 
     def highlight_atom_in_3d(self, atom_idx, atom_sym):
         """Highlight selected atom with a label in 3D viewer (legacy - now uses update_selected_labels)"""
@@ -901,13 +916,17 @@ class _NMRPlotMixin:
                 try:
                     plotter.remove_actor(actor)
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                    logging.debug("NMR: could not remove a selection-sphere actor: %s", e)
+                    logging.debug(
+                        "NMR: could not remove a selection-sphere actor: %s", e
+                    )
             self._nmr_sphere_actors = []
 
         try:
             plotter.render()
         except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-            logging.debug("NMR: could not render the plotter after clearing atom labels: %s", e)
+            logging.debug(
+                "NMR: could not render the plotter after clearing atom labels: %s", e
+            )
 
     def draw_custom_nmr_highlights_3d(self, atom_indices):
         """Draw yellow highlight spheres for selected atoms in 3D viewer"""
@@ -922,7 +941,9 @@ class _NMRPlotMixin:
         try:
             plotter.remove_actor("nmr_selection_highlights")
         except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-            logging.debug("NMR: could not remove the previous selection-highlight actor: %s", e)
+            logging.debug(
+                "NMR: could not remove the previous selection-highlight actor: %s", e
+            )
 
         # Clear tracker list to prevent stale references
         self._nmr_sphere_actors = []
@@ -932,7 +953,9 @@ class _NMRPlotMixin:
             try:
                 plotter.render()
             except (RuntimeError, AttributeError, KeyError, ValueError) as e:
-                logging.debug("NMR: could not render the plotter after clearing highlights: %s", e)
+                logging.debug(
+                    "NMR: could not render the plotter after clearing highlights: %s", e
+                )
             return
 
         indices = list(atom_indices)
@@ -998,4 +1021,8 @@ class _NMRPlotMixin:
             plotter.render()
 
         except Exception as e:
-            logging.warning("NMR: could not draw selection-highlight spheres for atoms %s: %s", atom_indices, e)
+            logging.warning(
+                "NMR: could not draw selection-highlight spheres for atoms %s: %s",
+                atom_indices,
+                e,
+            )

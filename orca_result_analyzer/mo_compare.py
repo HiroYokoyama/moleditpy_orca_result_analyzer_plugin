@@ -233,7 +233,9 @@ class MOCompareDialog(QDialog):
         try:
             selected = tree.selectedItems() or []
         except (AttributeError, RuntimeError) as e:
-            logging.warning("MO compare: could not read the MO table's current selection: %s", e)
+            logging.warning(
+                "MO compare: could not read the MO table's current selection: %s", e
+            )
             return keys
         for item in selected:
             key = item.data(0, Qt.ItemDataRole.UserRole)
@@ -467,7 +469,9 @@ class MOCompareDialog(QDialog):
                 with open(path, "r", encoding="utf-8") as fh:
                     all_settings = json.load(fh)
             except (OSError, ValueError) as e:
-                logging.warning("MO compare: could not read existing settings from %s: %s", path, e)
+                logging.warning(
+                    "MO compare: could not read existing settings from %s: %s", path, e
+                )
         if not isinstance(all_settings, dict):
             all_settings = {}
 
@@ -483,7 +487,9 @@ class MOCompareDialog(QDialog):
         try:
             return self.parent_dlg.get_color_hex(which)
         except (AttributeError, RuntimeError) as e:
-            logging.warning("MO compare: could not read the parent dialog's %s color: %s", which, e)
+            logging.warning(
+                "MO compare: could not read the parent dialog's %s color: %s", which, e
+            )
             return DEFAULT_COLORS[0][0 if which == "p" else 1]
 
     def _seed_first_slot(self, slot):
@@ -497,7 +503,10 @@ class MOCompareDialog(QDialog):
                 slot.combo_style.setCurrentIndex(idx)
             slot.check_smooth.setChecked(parent.check_smooth.isChecked())
         except (AttributeError, RuntimeError, TypeError) as e:
-            logging.warning("MO compare: could not copy the MO dialog's render settings into slot 1: %s", e)
+            logging.warning(
+                "MO compare: could not copy the MO dialog's render settings into slot 1: %s",
+                e,
+            )
 
     # -- interaction -------------------------------------------------------
 
@@ -551,7 +560,9 @@ class MOCompareDialog(QDialog):
         try:
             return self.parent_dlg.get_cube_path(display_id)
         except (AttributeError, RuntimeError) as e:
-            logging.warning("MO compare: could not resolve the cube path for %s: %s", display_id, e)
+            logging.warning(
+                "MO compare: could not resolve the cube path for %s: %s", display_id, e
+            )
             return None
 
     def render_all(self):
@@ -605,7 +616,9 @@ class MOCompareDialog(QDialog):
         try:
             mw.plotter.render()
         except (AttributeError, RuntimeError) as e:
-            logging.debug("MO compare: could not render the plotter after showing orbitals: %s", e)
+            logging.debug(
+                "MO compare: could not render the plotter after showing orbitals: %s", e
+            )
 
         msg = f"Showing {shown} orbital(s)."
         if missing:
@@ -627,7 +640,10 @@ class MOCompareDialog(QDialog):
             if self.mw:
                 self.mw.plotter.render()
         except (AttributeError, RuntimeError) as e:
-            logging.debug("MO compare: could not render the plotter after clearing all slots: %s", e)
+            logging.debug(
+                "MO compare: could not render the plotter after clearing all slots: %s",
+                e,
+            )
         self.lbl_status.setText("")
         self.refresh_update_button()
 
@@ -635,7 +651,11 @@ class MOCompareDialog(QDialog):
         try:
             plotter = self.mw.plotter if self.mw else None
         except (AttributeError, RuntimeError) as e:
-            logging.debug("MO compare: could not access the 3D plotter to remove actors for %s: %s", prefix, e)
+            logging.debug(
+                "MO compare: could not access the 3D plotter to remove actors for %s: %s",
+                prefix,
+                e,
+            )
             return
         if plotter is None:
             return
@@ -643,7 +663,9 @@ class MOCompareDialog(QDialog):
             try:
                 plotter.remove_actor(f"{prefix}{suffix}")
             except (AttributeError, RuntimeError, KeyError) as e:
-                logging.debug("MO compare: could not remove actor %s%s: %s", prefix, suffix, e)
+                logging.debug(
+                    "MO compare: could not remove actor %s%s: %s", prefix, suffix, e
+                )
 
     # -- teardown ----------------------------------------------------------
 
@@ -666,7 +688,10 @@ class MOCompareDialog(QDialog):
         try:
             self.parent_dlg.on_compare_closed()
         except (AttributeError, RuntimeError) as e:
-            logging.warning("MO compare: could not notify the parent MO dialog that this window closed: %s", e)
+            logging.warning(
+                "MO compare: could not notify the parent MO dialog that this window closed: %s",
+                e,
+            )
 
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.

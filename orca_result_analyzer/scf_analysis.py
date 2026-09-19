@@ -117,7 +117,9 @@ class SCFTraceDialog(QDialog):
         try:
             plt.close(self.figure)
         except (AttributeError, ValueError, NotImplementedError) as e:
-            logging.debug("SCF: could not close the matplotlib figure on dialog close: %s", e)
+            logging.debug(
+                "SCF: could not close the matplotlib figure on dialog close: %s", e
+            )
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.
         event.accept()

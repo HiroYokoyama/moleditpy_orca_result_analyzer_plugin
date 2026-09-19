@@ -271,7 +271,9 @@ class SpectrumWidget(QWidget):
                 self.ax2.remove()
                 del self.ax2
             except (AttributeError, ValueError, NotImplementedError) as e:
-                logging.debug("Spectrum widget: could not remove the secondary (twin) axis: %s", e)
+                logging.debug(
+                    "Spectrum widget: could not remove the secondary (twin) axis: %s", e
+                )
         self.plot_spectrum()
 
     def plot_spectrum(self):
@@ -282,7 +284,10 @@ class SpectrumWidget(QWidget):
                 try:
                     self.ax2.clear()
                 except (AttributeError, ValueError, NotImplementedError) as e:
-                    logging.debug("Spectrum widget: could not clear the secondary (twin) axis: %s", e)
+                    logging.debug(
+                        "Spectrum widget: could not clear the secondary (twin) axis: %s",
+                        e,
+                    )
 
             # Re-connect straight after the clear that dropped them: clear()
             # installs a fresh CallbackRegistry, and the "No Data" path below

@@ -85,7 +85,10 @@ class _ElectronicParsingMixin:
                         [int(p) for p in parts]
                         is_header = True
                 except (IndexError, TypeError, ValueError) as e:
-                    logging.debug("MO coefficients: could not check line for an MO-index header: %s", e)
+                    logging.debug(
+                        "MO coefficients: could not check line for an MO-index header: %s",
+                        e,
+                    )
 
                 if is_header:
                     current_mos = [int(p) for p in parts]
@@ -223,7 +226,9 @@ class _ElectronicParsingMixin:
                         ValueError,
                     ) as e:
                         logging.warning(
-                            "MO coefficients: could not parse the coefficient line %r: %s", line, e
+                            "MO coefficients: could not parse the coefficient line %r: %s",
+                            line,
+                            e,
                         )
                 curr += 1
 
@@ -330,7 +335,9 @@ class _ElectronicParsingMixin:
                         TypeError,
                         ValueError,
                     ) as e:
-                        logging.warning("Orbital energies: could not parse line %r: %s", line, e)
+                        logging.warning(
+                            "Orbital energies: could not parse line %r: %s", line, e
+                        )
 
                 curr += 1
 
@@ -422,7 +429,10 @@ class _ElectronicParsingMixin:
                     ValueError,
                 ) as e:
                     logging.warning(
-                        "Basis set: could not parse the %s shell for atom %s: %s", sh_type, current_sym, e
+                        "Basis set: could not parse the %s shell for atom %s: %s",
+                        sh_type,
+                        current_sym,
+                        e,
                     )
 
             curr += 1
