@@ -1,3 +1,5 @@
+"""MO Analyzer dialog: orbital list, cube generation/visualization and export."""
+
 import csv
 import os
 import tempfile
@@ -72,6 +74,8 @@ except ImportError:
 
 
 class MODialog(QDialog):
+    """Dialog listing MOs, generating their cube files and visualizing them in 3D."""
+
     def __init__(self, parent, mo_data, result_dir=None):
         super().__init__(parent)
         self.mw = None
@@ -95,6 +99,7 @@ class MODialog(QDialog):
         self.setup_ui()
 
     def get_cube_path(self, display_id):
+        """Return the on-disk cube file path for an orbital, if the parser has one."""
         if not hasattr(self.parent_dlg, "parser") or not self.parent_dlg.parser:
             return None
 
@@ -124,6 +129,7 @@ class MODialog(QDialog):
         return None
 
     def setup_ui(self):
+        """Build the orbital tree, visualization controls and action buttons."""
         # Use simpler Vertical Layout to fill the window
         layout = QVBoxLayout(self)
 
@@ -315,6 +321,7 @@ class MODialog(QDialog):
         self.normalize_and_populate()
 
     def normalize_and_populate(self):
+        """Sort the parsed orbitals by spin/index and rebuild the orbital tree."""
         self.tree.clear()  # Verify clear first
         self.mo_list = []
 
@@ -511,10 +518,12 @@ class MODialog(QDialog):
             iterator += 1
 
     def on_double_click(self, item, col):
+        """Visualize the double-clicked orbital, generating its cube if needed."""
         # Double click always tries to visualize (generate if needed)
         self.visualize_selected_mos()
 
     def on_item_changed(self, current, previous):
+        """Auto-load the already-cached cube for the newly selected orbital, if any."""
         # Single click or keyboard change
         if not current:
             return
@@ -539,6 +548,7 @@ class MODialog(QDialog):
             )
 
     def on_selection_changed(self):
+        """Enable Visualize only when the selected orbital has coefficients."""
         items = self.tree.selectedItems()
         has_coeffs = False
         if items:
@@ -576,6 +586,7 @@ class MODialog(QDialog):
             self.btn_copy_input.setVisible(False)
 
     def copy_orca_input(self):
+        """Copy the ORCA %output block needed for MO coefficients to the clipboard."""
         text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
         QApplication.clipboard().setText(text)
         if self.mw and hasattr(self.mw, "statusBar"):
@@ -588,6 +599,7 @@ class MODialog(QDialog):
             logging.info("ORCA Input block copied to clipboard.")
 
     def get_engine(self):
+        """Build a BasisSetEngine from the parser's basis set, or None on failure."""
         if not BasisSetEngine:
             QMessageBox.critical(self, "Error", "BasisSetEngine not available")
             return None
@@ -725,6 +737,7 @@ class MODialog(QDialog):
         self.show_cube(path)
 
     def visualize_selected_mos(self, force=False):
+        """Queue the selected orbitals for cube generation/visualization."""
         # Batch generation for selected items
         selected = self.tree.selectedItems()
         if not selected:
@@ -748,6 +761,7 @@ class MODialog(QDialog):
         self.process_generation_queue()
 
     def process_generation_queue(self):
+        """Generate the cube for the next queued orbital, or finish the batch."""
         if not getattr(self, "generation_queue", None):
             # Done
             if (
@@ -980,6 +994,7 @@ class MODialog(QDialog):
         self.worker.start()
 
     def pick_color(self, which):
+        """Open a color picker for the +/- lobe and apply it to the swatch button."""
         current_col = QColor("red") if which == "p" else QColor("blue")
         # Try to parse from button style
         try:
@@ -1016,6 +1031,7 @@ class MODialog(QDialog):
             self.update_vis_only()
 
     def load_settings(self):
+        """Restore saved visualization presets and select the last-used one."""
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.presets = {
             "Default": {
@@ -1057,6 +1073,7 @@ class MODialog(QDialog):
                 logging.warning("Error loading settings: %s", e)
 
     def save_settings(self):
+        """Persist the visualization presets and the currently selected one."""
         # Save current presets and selection
         mo_settings = {
             "presets": {k: v for k, v in self.presets.items() if k != "Default"},
@@ -1066,6 +1083,7 @@ class MODialog(QDialog):
         save_section(self.settings_file, "mo_settings", mo_settings)
 
     def save_preset(self):
+        """Prompt for a name and save the current visualization settings as a preset."""
         name, ok = QInputDialog.getText(self, "Save Preset", "Preset Name:")
         if not ok or not name:
             return
@@ -1093,6 +1111,7 @@ class MODialog(QDialog):
         self.save_settings()
 
     def delete_preset(self):
+        """Delete the currently selected preset (Default cannot be deleted)."""
         curr = self.combo_presets.currentText()
         if curr == "Default":
             QMessageBox.warning(self, "Error", "Cannot delete Default preset.")
@@ -1111,6 +1130,7 @@ class MODialog(QDialog):
         self.save_settings()
 
     def apply_preset(self, name):
+        """Apply a named preset's values to the visualization controls."""
         if name not in self.presets:
             return
         data = self.presets[name]
@@ -1153,6 +1173,7 @@ class MODialog(QDialog):
         self.save_settings()  # Save last used
 
     def get_color_hex(self, which):
+        """Read the +/- lobe's current hex color from its swatch button's stylesheet."""
         # Extract from stylesheet
         btn = self.btn_color_p if which == "p" else self.btn_color_n
         style = btn.styleSheet()
@@ -1161,6 +1182,7 @@ class MODialog(QDialog):
         return "#ff0000" if which == "p" else "#0000ff"
 
     def set_btn_color(self, btn, hex_c):
+        """Paint a swatch button with hex_c, choosing readable text contrast."""
         col = QColor(hex_c)
         brightness = (col.red() * 299 + col.green() * 587 + col.blue() * 114) / 1000
         text_c = "black" if brightness > 128 else "white"
@@ -1169,10 +1191,12 @@ class MODialog(QDialog):
         )
 
     def update_vis_only(self):
+        """Redraw the last-shown cube with the current visualization settings."""
         if self.last_cube_path and os.path.exists(self.last_cube_path):
             self.show_cube(self.last_cube_path)
 
     def show_cube(self, path):
+        """Load a cube file and render its +/- isosurfaces in the 3D view."""
         if not CubeVisualizer:
             logging.warning("Warning: CubeVisualizer module not loaded.")
             QMessageBox.warning(
@@ -1205,6 +1229,7 @@ class MODialog(QDialog):
             self.last_cube_path = path
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
@@ -1245,6 +1270,7 @@ class MODialog(QDialog):
         event.accept()
 
     def export_csv(self):
+        """Prompt for a path and write the visible orbital tree to CSV."""
         default_path = get_default_export_path(
             self.parent_dlg.file_path, suffix="_mo_list", extension=".csv"
         )
@@ -1290,6 +1316,7 @@ class MODialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
 
     def show_mo_diagram(self):
+        """Open the orbital energy level diagram for the current orbitals."""
         if not EnergyDiagramDialog:
             return
 
@@ -1404,6 +1431,7 @@ class MODialog(QDialog):
         self.compare_dlg.show()
 
     def on_compare_closed(self):
+        """Clear the tracked reference once the MO comparison dialog closes."""
         self.compare_dlg = None
 
     def load_file_by_path(self, path):

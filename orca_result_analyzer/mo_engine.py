@@ -1,3 +1,5 @@
+"""Basis-set evaluation engine for MO cubes: grid construction and cube I/O."""
+
 import os
 import logging
 import re
@@ -53,6 +55,8 @@ def read_generation_settings(filepath):
 
 
 class CubeWriter:
+    """Writes a Gaussian-cube file for a computed MO grid."""
+
     @staticmethod
     def write(
         filepath,
@@ -544,6 +548,8 @@ class BasisSetEngine:
 
 
 class CalcWorker(QThread):
+    """Background thread that evaluates one MO on a grid and writes its cube file."""
+
     progress_sig = pyqtSignal(int)
     finished_sig = pyqtSignal(bool, str)
 
@@ -570,6 +576,7 @@ class CalcWorker(QThread):
         self._is_cancelled = False
 
     def run(self):
+        """Evaluate the orbital on its grid and write the resulting cube file."""
         try:
             # Guard: with a single grid point per axis span/(n-1) divides by
             # zero, which numpy turns into inf spacing and a silently corrupt

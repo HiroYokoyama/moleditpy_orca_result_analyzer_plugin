@@ -133,6 +133,7 @@ class MOSlot:
         self.set_color("n", colors[1])
 
     def set_color(self, which, hex_c):
+        """Paint the +/- lobe button with hex_c, choosing readable text contrast."""
         btn = self.btn_p if which == "p" else self.btn_n
         btn.setStyleSheet(
             f"background-color: {hex_c}; color: {contrast_text(hex_c)}; "
@@ -140,6 +141,7 @@ class MOSlot:
         )
 
     def color(self, which):
+        """Read the +/- lobe's current hex color from its button's stylesheet."""
         btn = self.btn_p if which == "p" else self.btn_n
         style = btn.styleSheet()
         if "background-color:" in style:
@@ -147,6 +149,7 @@ class MOSlot:
         return "#ff0000" if which == "p" else "#0000ff"
 
     def is_on(self):
+        """Whether this slot's Show checkbox is checked."""
         return self.check_on.isChecked()
 
     def selection(self):
@@ -191,6 +194,8 @@ class MOSlot:
 
 
 class MOCompareDialog(QDialog):
+    """Dialog rendering up to four orbitals' isosurfaces side by side in 3D."""
+
     def __init__(self, parent):
         super().__init__(parent)
         self.parent_dlg = parent
@@ -326,6 +331,7 @@ class MOCompareDialog(QDialog):
             self.btn_update.setStyleSheet("")
 
     def setup_ui(self):
+        """Build the four orbital-slot boxes and the update/close controls."""
         layout = QVBoxLayout(self)
 
         info = QLabel(
@@ -447,6 +453,7 @@ class MOCompareDialog(QDialog):
         return os.path.join(os.path.dirname(__file__), "settings.json")
 
     def load_settings(self):
+        """Restore each slot's saved appearance from settings.json."""
         path = self.settings_path()
         if not os.path.exists(path):
             return
@@ -458,6 +465,7 @@ class MOCompareDialog(QDialog):
             slot.from_settings(data)
 
     def save_settings(self):
+        """Persist each slot's appearance to settings.json."""
         path = self.settings_path()
         save_section(
             path, "mo_compare", {"slots": [slot.to_settings() for slot in self.slots]}
@@ -491,6 +499,7 @@ class MOCompareDialog(QDialog):
     # -- interaction -------------------------------------------------------
 
     def pick_slot_color(self, slot, which):
+        """Open a color picker for a slot's +/- lobe and re-render on acceptance."""
         from PyQt6.QtGui import QColor
 
         col = QColorDialog.getColor(QColor(slot.color(which)), self, "Select Color")
@@ -537,6 +546,7 @@ class MOCompareDialog(QDialog):
             self.refresh_update_button()
 
     def _cube_path(self, display_id):
+        """Resolve a display id to its cube file path via the parent MO dialog."""
         try:
             return self.parent_dlg.get_cube_path(display_id)
         except (AttributeError, RuntimeError) as e:
@@ -546,6 +556,7 @@ class MOCompareDialog(QDialog):
             return None
 
     def render_all(self):
+        """Draw every enabled slot's isosurfaces (skipping any missing cube)."""
         if self._suspend:
             return
         if not CubeVisualizer:
@@ -609,6 +620,7 @@ class MOCompareDialog(QDialog):
         self.refresh_update_button()
 
     def clear_all(self):
+        """Turn off every slot and remove all their 3D actors."""
         self._suspend += 1
         try:
             for slot in self.slots:
@@ -650,10 +662,12 @@ class MOCompareDialog(QDialog):
     # -- teardown ----------------------------------------------------------
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Save settings and remove every slot's 3D actors before closing."""
         self.save_settings()
         for slot in self.slots:
             self._remove_actors(slot.prefix)
