@@ -84,8 +84,8 @@ class _ElectronicParsingMixin:
                     if all(p.isdigit() for p in parts):
                         [int(p) for p in parts]
                         is_header = True
-                except (IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (IndexError, TypeError, ValueError) as e:
+                    logging.debug("MO coefficients: could not check line for an MO-index header: %s", e)
 
                 if is_header:
                     current_mos = [int(p) for p in parts]
@@ -141,16 +141,24 @@ class _ElectronicParsingMixin:
                                         )
                                         self.data["mo_coeffs"][key]["occ"] = occs[k]
                                 curr += 2  # Skip these 2 lines
-                            except (KeyError, IndexError, TypeError, ValueError) as _e:
-                                logging.warning("silenced: %s", _e)
+                            except (KeyError, IndexError, TypeError, ValueError) as e:
+                                logging.warning(
+                                    "MO coefficients: could not parse energy/occupation values for MOs %s: %s",
+                                    current_mos,
+                                    e,
+                                )
                     except (
                         AttributeError,
                         KeyError,
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
-                        logging.warning("silenced: %s", _e)
+                    ) as e:
+                        logging.warning(
+                            "MO coefficients: could not read the energy/occupation lines after MOs %s: %s",
+                            current_mos,
+                            e,
+                        )
 
                     curr += 1
                     continue
@@ -199,16 +207,24 @@ class _ElectronicParsingMixin:
                                     IndexError,
                                     TypeError,
                                     ValueError,
-                                ) as _e:
-                                    logging.warning("silenced: %s", _e)
+                                ) as e:
+                                    logging.warning(
+                                        "MO coefficients: could not parse coefficient %r for atom %d orbital %s: %s",
+                                        v_str,
+                                        atom_idx,
+                                        orb,
+                                        e,
+                                    )
                     except (
                         AttributeError,
                         KeyError,
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
-                        logging.warning("silenced: %s", _e)
+                    ) as e:
+                        logging.warning(
+                            "MO coefficients: could not parse the coefficient line %r: %s", line, e
+                        )
                 curr += 1
 
     def parse_orbital_energies(self):
@@ -313,8 +329,8 @@ class _ElectronicParsingMixin:
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
-                        logging.warning("silenced: %s", _e)
+                    ) as e:
+                        logging.warning("Orbital energies: could not parse line %r: %s", line, e)
 
                 curr += 1
 
@@ -404,8 +420,10 @@ class _ElectronicParsingMixin:
                     IndexError,
                     TypeError,
                     ValueError,
-                ) as _e:
-                    logging.warning("silenced: %s", _e)
+                ) as e:
+                    logging.warning(
+                        "Basis set: could not parse the %s shell for atom %s: %s", sh_type, current_sym, e
+                    )
 
             curr += 1
             if curr > start_idx + 5000:

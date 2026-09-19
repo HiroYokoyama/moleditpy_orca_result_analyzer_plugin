@@ -54,8 +54,8 @@ class _SpectraParsingMixin:
                         self.data["nmr_shielding"].append(
                             {"atom_idx": idx, "atom_sym": sym, "shielding": val}
                         )
-                    except (KeyError, IndexError, TypeError, ValueError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (KeyError, IndexError, TypeError, ValueError) as e:
+                        logging.warning("NMR: could not parse the shielding row %r: %s", line, e)
                 curr += 1
 
         # Parse Couplings
@@ -157,8 +157,8 @@ class _SpectraParsingMixin:
                             IndexError,
                             TypeError,
                             ValueError,
-                        ) as _e:
-                            logging.warning("silenced: %s", _e)
+                        ) as e:
+                            logging.warning("NMR: could not parse a spin-spin coupling value from %r: %s", line, e)
 
                 curr += 1
 
@@ -326,18 +326,18 @@ class _SpectraParsingMixin:
                                 # Reading eV here matters when the detailed block (PASS 1) was absent
                                 try:
                                     entry["energy_ev"] = float(parts[arrow_idx + 2])
-                                except (IndexError, TypeError, ValueError) as _e:
-                                    logging.warning("silenced: %s", _e)
+                                except (IndexError, TypeError, ValueError) as e:
+                                    logging.debug("TD-DFT: could not parse the eV energy for state %d: %s", s_id, e)
 
                                 try:
                                     entry["energy_cm"] = float(parts[arrow_idx + 3])
-                                except (IndexError, TypeError, ValueError) as _e:
-                                    logging.warning("silenced: %s", _e)
+                                except (IndexError, TypeError, ValueError) as e:
+                                    logging.debug("TD-DFT: could not parse the cm**-1 energy for state %d: %s", s_id, e)
 
                                 try:
                                     entry["energy_nm"] = float(parts[arrow_idx + 4])
-                                except (IndexError, TypeError, ValueError) as _e:
-                                    logging.warning("silenced: %s", _e)
+                                except (IndexError, TypeError, ValueError) as e:
+                                    logging.debug("TD-DFT: could not parse the nm wavelength for state %d: %s", s_id, e)
                     except (
                         AttributeError,
                         KeyError,
@@ -387,8 +387,8 @@ class _SpectraParsingMixin:
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
-                        logging.warning("silenced: %s", _e)
+                    ) as e:
+                        logging.warning("TD-DFT: could not parse the short-format excitation row %r: %s", line, e)
 
                 curr += 1
 
@@ -505,8 +505,8 @@ class _SpectraParsingMixin:
                                 try:
                                     val = float(val_matches[-1])
                                     self.data["thermal"][val_key] = val
-                                except ValueError as _e:
-                                    logging.warning("silenced: %s", _e)
+                                except ValueError as e:
+                                    logging.warning("Thermal: could not parse %s value from %r: %s", val_key, pre_eh, e)
                         else:
                             # Fallback: take the last numeric match
                             matches = re.findall(
@@ -516,8 +516,8 @@ class _SpectraParsingMixin:
                                 try:
                                     val = float(matches[-1])
                                     self.data["thermal"][val_key] = val
-                                except ValueError as _e:
-                                    logging.warning("silenced: %s", _e)
+                                except ValueError as e:
+                                    logging.warning("Thermal: could not parse %s value from %r: %s", val_key, line, e)
                 curr += 1
 
             # Post-processing: Calculate H correction (H - E_el) more accurately
@@ -558,8 +558,8 @@ class _SpectraParsingMixin:
                     val = float(parts[-1])
                     self.data["scf_energy"] = val
                     break
-                except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (KeyError, IndexError, TypeError, ValueError) as e:
+                    logging.warning("Thermal: could not parse the final single-point energy from %r: %s", line, e)
 
     def parse_frequencies(self):
         self.data["frequencies"] = []
@@ -605,8 +605,8 @@ class _SpectraParsingMixin:
                         self.data["frequencies"].append(
                             {"freq": val, "ir": 0.0, "raman": 0.0, "vector": []}
                         )
-                    except (KeyError, IndexError, TypeError, ValueError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (KeyError, IndexError, TypeError, ValueError) as e:
+                        logging.warning("Frequencies: could not parse the vibrational frequency row %r: %s", line, e)
                 elif len(self.data["frequencies"]) > 0 and ":" not in line:
                     # Maybe end of block
                     break
