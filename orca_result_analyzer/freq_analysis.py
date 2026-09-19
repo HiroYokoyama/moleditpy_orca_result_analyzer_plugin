@@ -98,8 +98,8 @@ class FreqSpectrumWindow(QWidget):
                     self.chk_auto_x.setChecked(bool(settings["spec_auto_x"]))
                 if "spec_auto_y" in settings:
                     self.chk_auto_y.setChecked(bool(settings["spec_auto_y"]))
-            except (OSError, KeyError, TypeError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, KeyError, TypeError, ValueError) as e:
+                logging.warning("Frequency analysis: could not load spectrum display settings: %s", e)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -928,8 +928,8 @@ class FrequencyDialog(QDialog):
                         tree_item, QAbstractItemView.ScrollHint.PositionAtCenter
                     )
                     break
-            except (RuntimeError, AttributeError, TypeError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, TypeError, ValueError) as e:
+                logging.debug("Frequency analysis: could not match tree item to mode index %d: %s", target_idx, e)
             it += 1
 
     def on_mode_selected(self, current, previous):
@@ -969,8 +969,8 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Frequency analysis: could not remove the old displacement vector actor: %s", e)
             self.vector_actor = None
         self._clear_dipole_actor()
 
@@ -1023,8 +1023,8 @@ class FrequencyDialog(QDialog):
             return
         try:
             self.mw.plotter.remove_actor(self.dipole_actor)
-        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+            logging.debug("Frequency analysis: could not remove the dipole vector actor: %s", e)
         self.dipole_actor = None
 
     def update_dipole_view(self):
@@ -1144,8 +1144,8 @@ class FrequencyDialog(QDialog):
                 if self.vector_actor:
                     try:
                         self.mw.plotter.remove_actor(self.vector_actor)
-                    except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                        logging.debug("Frequency analysis: could not remove the vector actor when vectors were disabled: %s", e)
                     self.vector_actor = None
 
         except Exception as e:
@@ -1229,8 +1229,8 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Frequency analysis: could not remove the vector actor before redraw: %s", e)
             self.vector_actor = None
 
         vecs = self.frequencies[self.current_mode_idx].get("vector", [])
@@ -1499,8 +1499,8 @@ class FrequencyDialog(QDialog):
         if self.vector_actor:
             try:
                 self.mw.plotter.remove_actor(self.vector_actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Frequency analysis: could not remove the vector actor on close: %s", e)
         # The dipole arrow is a separate actor and outlives the dialog if it
         # is not removed here -- it would stay in the 3D view after closing.
         self._clear_dipole_actor()
@@ -1576,8 +1576,8 @@ class FrequencyDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, ValueError) as e:
+                logging.warning("Frequency analysis: could not read existing settings from %s: %s", self.settings_file, e)
 
         freq_settings = {
             "sf_a": self.spin_sf_a.value(),

@@ -516,8 +516,8 @@ class ForceViewerDialog(QDialog):
                 # If currently visualizing, update
                 if self.btn_visualize.isChecked():
                     self.update_vectors()
-        except Exception as _e:
-            logging.warning("silenced: %s", _e)
+        except Exception as e:
+            logging.warning("Force analysis: could not auto-scale the gradient vector display: %s", e)
 
     def _setup_trajectory_controls(self, layout):
         """Setup trajectory navigation controls"""
@@ -639,8 +639,8 @@ class ForceViewerDialog(QDialog):
         if getattr(self, "graph_dlg", None) is not None:
             try:
                 self.graph_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning("Force analysis: could not close the existing convergence graph window: %s", e)
 
         # pass current_step_idx so it can draw a vertical line for the current frame
         current_idx = getattr(self, "current_step_idx", None)
@@ -906,8 +906,8 @@ class ForceViewerDialog(QDialog):
             try:
                 charge = self.parser.data.get("charge", 0) if self.parser else 0
                 determine_bonds_without_dummies(mol, charge=charge, bond_orders=True)
-            except (RuntimeError, AttributeError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, ValueError) as e:
+                logging.warning("Force analysis: could not determine bonds/bond orders for the trajectory frame: %s", e)
 
         final_mol = mol.GetMol()
 
@@ -1066,8 +1066,8 @@ class ForceViewerDialog(QDialog):
         for actor in self.actors:
             try:
                 mw.plotter.remove_actor(actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Force analysis: could not remove a force-vector actor: %s", e)
 
         self.actors = []
         mw.plotter.render()
@@ -1083,8 +1083,8 @@ class ForceViewerDialog(QDialog):
         if getattr(self, "graph_dlg", None) is not None:
             try:
                 self.graph_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning("Force analysis: could not close the convergence graph window on close: %s", e)
             self.graph_dlg = None
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.
@@ -1112,8 +1112,8 @@ class ForceViewerDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, ValueError) as e:
+                logging.warning("Force analysis: could not read existing settings from %s: %s", self.settings_file, e)
 
         force_settings = {
             # "scale": self.spin_scale.value(), # Do not save scale
