@@ -92,8 +92,8 @@ class ThermalTableDialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, ValueError) as e:
+                logging.warning("Thermal analysis: could not read existing settings from %s: %s", self.settings_file, e)
 
         thermal_settings = {"show_details": self.chk_details.isChecked()}
 

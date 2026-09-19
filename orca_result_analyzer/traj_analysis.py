@@ -185,7 +185,7 @@ class TrajectoryResultDialog(QDialog):
                         loaded = True
                         break
                     except Exception as e:
-                        logging.warning("silenced: %s", e)
+                        logging.warning("Trajectory: could not auto-load candidate trajectory file %s: %s", path, e)
 
             if not loaded and self.base_dir:
                 # 2. Heuristic: look for unique *_MEP_trj.xyz in base_dir
@@ -199,8 +199,8 @@ class TrajectoryResultDialog(QDialog):
                         full_path = os.path.join(self.base_dir, f_cands[0])
                         self.load_external_trj(full_path, silent=True)
                         loaded = True
-                except (OSError, IndexError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (OSError, IndexError) as e:
+                    logging.warning("Trajectory: could not scan %s for a unique _MEP_trj.xyz file: %s", self.base_dir, e)
 
             if not loaded:
                 # 3. Last resort: prompt user
@@ -632,13 +632,13 @@ class TrajectoryResultDialog(QDialog):
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug("Trajectory: could not remove the old highlight marker: %s", e)
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug("Trajectory: could not remove the old highlight line: %s", e)
 
         if not self.display_energies or idx < 0 or idx >= len(self.display_energies):
             return
@@ -865,39 +865,39 @@ class TrajectoryResultDialog(QDialog):
                 if hasattr(mw.ui_manager, "enter_3d_viewer_mode"):
                     try:
                         mw.ui_manager.enter_3d_viewer_mode()
-                    except (AttributeError, RuntimeError) as _e:
-                        logging.warning("[traj_analysis.py] silenced: %s", _e)
+                    except (AttributeError, RuntimeError) as e:
+                        logging.warning("Trajectory: could not switch the main window into 3D viewer mode: %s", e)
                 elif hasattr(mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
-                    except (AttributeError, RuntimeError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (AttributeError, RuntimeError) as e:
+                        logging.warning("Trajectory: could not switch the main window into 3D viewer mode: %s", e)
                 else:
                     try:
                         self.context.set_3d_features_enabled(True)
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
-                    except Exception as _e:
-                        logging.warning("silenced: %s", _e)
+                    except Exception as e:
+                        logging.warning("Trajectory: could not enable 3D features / minimize the 2D panel: %s", e)
             elif hasattr(mw, "init_manager") and hasattr(mw.init_manager, "splitter"):
                 # Fallback for manual splitter manipulation if ui_manager is missing
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
-                except IndexError as _e:
-                    logging.warning("silenced: %s", _e)
+                except IndexError as e:
+                    logging.warning("Trajectory: could not resize the main-window splitter for 3D mode: %s", e)
 
             # Reset Camera
             if self.context:
                 try:
                     self.context.reset_3d_camera()
-                except (AttributeError, RuntimeError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (AttributeError, RuntimeError) as e:
+                    logging.warning("Trajectory: could not reset the 3D camera via the host context: %s", e)
             elif hasattr(mw, "plotter") and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
-                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                    logging.warning("Trajectory: could not reset the 3D camera: %s", e)
 
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
@@ -1048,14 +1048,14 @@ class TrajectoryResultDialog(QDialog):
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug("Trajectory: could not remove the highlight marker on selection clear: %s", e)
             del self._highlight_marker
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug("Trajectory: could not remove the highlight line on selection clear: %s", e)
             del self._highlight_line
 
         self.lbl_info.setText("Selection Cleared")
