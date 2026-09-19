@@ -414,8 +414,8 @@ class MODialog(QDialog):
             local_idx = -1
             try:
                 local_idx = int(mo_idx_val)
-            except (TypeError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (TypeError, ValueError) as e:
+                logging.warning("MO: could not parse MO index %r as an integer: %s", mo_idx_val, e)
 
             if spin in spin_homo_idx:
                 h = spin_homo_idx[spin]
@@ -462,8 +462,8 @@ class MODialog(QDialog):
                 path = self.get_cube_path(label_id)
                 if path and os.path.exists(path):
                     bg_color = QColor(240, 255, 240)  # Light Green
-            except Exception as _e:
-                logging.warning("silenced: %s", _e)
+            except Exception as e:
+                logging.warning("MO: could not check for an existing cube file for %s: %s", label_id, e)
 
             item = QTreeWidgetItem(
                 [label_id, homo_lumo_label, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"]
@@ -525,8 +525,8 @@ class MODialog(QDialog):
             path = self.get_cube_path(display_id)
             if path and os.path.exists(path):
                 self.show_cube(path)
-        except Exception as _e:
-            logging.warning("silenced: %s", _e)
+        except Exception as e:
+            logging.warning("MO: could not auto-load the cached cube for %s: %s", display_id, e)
 
     def on_selection_changed(self):
         items = self.tree.selectedItems()
@@ -546,8 +546,8 @@ class MODialog(QDialog):
                             # Use key directly
                             if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
-            except (KeyError, IndexError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (KeyError, IndexError) as e:
+                logging.warning("MO: could not check mo_coeffs for key %r: %s", key, e)
 
         self.btn_vis.setEnabled(has_coeffs)
         if items and not has_coeffs:
@@ -873,8 +873,8 @@ class MODialog(QDialog):
             if not os.path.exists(out_dir):
                 try:
                     os.makedirs(out_dir)
-                except OSError as _e:
-                    logging.warning("silenced: %s", _e)
+                except OSError as e:
+                    logging.warning("MO: could not create cube output directory %s: %s", out_dir, e)
 
         # A silent batch must not steal what the main view is showing: an
         # update_vis_only() afterwards would redraw somebody else's orbital.
@@ -978,8 +978,8 @@ class MODialog(QDialog):
             if "background-color:" in style:
                 c_str = style.split("background-color:")[1].split(";")[0].strip()
                 current_col = QColor(c_str)
-        except (RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError, IndexError) as e:
+            logging.warning("MO: could not read the current %s-lobe color from the button style: %s", which, e)
 
         col = QColorDialog.getColor(current_col, self, "Select Color")
         if col.isValid():
@@ -1048,8 +1048,8 @@ class MODialog(QDialog):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
                     all_settings = json.load(f)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, ValueError) as e:
+                logging.warning("MO: could not read existing settings from %s: %s", self.settings_file, e)
 
         mo_settings = {
             "presets": {k: v for k, v in self.presets.items() if k != "Default"},
@@ -1212,15 +1212,15 @@ class MODialog(QDialog):
         if getattr(self, "energy_dlg", None) is not None and self.energy_dlg:
             try:
                 self.energy_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning("MO: could not close the energy-components sub-dialog: %s", e)
             self.energy_dlg = None
 
         if getattr(self, "compare_dlg", None) is not None and self.compare_dlg:
             try:
                 self.compare_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning("MO: could not close the MO comparison sub-dialog: %s", e)
             self.compare_dlg = None
 
         if hasattr(self.parent_dlg, "mw"):
@@ -1386,9 +1386,9 @@ class MODialog(QDialog):
                 self.compare_dlg.raise_()
                 self.compare_dlg.activateWindow()
                 return
-            except RuntimeError as _e:
+            except RuntimeError as e:
                 # Underlying C++ object already gone; fall through and rebuild.
-                logging.warning("silenced: %s", _e)
+                logging.warning("MO: could not reuse the existing MO comparison dialog, rebuilding it: %s", e)
 
         self.compare_dlg = MOCompareDialog(self)
         self.compare_dlg.show()

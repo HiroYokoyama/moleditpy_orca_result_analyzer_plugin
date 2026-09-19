@@ -657,5 +657,5 @@ class CalcWorker(QThread):
             self.finished_sig.emit(True, self.output_path)
 
         except Exception as e:
-            logging.exception("silenced")
+            logging.exception("MO: cube generation failed for MO %s", self.mo_idx)
             self.finished_sig.emit(False, str(e))
