@@ -131,8 +131,8 @@ class DipoleDialog(QDialog):
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Dipole analysis: could not remove the old dipole arrow actor: %s", e)
             self.arrow_actor = None
 
         if not self.chk_show.isChecked():
@@ -208,8 +208,8 @@ class DipoleDialog(QDialog):
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
                 self.parent_dlg.mw.plotter.render()
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Dipole analysis: could not remove the dipole arrow actor on close: %s", e)
         # Clean up reference in parent
         if hasattr(self.parent_dlg, "dipole_dlg"):
             self.parent_dlg.dipole_dlg = None

@@ -45,8 +45,8 @@ def _open_orca_file(path, context):
     if existing is not None:
         try:
             existing.close()
-        except (RuntimeError, AttributeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError) as e:
+            logging.warning("Could not close the previous analyzer window: %s", e)
 
     # New result loaded — any atom colors applied to the previous molecule's
     # indices must not bleed onto this (possibly differently-indexed) one.
@@ -86,8 +86,8 @@ def _open_orca_analyzer_empty(context):
             existing.raise_()
             existing.activateWindow()
             return
-        except (RuntimeError, AttributeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError) as e:
+            logging.warning("Could not re-raise the existing analyzer window: %s", e)
 
     from .parser import OrcaParser
     from .gui import OrcaResultAnalyzerDialog
@@ -119,7 +119,7 @@ def _on_document_reset(context):
         try:
             win.close()
         except (RuntimeError, AttributeError) as e:
-            logging.warning("silenced: %s", e)
+            logging.warning("Could not close the analyzer window on document reset: %s", e)
 
     from .utils import clear_atom_color_overrides
 
@@ -146,8 +146,8 @@ def initialize(context):
                 if "* O   R   C   A *" in header or "Program Version" in header:
                     _open_orca_file(path, context)
                     return True
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (OSError, ValueError) as e:
+                logging.warning("Could not read dropped file %s to check for an ORCA header: %s", path, e)
         return False
 
     context.register_file_opener(".out", open_orca_file, priority=100)

@@ -275,13 +275,13 @@ class BondAnalysisDialog(QDialog):
         for actor in self._actors:
             try:
                 plotter.remove_actor(actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Could not remove a bond-highlight actor: %s", e)
         self._actors = []
         try:
             plotter.render()
-        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+            logging.debug("Could not render the plotter after clearing bond highlights: %s", e)
 
     def _highlight_atoms(self, indices):
         self._clear_highlight()
@@ -302,8 +302,8 @@ class BondAnalysisDialog(QDialog):
                         plotter.add_mesh(sphere, color="yellow", opacity=0.4)
                     )
             plotter.render()
-        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (ImportError, RuntimeError, AttributeError, IndexError) as e:
+            logging.warning("Bond analysis: could not highlight atoms %s in the 3D view: %s", indices, e)
 
     def _highlight_bond(self, i, j):
         self._clear_highlight()
@@ -326,8 +326,8 @@ class BondAnalysisDialog(QDialog):
                     plotter.add_mesh(sphere, color="orange", opacity=0.4)
                 )
             plotter.render()
-        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (ImportError, RuntimeError, AttributeError, IndexError) as e:
+            logging.warning("Bond analysis: could not highlight the bond %d-%d in the 3D view: %s", i, j, e)
 
     @staticmethod
     def _single_selected_row(table):
