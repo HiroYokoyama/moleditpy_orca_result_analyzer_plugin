@@ -846,7 +846,8 @@ class FrequencyDialog(QDialog):
             self.combo_preset.setCurrentText(name)
             self.save_settings()
 
-    def apply_preset(self, index=None):
+    def apply_preset(self, _index=None):
+        # _index absorbs QComboBox.activated(int); the preset is read from the combo.
         preset = self.combo_preset.currentText()
         is_manual = preset == "Manual"
         self.spin_sf_a.setEnabled(is_manual)
