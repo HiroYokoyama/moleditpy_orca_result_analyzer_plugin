@@ -1,3 +1,5 @@
+"""Trajectory/scan analysis dialog: energy profile plot, structure playback, MEP loading and export."""
+
 import csv
 import os
 import matplotlib
@@ -44,13 +46,18 @@ except ImportError:
 
 
 class MplCanvas(FigureCanvasQTAgg):
+    """Matplotlib canvas embedding a single figure/axes for the energy profile plot."""
+
     def __init__(self, parent=None, width=5, height=4, dpi=100):
+        """Create the figure and single subplot backing this canvas."""
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
         super(MplCanvas, self).__init__(self.fig)
 
 
 class TrajectoryResultDialog(QDialog):
+    """Trajectory/scan dialog: energy profile plot, structure playback and MEP/export controls."""
+
     def __init__(
         self,
         gl_widget,
@@ -211,6 +218,7 @@ class TrajectoryResultDialog(QDialog):
                 QTimer.singleShot(200, self.load_mep_trj)
 
     def init_ui(self):
+        """Build the step slider, view/energy/axis toggles and playback/export buttons."""
         # 2. Controls
         ctrl_layout = QHBoxLayout()
 
@@ -396,6 +404,7 @@ class TrajectoryResultDialog(QDialog):
         self.layout().addLayout(btn_layout)
 
     def recalc_energies(self):
+        """Recompute the raw and display energies (and their baseline) for the current step list."""
         # Extract energies
         self.energies = [s["energy"] for s in self.steps]
         # Absolute and Relative energies in current unit
@@ -440,6 +449,7 @@ class TrajectoryResultDialog(QDialog):
         return final_points
 
     def on_traj_mode_changed(self):
+        """Switch between showing all trajectory steps and only the converged scan points."""
         # Only trigger on the newly checked button
         if not self.sender().isChecked():
             return
@@ -485,6 +495,7 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(0)
 
     def on_toggle_mode(self):
+        """Switch the plotted energy between absolute and relative-to-minimum."""
         self.show_relative = self.radio_rel.isChecked()
 
         # Disable Log Scale for Absolute Mode (usually negative energies)
@@ -501,10 +512,12 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(self.slider.value())
 
     def on_log_changed(self):
+        """Toggle log-scale plotting of the energy axis and redraw."""
         self.use_log_scale = self.chk_log.isChecked()
         self.plot_data()
 
     def on_x_axis_mode_changed(self):
+        """Switch the plotted X axis between step index and scan coordinate/path distance."""
         # Trigger fires for both the newly-checked and newly-unchecked button;
         # only act on the newly-checked one.
         sender = self.sender()
@@ -518,12 +531,14 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(self.slider.value())
 
     def on_unit_changed(self, unit):
+        """Switch the displayed energy unit and refresh the plot and step label."""
         self.current_unit = unit
         self.update_display_values()
         self.plot_data()
         self.on_step_changed(self.slider.value())
 
     def update_display_values(self):
+        """Recompute the display-unit energies from the raw Hartree values and current unit/mode."""
         factor = 1.0  # default Eh
         # High precision factors (CODATA 2018 / ORCA consistency)
         if self.current_unit == "kJ/mol":
@@ -539,6 +554,7 @@ class TrajectoryResultDialog(QDialog):
             self.display_energies = [e * factor for e in self.energies]
 
     def plot_data(self):
+        """Redraw the whole energy-profile plot from the current steps, axis mode and unit."""
         self.canvas.axes.clear()
         self._highlight_marker = None
         self._highlight_line = None
@@ -632,6 +648,7 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
 
     def highlight_point(self, idx):
+        """Draw the red marker and vertical guide line at the given step's position on the plot."""
         # Remove old markers
         if getattr(self, "_highlight_marker", None) is not None:
             try:
@@ -683,6 +700,7 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw_idle()
 
     def on_step_changed(self, idx):
+        """Update the highlight, info label and 3D structure for a newly selected step index."""
         if getattr(self, "_is_closing", False):
             return
         # Bounds check to prevent IndexError during mode transitions
@@ -717,6 +735,7 @@ class TrajectoryResultDialog(QDialog):
         self.update_structure(step["atoms"], step["coords"])
 
     def update_structure(self, atoms, coords):
+        """Build an RDKit molecule from a step's atoms/coordinates and push it to the 3D view."""
         if not atoms:
             return
         # RDKit build
@@ -757,12 +776,14 @@ class TrajectoryResultDialog(QDialog):
             self.gl_widget.draw_molecule_3d(final_mol)
 
     def on_scroll(self, event):
+        """Step the slider one frame per mouse-wheel notch over the plot."""
         if event.button == "up":
             self.slider.setValue(max(self.slider.value() - 1, 0))
         elif event.button == "down":
             self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
 
     def load_mep_trj(self):
+        """Prompt for an MEP trajectory XYZ file and load it to replace the current steps."""
         if getattr(self, "_is_closing", False):
             return
         start_path = self.base_dir if self.base_dir else ""
@@ -783,6 +804,7 @@ class TrajectoryResultDialog(QDialog):
         self.load_external_trj(path)
 
     def load_external_trj(self, path, silent=False):
+        """Parse an external XYZ trajectory file and replace the dialog's steps with it."""
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
@@ -935,6 +957,7 @@ class TrajectoryResultDialog(QDialog):
                 QMessageBox.critical(self, "Error", f"Failed to load TRJ:\n{e}")
 
     def on_pick(self, event):
+        """Jump the slider to the plot point clicked by the user."""
         # Disable pick if current steps have no atoms (NEB Summary)
         if self.steps and not self.steps[0].get("atoms", None):
             return
@@ -949,6 +972,7 @@ class TrajectoryResultDialog(QDialog):
             self.slider.setValue(idx)
 
     def on_hover(self, event):
+        """Show or hide the tooltip annotation as the mouse moves over a plotted point."""
         if not self.scatter:
             return
         vis = self.annot.get_visible()
@@ -985,6 +1009,7 @@ class TrajectoryResultDialog(QDialog):
                     self.canvas.draw_idle()
 
     def toggle_play(self):
+        """Start or stop step-by-step playback of the trajectory."""
         # Disable play if no atoms
         if self.steps and not self.steps[0].get("atoms", None):
             return
@@ -1013,11 +1038,13 @@ class TrajectoryResultDialog(QDialog):
             self.is_playing = True
 
     def on_fps_changed(self):
+        """Apply a changed FPS spin box value to the running playback timer."""
         if self.is_playing:
             fps = self.spin_fps.value()
             self.timer.start(int(1000 / fps))
 
     def next_frame(self):
+        """Advance the slider one step, looping or stopping playback at the end per the Loop checkbox."""
         idx = self.slider.value() + 1
         if idx >= len(self.steps):
             if self.chk_loop.isChecked():
@@ -1029,6 +1056,7 @@ class TrajectoryResultDialog(QDialog):
         self.slider.setValue(idx)
 
     def prev_frame(self):
+        """Step the slider back one frame, wrapping to the last step if Loop is checked."""
         idx = self.slider.value() - 1
         if idx < 0:
             if self.chk_loop.isChecked():
@@ -1038,16 +1066,19 @@ class TrajectoryResultDialog(QDialog):
         self.slider.setValue(idx)
 
     def go_to_first_frame(self):
+        """Stop playback and jump the slider to the first step."""
         if self.is_playing:
             self.toggle_play()
         self.slider.setValue(0)
 
     def go_to_last_frame(self):
+        """Stop playback and jump the slider to the last step."""
         if self.is_playing:
             self.toggle_play()
         self.slider.setValue(len(self.steps) - 1)
 
     def save_graph(self):
+        """Prompt for a path and save the energy profile plot as an image."""
         # Hide annotation before saving
         was_visible = self.annot.get_visible()
         self.annot.set_visible(False)
@@ -1068,6 +1099,7 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
 
     def clear_selection(self):
+        """Remove the plot's highlight marker/line and clear the step info label."""
         # Remove highlight markers and line
         if getattr(self, "_highlight_marker", None) is not None:
             try:
@@ -1092,6 +1124,7 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
 
     def save_csv(self):
+        """Prompt for a path and export the step/energy/coordinate data as CSV."""
         default_path = get_default_export_path(
             self.output_path, suffix="_traj_data", extension=".csv"
         )
@@ -1132,6 +1165,7 @@ class TrajectoryResultDialog(QDialog):
 
     # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PyQt6-free
     def save_gif(self):
+        """Prompt for GIF settings and export a playback loop of all steps as an animated GIF."""
         if not HAS_PIL:
             QMessageBox.warning(self, "Error", "PIL (Pillow) not installed.")
             return
@@ -1235,6 +1269,7 @@ class TrajectoryResultDialog(QDialog):
     # pylint: enable=duplicate-code
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
