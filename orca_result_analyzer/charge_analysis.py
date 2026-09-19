@@ -1,3 +1,5 @@
+"""Atomic Charges dialog: table, color-scheme gradient mapping and CSV export."""
+
 import csv
 import os
 import numpy as np
@@ -32,16 +34,20 @@ import logging
 
 # GradientBar Widget
 class GradientBar(QWidget):
+    """Widget painting a horizontal color gradient bar for the charge scale."""
+
     def __init__(self, parent=None, colors=None):
         super().__init__(parent)
         self.colors = colors if colors is not None else ["red", "white", "blue"]
         self.setFixedHeight(30)
 
     def set_colors(self, colors):
+        """Replace the gradient's color stops and repaint."""
         self.colors = colors
         self.update()
 
     def paintEvent(self, event):
+        """Fill the widget with the gradient and draw a border around it."""
         painter = QPainter(self)
         grad = self.get_gradient()
         painter.fillRect(self.rect(), grad)
@@ -51,6 +57,7 @@ class GradientBar(QWidget):
         painter.drawRect(0, 0, self.width() - 1, self.height() - 1)
 
     def get_gradient(self):
+        """Build a QLinearGradient spanning the widget from the stored colors."""
         grad = QLinearGradient(0, 0, self.width(), 0)
 
         n = len(self.colors)
@@ -64,6 +71,8 @@ class GradientBar(QWidget):
 
 
 class ChargeDialog(QDialog):
+    """Dialog listing per-atom charges with 3D color-mapping and CSV export."""
+
     def __init__(self, parent, all_charges):
         super().__init__(parent)
         self.parent_dlg = parent  # OrcaResultAnalyzerDialog
@@ -208,10 +217,12 @@ class ChargeDialog(QDialog):
         self.update_table()
 
     def on_type_change(self, text):
+        """Switch the displayed charge type when the combo box selection changes."""
         self.current_type = text
         self.update_table()
 
     def on_scheme_change(self, text):
+        """Apply the newly-selected color scheme to the gradient bar and save it."""
         self.current_scheme = text
         colors = self.schemes.get(text, ["red", "white", "blue"])
         self.grad_bar.set_colors(colors)
@@ -394,6 +405,7 @@ class ChargeDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
     def update_table(self):
+        """Rebuild the charge table's columns and rows for the current type."""
         data = self.all_charges.get(self.current_type, [])
         if not data:
             self.table.setRowCount(0)
@@ -481,6 +493,7 @@ class ChargeDialog(QDialog):
                 self.table.setItem(r, c, QTableWidgetItem(val_str))
 
     def apply_colors(self):
+        """Recolor the 3D atoms by charge using the current gradient scheme."""
         data = self.all_charges.get(self.current_type, [])
         if not data:
             return
@@ -645,6 +658,7 @@ class ChargeDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
 
     def export_csv(self):
+        """Prompt for a path and write the current charge table to CSV."""
         if getattr(self, "_csv_exporting", False):
             return
         self._csv_exporting = True
@@ -735,6 +749,7 @@ class ChargeDialog(QDialog):
             self._csv_exporting = False
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 

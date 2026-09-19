@@ -1,3 +1,5 @@
+"""Plugin entry points and metadata for the ORCA Result Analyzer plugin."""
+
 PLUGIN_NAME = "ORCA Result Analyzer"
 PLUGIN_VERSION = "3.15.6"
 PLUGIN_AUTHOR = "HiroYokoyama"
