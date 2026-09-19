@@ -227,3 +227,50 @@ def list_orca_output_files(directory: str) -> list[str]:
     except OSError as exc:
         logging.debug("list_orca_output_files: cannot list '%s' — %s", directory, exc)
         return []
+
+
+def _host_context(owner):
+    """Resolve the host ``PluginContext`` reachable from a dialog or widget.
+
+    Dialogs in this package reach the host through four different spellings
+    depending on how they were constructed: ``self.context`` on the ones the
+    host builds directly, and ``parent_dlg`` / ``freq_dialog`` / ``parent()``
+    on the child dialogs. Callers should not have to know which.
+    """
+    if owner is None:
+        return None
+    seen = []
+    candidate = owner
+    for _ in range(4):
+        if candidate is None or any(candidate is s for s in seen):
+            break
+        seen.append(candidate)
+        context = getattr(candidate, "context", None)
+        if context is not None and hasattr(context, "show_status_message"):
+            return context
+        for hop in ("parent_dlg", "freq_dialog", "parent_dialog"):
+            nxt = getattr(candidate, hop, None)
+            if nxt is not None:
+                break
+        else:
+            parent = getattr(candidate, "parent", None)
+            nxt = parent() if callable(parent) else parent
+        candidate = nxt
+    return None
+
+
+def notify(owner, message, timeout=3000):
+    """Show ``message`` in the host's status bar, or log it if there is no host.
+
+    Returns True when the host displayed it. Never raises: a status message is
+    never important enough to take down the slot that reported it.
+    """
+    context = _host_context(owner)
+    if context is not None:
+        try:
+            context.show_status_message(message, timeout)
+            return True
+        except (AttributeError, TypeError, RuntimeError) as exc:
+            logging.warning("Status message rejected by host: %s", exc)
+    logging.info("%s", message)
+    return False
