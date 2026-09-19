@@ -513,14 +513,14 @@ class NMRDialog(QDialog):
         selected_indices = []
         atom_symbols = set()
 
-        # 1. 選択されたピークから原子インデックスと元素記号を取得
+        # 1. Collect atom indices and element symbols from the selected peaks
         if getattr(self, "peaks_metadata", None) is not None and self.peaks_metadata:
             for peak_idx in self.selected_peak_indices:
                 if peak_idx < len(self.peaks_metadata):
                     _, _, _, atom_indices = self.peaks_metadata[peak_idx]
                     selected_indices.extend(atom_indices)
 
-                    # 核種のチェック用に元素記号を収集
+                    # Element symbols, for the same-nucleus check below
                     for idx in atom_indices:
                         item = next(
                             (d for d in self.data if d.get("atom_idx", None) == idx),
@@ -534,7 +534,7 @@ class NMRDialog(QDialog):
                             if sym:
                                 atom_symbols.add(sym)
 
-        # 2. 【物理バリデーション】異なる元素が混ざっていないかチェック
+        # 2. Physical validation: refuse to merge peaks of different elements
         if len(atom_symbols) > 1:
             QMessageBox.critical(
                 self,
@@ -544,7 +544,7 @@ class NMRDialog(QDialog):
             )
             return
 
-        # 3. 重複排除とソート
+        # 3. De-duplicate and sort
         selected_indices = sorted(list(set(selected_indices)))
 
         # Stale peak metadata can resolve the selection to zero atoms;
@@ -559,13 +559,13 @@ class NMRDialog(QDialog):
             )
             return
 
-        # 4. 既存のマージグループとの競合チェック
+        # 4. Check for conflicts with existing merge groups
         new_merged_peaks = []
         conflict_found = False
         for group in self.merged_peaks:
             if any(idx in group["indices"] for idx in selected_indices):
                 conflict_found = True
-                continue  # 競合する古いグループはスキップ（後でまとめて追加するため）
+                continue  # Drop the conflicting old group; the merged one is added below
             new_merged_peaks.append(group)
 
         if conflict_found:
@@ -578,12 +578,12 @@ class NMRDialog(QDialog):
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        # 5. 新しいグループの追加（保存は Save Merges ボタン / クローズ時の確認で）
+        # 5. Add the new group (persisted by Save Merges / the close-time prompt)
         new_merged_peaks.append({"indices": selected_indices})
         self.merged_peaks = new_merged_peaks
         self._mark_merges_dirty()
 
-        # 6. UIのクリーンアップ
+        # 6. UI cleanup
         self.clear_peak_selection()
         if self.parent_dlg and self.parent_dlg.context:
             self.parent_dlg.context.show_status_message(
@@ -690,7 +690,7 @@ class NMRDialog(QDialog):
     def save_settings(self):
         """Save NMR settings to JSON"""
         all_settings = {}
-        # 既存の設定を読み込む（MO設定などを消さないため）
+        # Load the existing settings so unrelated keys (e.g. MO) survive
         if os.path.exists(self.settings_file):
             try:
                 with open(self.settings_file, "r", encoding="utf-8") as f:
@@ -722,10 +722,10 @@ class NMRDialog(QDialog):
             "spectrum_linewidth": self.linewidth,
             "peak_intensity": self.peak_intensity,
             "last_reference": self.last_ref_name,
-            "custom_references": custom_refs,  # 既存の変数
+            "custom_references": custom_refs,
         }
 
-        # 全体設定の 'nmr_settings' キーだけを更新
+        # Update only the 'nmr_settings' key of the whole settings file
         all_settings["nmr_settings"] = current_nmr_settings
 
         try:
@@ -1135,16 +1135,16 @@ class NMRDialog(QDialog):
 
         target_ref = None
 
-        # 直前の選択がある、かつ "No Reference" ではない（Allモード由来ではない）場合
+        # A previous selection that did not come from "All" mode
         if current_ref and current_ref in items and current_ref != "No Reference":
             target_ref = current_ref
-        # 記憶していたリファレンスがある場合
+        # Otherwise the remembered reference
         elif self.last_ref_name and self.last_ref_name in items:
             target_ref = self.last_ref_name
-        # デフォルト(TMS)
+        # Otherwise the default, TMS
         elif "TMS" in items:
             target_ref = "TMS"
-        # それ以外
+        # Otherwise whatever is first
         elif items:
             target_ref = items[0]
 
@@ -1152,7 +1152,7 @@ class NMRDialog(QDialog):
             self.combo_ref.setCurrentText(target_ref)
             ref_data = refs.get(target_ref, {"delta_ref": 0.0, "sigma_ref": 0.0})
         else:
-            self.combo_ref.setCurrentText("Custom")  # または No Reference
+            self.combo_ref.setCurrentText("Custom")
             ref_data = {"delta_ref": 0.0, "sigma_ref": 0.0}
 
         # Update internal values
@@ -1389,10 +1389,10 @@ class NMRDialog(QDialog):
 
         if getattr(self, "chk_auto_x", None) is not None:
             self.chk_auto_x.blockSignals(True)
-            self.chk_auto_x.setChecked(False)  # ここで強制解除
+            self.chk_auto_x.setChecked(False)
             self.chk_auto_x.blockSignals(False)
 
-            # Auto RangeをOFFにしたので、入力欄（スピンボックス）は有効化しておく
+            # Auto Range is now off, so the spin boxes take over
             if getattr(self, "spin_x_max", None) is not None:
                 self.spin_x_max.setEnabled(True)
             if getattr(self, "spin_x_min", None) is not None:
@@ -1632,11 +1632,11 @@ class NMRDialog(QDialog):
         self.plot_spectrum()
 
     def plot_spectrum(self):
-        """NMRのスティックスペクトルを描画"""
+        """Draw the NMR stick spectrum"""
         self.figure.clear()
         ax = self.figure.add_subplot(111)
 
-        # シミュレーションモードなら別メソッドへ
+        # Simulation mode is drawn by a separate method
         if (
             getattr(self, "chk_real_spectrum", None) is not None
             and self.chk_real_spectrum.isChecked()
@@ -1644,7 +1644,7 @@ class NMRDialog(QDialog):
             self.plot_real_spectrum(ax)
             return
 
-        # 共通ロジックからピークを取得
+        # Peaks come from the shared builder
         old_metadata = getattr(self, "peaks_metadata", None) or []
         self.peaks_metadata = self._get_current_peaks()
         self._remap_selection_to_new_peaks(old_metadata)
@@ -1662,20 +1662,18 @@ class NMRDialog(QDialog):
             self.canvas.draw_idle()
             return
 
-        # リストから描画用の値を抽出（NameErrorを解決）
+        # Split the peak tuples into the two series matplotlib wants
         shifts = [p[0] for p in self.peaks_metadata]
         intensities = [p[1] for p in self.peaks_metadata]
 
-        # クリック判定用に保存
         self.current_shifts = shifts
 
-        # X軸の範囲とパディング
+        # X-axis range and padding
         min_shift, max_shift = min(shifts), max(shifts)
         padding = (
             max(0.5, (max_shift - min_shift) * 0.15) if max_shift > min_shift else 5.0
         )
 
-        # 描画
         markerline, stemlines, baseline = ax.stem(
             shifts, intensities, linefmt="b-", markerfmt="None", basefmt="k-"
         )
@@ -1683,7 +1681,6 @@ class NMRDialog(QDialog):
         stemlines.set_alpha(0.8)
         baseline.set_alpha(0.3)
 
-        # 軸の設定
         if self.chk_auto_x.isChecked():
             ax.set_xlim(max_shift + padding, min_shift - padding)
         else:
@@ -1701,13 +1698,12 @@ class NMRDialog(QDialog):
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         ax.grid(True, alpha=0.2, linestyle="--")
 
-        # タイトル
         display_nuc = self.get_nucleus_key(self.current_nucleus)
         ax.set_title(
             f"{display_nuc} NMR Stick Spectrum", fontsize=12, fontweight="bold", pad=20
         )
 
-        # 選択中ハイライトの再描画
+        # Redraw the highlight for the current selection
         if self.selected_peak_indices:
             self.highlight_selected_peaks()
 
@@ -1798,22 +1794,22 @@ class NMRDialog(QDialog):
 
     def _get_current_peaks(self):
         """
-        現在の核種フィルタ、マージ設定、リファレンス値に基づき、
-        プロットおよび解析用の共通ピークリストを生成する。
+        Build the peak list shared by the plot and the analysis views, honouring
+        the current nucleus filter, merge groups and reference values.
         Returns: List of (delta, intensity, is_merged, atom_indices)
         """
-        # 原子インデックスからデータへの高速ルックアップ用マップ
+        # Fast atom-index -> data lookup
         atom_map = {d["atom_idx"]: d for d in self.data}
-        # 現在の表示対象原子のインデックスセット
+        # Atoms currently on screen for this nucleus
         displayed_indices = {d["atom_idx"] for d in self.displayed_data}
 
         peaks = []
         processed_indices = set()
 
-        # 1. マージされたグループの処理
+        # 1. Merged groups
         for group in self.merged_peaks:
             indices = group["indices"]
-            # グループ内の原子が表示対象（現在の核種）に含まれているかチェック
+            # Include the group only if one of its atoms is on screen
             if any(idx in displayed_indices for idx in indices):
                 total_sigma = 0.0
                 valid_count = 0
@@ -1826,11 +1822,11 @@ class NMRDialog(QDialog):
                 if valid_count > 0:
                     avg_sigma = total_sigma / valid_count
                     avg_delta = self.delta_ref + (self.sigma_ref - avg_sigma)
-                    # 強度はマージされた原子数（積分値）
+                    # Intensity is the number of merged atoms (the integral)
                     peaks.append((avg_delta, float(len(indices)), True, indices))
                     processed_indices.update(indices)
 
-        # 2. 個別（マージされていない）原子の処理
+        # 2. Individual, unmerged atoms
         for item in self.displayed_data:
             idx = item.get("atom_idx", None)
             if idx not in processed_indices:
@@ -1838,7 +1834,7 @@ class NMRDialog(QDialog):
                 delta = self.delta_ref + (self.sigma_ref - sigma)
                 peaks.append((delta, 1.0, False, [idx]))
 
-        # 化学シフトの降順（NMRの慣習）でソートしておくと管理しやすい
+        # Descending chemical shift, the NMR convention
         return sorted(peaks, key=lambda x: x[0], reverse=True)
 
     def export_spectrum(self):
@@ -2334,9 +2330,9 @@ class NMRDialog(QDialog):
             self.canvas.draw_idle()
 
     def plot_real_spectrum(self, ax):
-        """Jカップリングを考慮したスペクトル描画（共通ロジック完全統合版）"""
+        """Draw the spectrum with J-coupling applied"""
 
-        # 1. 【共通ロジック】からピーク情報を取得し、既存コードが期待する変数名に代入
+        # 1. Peaks come from the shared builder
         peaks_to_simulate = self._get_current_peaks()
 
         if not peaks_to_simulate:
@@ -2351,13 +2347,13 @@ class NMRDialog(QDialog):
             self.canvas.draw_idle()
             return
 
-        # 2. クラス変数にも保存（クリック判定やハイライト用）
+        # 2. Keep them on the instance for click hit-testing and highlighting
         old_metadata = getattr(self, "peaks_metadata", None) or []
         self.peaks_metadata = peaks_to_simulate
         self._remap_selection_to_new_peaks(old_metadata)
         self.current_shifts = [p[0] for p in peaks_to_simulate]
 
-        # 3. 核種シンボルの定義
+        # 3. Nucleus symbol
         target_nuc_sym = self.current_nucleus
         if target_nuc_sym == "All":
             if self.displayed_data:
@@ -2365,7 +2361,7 @@ class NMRDialog(QDialog):
             else:
                 target_nuc_sym = "H"
 
-        # 4. 周波数と磁気回転比の計算
+        # 4. Frequency and gyromagnetic ratio
         base_freq_mhz = (
             self.spin_mhz.value()
             if getattr(self, "spin_mhz", None) is not None
@@ -2390,13 +2386,12 @@ class NMRDialog(QDialog):
             else 0.5
         )
 
-        # --- Jカップリングの計算とMultiplet生成 ---
+        # --- J-coupling and multiplet construction ---
         atom_to_group_size = {
             idx: len(g["indices"]) for g in self.merged_peaks for idx in g["indices"]
         }
         all_multiplets = []
 
-        # 5. ここからループ開始（peaks_to_simulate が定義されているのでエラーになりません）
         for shift, intensity, is_merged, atom_indices in peaks_to_simulate:
             peak_atoms_set = set(atom_indices)
             rep_item = next(
@@ -2407,7 +2402,7 @@ class NMRDialog(QDialog):
 
             couplings_list = []
 
-            # カップリング計算ロジック
+            # Coupling calculation
             if (
                 getattr(self, "chk_real_spectrum", None) is not None
                 and self.chk_real_spectrum.isChecked()
@@ -2471,7 +2466,7 @@ class NMRDialog(QDialog):
                         "NMR: Multiplet creation failed for shift=%.3f: %s", shift, e
                     )
 
-        # --- プロット範囲計算 ---
+        # --- Plot range ---
         if self.chk_auto_x.isChecked():
             shifts_all_sim = [p[0] for p in peaks_to_simulate]
             min_s, max_s = min(shifts_all_sim), max(shifts_all_sim)
@@ -2480,7 +2475,7 @@ class NMRDialog(QDialog):
         else:
             x_limit_max, x_limit_min = self.spin_x_max.value(), self.spin_x_min.value()
 
-        # シミュレーション範囲の計算
+        # Simulation range
         l_low = min(x_limit_min, x_limit_max) * spectrometer_freq
         l_high = max(x_limit_min, x_limit_max) * spectrometer_freq
         if l_low > l_high:
@@ -2495,7 +2490,7 @@ class NMRDialog(QDialog):
         y_total = np.zeros_like(x_hz_grid)
         gamma = width_hz / 2.0
 
-        # --- nmrsim計算またはフォールバック ---
+        # --- nmrsim, or the Lorentzian fallback ---
         nmrsim_success = False
         if all_multiplets and Spectrum:
             try:
@@ -2526,23 +2521,20 @@ class NMRDialog(QDialog):
                             gamma / (np.pi * ((x_hz_grid - v) ** 2 + gamma**2))
                         )
 
-        # 高さの正規化
+        # Normalise the heights
         max_p = max(p[1] for p in peaks_to_simulate) if peaks_to_simulate else 1.0
         if np.max(y_total) > 0:
             y_total = y_total / np.max(y_total) * max_p
 
-        # プロット
         ax.plot(x_hz_grid / spectrometer_freq, y_total, "b-", linewidth=1.2)
         if np.max(y_total) > 0:
             ax.set_ylim(0, np.max(y_total) * 1.3)
 
-        # スタイル設定
         ax.set_xlim(x_limit_max, x_limit_min)
         ax.set_xlabel("Chemical Shift δ (ppm)", fontsize=10, fontweight="bold")
         ax.set_ylabel("Intensity", fontsize=10, fontweight="bold")
         ax.tick_params(axis="both", which="major", labelsize=8)
 
-        # タイトル設定
         current_nucleus_title = self.current_nucleus
         display_nuc = self.get_nucleus_key(current_nucleus_title)
         ref_name_title = (
@@ -2571,11 +2563,9 @@ class NMRDialog(QDialog):
 
         self.figure.tight_layout()
 
-        # --- 修正3: イベント接続とハイライト更新 ---
-        # クリックイベントを再接続
         # self.canvas.mpl_connect('button_press_event', self.on_peak_click)
 
-        # 選択済みのピークがあればハイライト（赤い線やラベル）を再描画
+        # Redraw the highlight for the current selection
         if self.selected_peak_indices:
             self.highlight_selected_peaks()
 

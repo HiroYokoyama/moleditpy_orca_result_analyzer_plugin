@@ -2027,7 +2027,7 @@ class OrcaParser:
             curr = start_idx + 1
             header_found = False
 
-            # 1. ヘッダー検出 (テーブルの開始を確認するだけ)
+            # 1. Header detection (only confirms the table has started)
             while curr < len(self.lines) and curr < start_idx + 30:
                 line = self.lines[curr].strip()
                 if not line or "--------" in line:
@@ -2035,14 +2035,14 @@ class OrcaParser:
                     continue
 
                 u_line = line.upper()
-                # "TRANSITION" や "STATE" があり、かつ "ENERGY" や "WAVELENGTH" があればテーブルとみなす
+                # A table needs TRANSITION/STATE plus ENERGY/WAVELENGTH
                 if ("TRANSITION" in u_line or "STATE" in u_line) and (
                     "ENERGY" in u_line or "WAVELENGTH" in u_line
                 ):
                     header_found = True
                     break
 
-                # 古いフォーマット等の救済
+                # Fallback for older output formats
                 parts = line.split()
                 if len(parts) >= 3 and parts[0].isdigit():
                     header_found = True
@@ -2053,7 +2053,7 @@ class OrcaParser:
             if not header_found:
                 return
 
-            # 2. データ行の解析
+            # 2. Parse the data rows
             data_parsing_started = False
             while curr < len(self.lines):
                 line = self.lines[curr].strip()
@@ -2082,13 +2082,13 @@ class OrcaParser:
                 if (len(parts) > 0 and parts[0].isdigit()) or "->" in parts:
                     data_parsing_started = True
 
-                # --- パターンA: 矢印 "->" を含む標準フォーマット ---
-                # 例: 0-1A  ->  1-1A   2.780   22422   446.0   0.000 ...
+                # --- Pattern A: standard format containing the "->" arrow ---
+                # e.g. 0-1A  ->  1-1A   2.780   22422   446.0   0.000 ...
                 # idx:  0    1     2      3       4       5       6
                 if "->" in parts:
                     try:
                         arrow_idx = parts.index("->")
-                        # 矢印の位置を基準に相対的に取得
+                        # Columns are read relative to the arrow position
                         # arrow+1: Target State (1-1A)
                         # arrow+2: Energy (eV)
                         # arrow+3: Energy (cm-1)
@@ -2103,11 +2103,11 @@ class OrcaParser:
                                 s_id = int(match.group(1))
                                 entry = get_state(s_id)
 
-                                # 2. Values (強度)
+                                # 2. Values (intensity)
                                 entry[data_key] = float(parts[arrow_idx + 5])
 
-                                # 3. Energies (値が0なら埋める / 上書きする)
-                                # 詳細ブロック(PASS 1)が見つからなかった場合のためにここでeVを取得することが重要
+                                # 3. Energies (fill in when zero / overwrite)
+                                # Reading eV here matters when the detailed block (PASS 1) was absent
                                 try:
                                     entry["energy_ev"] = float(parts[arrow_idx + 2])
                                 except (IndexError, TypeError, ValueError) as _e:
@@ -2129,7 +2129,7 @@ class OrcaParser:
                         TypeError,
                         ValueError,
                     ):
-                        # パース失敗行はスキップ
+                        # Skip rows that fail to parse
                         logging.debug("Skipping unparseable TDDFT line", exc_info=True)
 
                 # --- Pattern B: short format, no arrow ---
