@@ -23,7 +23,7 @@ _PKG = os.path.normpath(
 
 # Ratchet. Lower it whenever handlers are narrowed; never raise it without a
 # reason in the commit message. Was 212 before the 3.12.2 narrowing pass, 50
-# before the 3.16.0 narrow-or-justify pass.
+# before the 4.0.0 narrow-or-justify pass.
 _MAX_BROAD_HANDLERS = 46
 
 # A surviving broad handler must name one of these on the `except` line or
