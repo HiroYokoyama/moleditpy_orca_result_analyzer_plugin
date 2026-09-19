@@ -1,3 +1,5 @@
+"""NMR dialog mixin: stick/simulated spectrum plotting, highlighting and 3D labels."""
+
 import re
 import logging
 from PyQt6.QtWidgets import QApplication

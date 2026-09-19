@@ -1,3 +1,5 @@
+"""NMR dialog mixin: merging equivalent peaks and persisting the merge choices."""
+
 import hashlib
 import os
 import json

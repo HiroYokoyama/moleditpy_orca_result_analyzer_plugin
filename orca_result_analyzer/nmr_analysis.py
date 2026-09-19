@@ -1,3 +1,5 @@
+"""NMR dialog: shielding/coupling tables, reference calibration and the spectrum tab."""
+
 import os
 import re
 import logging
@@ -361,6 +363,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         save_section(self.settings_file, "nmr_settings", current_nmr_settings)
 
     def setup_ui(self):
+        """Build the dialog's layout: filters, tables, plot tab and action buttons."""
         main_layout = QVBoxLayout(self)
 
         # 1. Reference & Element Filter Row
