@@ -1,3 +1,5 @@
+"""Main dialog: file loading, the 3D structure view, atom picking and analysis launchers."""
+
 import os
 from datetime import datetime
 from PyQt6.QtWidgets import (
@@ -39,6 +41,7 @@ class _ClickFilter(QObject):
         self._press_pos = None
 
     def eventFilter(self, obj, event):
+        """Fire the press/click callbacks for a non-drag left click on the widget."""
         t = event.type()
         if t == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
@@ -60,16 +63,20 @@ class _ClickFilter(QObject):
 
 
 class ElidedLabel(QLabel):
+    """Label that elides its text with an ellipsis to fit the current width."""
+
     def __init__(self, text="", parent=None):
         super().__init__(parent)
         self._full_text = text
         super().setText(text)
 
     def setText(self, text):
+        """Store the full text and redraw it elided to the current width."""
         self._full_text = text
         self._update_elided_text()
 
     def resizeEvent(self, event):
+        """Re-elide the text when the label is resized."""
         super().resizeEvent(event)
         self._update_elided_text()
 
@@ -179,6 +186,8 @@ def build_status_suffix(data):
 
 
 class OrcaResultAnalyzerDialog(QDialog):
+    """Main plugin window: loads ORCA output, drives the 3D view and analysis dialogs."""
+
     def __init__(self, parent, parser, file_path, context=None):
         super().__init__(parent)
         self.mw = parent
@@ -203,6 +212,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             sync_main_window_file(host, self.file_path, context)
 
     def showEvent(self, event):
+        """Shift the window right of the WM's default centered position on first show."""
         super().showEvent(event)
         # Shift right of the WM's default center-on-parent placement; only
         # on first show so a later existing.show() (re-raising an
@@ -229,6 +239,7 @@ class OrcaResultAnalyzerDialog(QDialog):
     # ------------------------------------------------------------------
 
     def dragEnterEvent(self, event):
+        """Accept a dragged folder or .out file, reject anything else."""
         mime = event.mimeData()
         if mime.hasUrls():
             for url in mime.urls():
@@ -239,6 +250,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         event.ignore()
 
     def dropEvent(self, event):
+        """Open a dropped folder via the file picker, or load a dropped .out directly."""
         for url in event.mimeData().urls():
             local = url.toLocalFile()
             if os.path.isdir(local):
@@ -266,6 +278,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             self.load_file(picker.selected_path)
 
     def init_ui(self):
+        """Build the menu bar, 3D viewer, file info panel and action buttons."""
         layout = QVBoxLayout(self)
 
         # Menu Bar (added as widget since QDialog doesn't have native menu bar)
@@ -799,6 +812,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 setattr(self, attr, None)
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
@@ -831,6 +845,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         )
 
     def open_file(self):
+        """Prompt for an .out file to load, or the directory picker on Shift+click."""
         # Shift+click → open directory picker instead
         if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.open_directory()
@@ -996,6 +1011,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 )
 
     def reload_file(self):
+        """Re-parse and refresh the view from the currently loaded file's path."""
         if self.file_path and os.path.exists(self.file_path):
             self.load_file(self.file_path)
         else:
@@ -1004,6 +1020,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             )
 
     def open_output_file(self):
+        """Open the loaded .out file in the OS's default text viewer."""
         if self.file_path and os.path.exists(self.file_path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.file_path))
         else:
@@ -1022,6 +1039,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self._open_directory_path(chosen_dir)
 
     def update_button_states(self):
+        """Enable/disable each analysis button based on what the parser found."""
         data = self.parser.data
 
         # Enable MO button if MO coefficients OR orbital energies exist
@@ -1107,6 +1125,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.btn_scf.setToolTip("" if has_scf else "No SCF iteration data found")
 
     def load_structure_3d(self, fit_camera=False):
+        """Build an RDKit mol from the parsed geometry and draw it in the host's 3D view."""
         # Helper to ensure the 3D structure is (re)drawn.
         #
         # Analysis dialogs redraw the optimized/final molecule on popup so the
@@ -1204,6 +1223,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             )
 
     def show_mo_analyzer(self):
+        """Open the MO Analyzer dialog on the parsed orbital coefficients/energies."""
         self.load_structure_3d()
         mo_coeffs = self.parser.data.get("mo_coeffs", None)
         orb_energies = self.parser.data.get("orbital_energies", None)
@@ -1223,6 +1243,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.mo_dlg.show()
 
     def show_freq(self):
+        """Open the Frequency dialog on the parsed vibrational modes."""
         self.load_structure_3d()  # Reset to final structure before opening
         freqs = self.parser.data.get("frequencies", [])
         if not freqs:
@@ -1241,6 +1262,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.freq_dlg.show()
 
     def show_trajectory(self):
+        """Open the Trajectory/NEB dialog on the parsed optimization or scan steps."""
         data = self.parser.data.get("scan_steps", [])
         if not data:
             QMessageBox.warning(
@@ -1289,6 +1311,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.conv_graph_dlg.show()
 
     def show_forces(self):
+        """Open the Force Viewer, or the convergence graph directly on Shift+click."""
         # Shift+click → open convergence graph directly instead
         if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.show_convergence_graph_direct()
@@ -1313,6 +1336,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.forces_dlg.show()
 
     def show_thermal(self):
+        """Open the Thermochemistry dialog on the parsed thermal data."""
         self.load_structure_3d()
         data = self.parser.data.get("thermal", {})
         if not data:
@@ -1327,6 +1351,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.thermal_dlg.show()
 
     def show_tddft(self):
+        """Open the TD-DFT dialog on the parsed excitation energies."""
         self.load_structure_3d()
         excitations = self.parser.data.get("tddft", [])
         if not excitations:
@@ -1342,6 +1367,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.tddft_dlg.show()
 
     def show_dipole(self):
+        """Open the Dipole Moment dialog on the parsed dipole data."""
         self.load_structure_3d()
         d = self.parser.data.get("dipoles", None)
         if not d:
@@ -1356,6 +1382,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.dipole_dlg.show()
 
     def show_charges(self):
+        """Open the Atomic Charges dialog on the parsed charge schemes."""
         self.load_structure_3d()
         charges = self.parser.data.get("charges", {})
         if not charges:
@@ -1370,6 +1397,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.charges_dlg.show()
 
     def show_nmr(self):
+        """Open the NMR dialog on the parsed shielding and coupling data."""
         self.load_structure_3d()
         data = self.parser.data.get("nmr_shielding", [])
         couplings = self.parser.data.get("nmr_couplings", [])
@@ -1402,12 +1430,14 @@ class OrcaResultAnalyzerDialog(QDialog):
         action.setVisible(nics_analyzer_available(self._nics_host()))
 
     def show_nics_analysis(self):
+        """Hand the current file to the NICS Analyzer plugin, if installed."""
         ok, message = open_nics_analyzer(self._nics_host(), self.file_path)
         if not ok:
             QMessageBox.information(self, "NICS Analysis", message)
         self._refresh_nics_action()
 
     def show_scf_trace(self):
+        """Open the SCF Trace dialog on the parsed convergence iterations."""
         self.load_structure_3d()
         data = self.parser.data.get("scf_traces", [])
         if not data:
@@ -1424,6 +1454,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.scf_dlg.show()
 
     def show_properties(self):
+        """Open the general Properties dialog on the full parsed data dict."""
         from .property_analysis import PropertiesDialog
 
         if getattr(self, "props_dlg", None) is not None:
@@ -1435,6 +1466,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.props_dlg.show()
 
     def show_bond_analysis(self):
+        """Open the Bond Analysis dialog on Mayer bond orders and NBO results."""
         from .bond_analysis import BondAnalysisDialog
 
         data = self.parser.data
@@ -1456,6 +1488,7 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.bond_dlg.show()
 
     def show_energy_components(self):
+        """Open the Energy Components dialog on the parsed post-HF energy terms."""
         from .energy_analysis import EnergyComponentsDialog
 
         if not self.parser.data.get("energy_components"):

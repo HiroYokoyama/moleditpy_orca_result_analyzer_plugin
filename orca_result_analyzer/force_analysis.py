@@ -1,3 +1,5 @@
+"""Force Analysis dialog: gradient/force table, 3D vector overlay and convergence graph."""
+
 import os
 import math
 import numpy as np
@@ -36,6 +38,8 @@ except ImportError:
 
 
 class ConvergenceGraphDialog(QDialog):
+    """Dialog plotting optimization convergence metrics against their thresholds."""
+
     def __init__(self, parent, traj_steps, current_idx=None):
         super().__init__(parent)
         self.setWindowTitle("Convergence Thresholds")
@@ -75,6 +79,7 @@ class ConvergenceGraphDialog(QDialog):
         self.redraw_graph()
 
     def redraw_graph(self):
+        """Replot the convergence graph for the currently selected metric."""
         self.figure.clear()
         selection = self.metric_combo.currentText()
         if not isinstance(selection, str) or not selection:
@@ -141,6 +146,7 @@ class ConvergenceGraphDialog(QDialog):
             QMessageBox.critical(self, "Export Error", str(e))
 
     def plot_data(self, traj_steps, current_idx, selection="All"):
+        """Draw the selected convergence metric(s) with threshold lines and markers."""
         display_keys = {
             "rms gradient": "RMS Grad",
             "max gradient": "MAX Grad",
@@ -360,6 +366,8 @@ class ConvergenceGraphDialog(QDialog):
 
 
 class ForceViewerDialog(QDialog):
+    """Dialog showing gradients/forces per atom with an optional 3D vector overlay."""
+
     def __init__(self, parent_dlg, gradients, parser=None):
         super().__init__(parent_dlg)
         self.setWindowTitle("Force Analysis")
@@ -628,6 +636,7 @@ class ForceViewerDialog(QDialog):
         layout.insertWidget(0, traj_group)
 
     def show_convergence_graph(self):
+        """Open (or refresh) the convergence-threshold graph window."""
         if getattr(self, "traj_steps", None) is None or not self.traj_steps:
             QMessageBox.warning(
                 self, "No Data", "No trajectory convergence data available."
@@ -1082,6 +1091,7 @@ class ForceViewerDialog(QDialog):
         mw.plotter.render()
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
@@ -1104,6 +1114,7 @@ class ForceViewerDialog(QDialog):
         event.accept()
 
     def load_settings(self):
+        """Restore the saved force-vector color."""
         if os.path.exists(self.settings_file):
             settings = load_section(self.settings_file, "force_settings")
             try:
@@ -1116,6 +1127,7 @@ class ForceViewerDialog(QDialog):
                 logging.warning("Error loading force settings: %s", e)
 
     def save_settings(self):
+        """Persist the force-vector color."""
         force_settings = {
             # "scale": self.spin_scale.value(), # Do not save scale
             # "reverse_vector": self.chk_reverse.isChecked() if hasattr(self, 'chk_reverse') else True,
