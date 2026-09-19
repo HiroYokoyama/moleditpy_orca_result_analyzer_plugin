@@ -15,6 +15,8 @@ from .bond_analysis import _make_table
 
 
 class PropertiesDialog(QDialog):
+    """Dialog listing scalar/global result properties (energy, charge, spin, ...)."""
+
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Properties")

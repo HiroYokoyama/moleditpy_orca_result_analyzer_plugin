@@ -1,3 +1,5 @@
+"""Thermochemistry dialog: enthalpy/entropy/free-energy table with CSV export."""
+
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -18,6 +20,8 @@ from .utils import notify
 
 
 class ThermalTableDialog(QDialog):
+    """Dialog listing thermochemistry values (enthalpy, entropy, free energy)."""
+
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Thermochemistry")
@@ -58,16 +62,19 @@ class ThermalTableDialog(QDialog):
         self.load_settings()
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Save settings before the dialog closes."""
         self.save_settings()
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.
         event.accept()
 
     def load_settings(self):
+        """Restore the saved 'show detailed values' preference."""
         if os.path.exists(self.settings_file):
             settings = load_section(self.settings_file, "thermal_settings")
             try:
@@ -84,10 +91,12 @@ class ThermalTableDialog(QDialog):
                 logging.warning("Error loading thermal settings: %s", e)
 
     def save_settings(self):
+        """Persist the 'show detailed values' preference."""
         thermal_settings = {"show_details": self.chk_details.isChecked()}
         save_section(self.settings_file, "thermal_settings", thermal_settings)
 
     def update_table(self):
+        """Rebuild the property/value table, including detail rows when enabled."""
         show_details = self.chk_details.isChecked()
         data = self.data
 
@@ -173,6 +182,7 @@ class ThermalTableDialog(QDialog):
                 self.table.setItem(i, 1, QTableWidgetItem("-"))
 
     def copy_table(self):
+        """Put the property/value table on the clipboard as tab-separated text."""
         text = ""
         for r in range(self.table.rowCount()):
             p = self.table.item(r, 0).text()
@@ -181,6 +191,7 @@ class ThermalTableDialog(QDialog):
         QApplication.clipboard().setText(text)
 
     def export_csv(self):
+        """Prompt for a path and write the property/value table to CSV."""
         path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
         if path:
             try:

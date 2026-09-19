@@ -1,3 +1,5 @@
+"""Reusable spectrum plot widget: sticks/Gaussian broadening, zoom sync, CSV/PNG export."""
+
 import csv
 from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from PyQt6.QtCore import pyqtSignal, Qt
@@ -8,6 +10,8 @@ import logging
 
 
 class MplCanvas(FigureCanvasQTAgg):
+    """Matplotlib figure canvas with a single constrained-layout axes."""
+
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         # Use constrained_layout for robust handling of dual axes and labels
         fig = Figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
@@ -16,6 +20,8 @@ class MplCanvas(FigureCanvasQTAgg):
 
 
 class SpectrumWidget(QWidget):
+    """Sticks/Gaussian spectrum plot with click-to-select, zoom sync and export."""
+
     clicked = pyqtSignal(object)
     range_changed = pyqtSignal(
         float, float, float, float, bool
@@ -98,30 +104,37 @@ class SpectrumWidget(QWidget):
         self.range_changed.emit(xmin, xmax, ymin, ymax, True)
 
     def set_selected_item(self, item):
+        """Highlight *item* on the plot and redraw."""
         self.selected_item = item
         self.plot_spectrum()
 
     def set_data(self, data_list):
+        """Replace the plotted data points and redraw."""
         self.data_list = data_list
         self.plot_spectrum()
 
     def set_x_range(self, x_min, x_max):
+        """Fix the X-axis to the given range and redraw."""
         self.x_range = (x_min, x_max)
         self.plot_spectrum()
 
     def set_auto_x_range(self):
+        """Let the X-axis range be computed from the data again, and redraw."""
         self.x_range = None
         self.plot_spectrum()
 
     def set_y_range(self, y_min, y_max):
+        """Fix the Y-axis to the given range and redraw."""
         self.y_range = (y_min, y_max)
         self.plot_spectrum()
 
     def set_auto_range(self):
+        """Let the Y-axis range be computed from the data again, and redraw."""
         self.y_range = None
         self.plot_spectrum()
 
     def set_sigma(self, val):
+        """Set the Gaussian broadening width and redraw."""
         self.sigma = val
         self.plot_spectrum()
 
@@ -131,21 +144,26 @@ class SpectrumWidget(QWidget):
         return bool(state) and state != Qt.CheckState.Unchecked.value
 
     def set_sticks(self, state):
+        """Toggle the stick markers and redraw."""
         self.show_sticks = self._checked(state)
         self.plot_spectrum()
 
     def set_gaussian(self, state):
+        """Toggle the broadened Gaussian curve and redraw."""
         self.show_gaussian = self._checked(state)
         self.plot_spectrum()
 
     def set_markers(self, state):
+        """Toggle the peak markers and redraw."""
         self.show_markers = self._checked(state)
         self.plot_spectrum()
 
     def save_png(self, path):
+        """Save the current plot as a PNG."""
         self.canvas.figure.savefig(path, dpi=300, bbox_inches="tight")
 
     def save_csv(self, path):
+        """Write the broadened curve, sampled over its visible range, to CSV."""
         # Filter valid data
         points = []
         for item in self.data_list:
@@ -232,6 +250,7 @@ class SpectrumWidget(QWidget):
             return False
 
     def save_sticks_csv(self, path):
+        """Write the raw (unbroadened) stick data points to CSV."""
         # Filter valid data
         points = []
         for item in self.data_list:
@@ -260,10 +279,12 @@ class SpectrumWidget(QWidget):
             return False
 
     def set_scaling(self, factor):
+        """Apply an intensity scaling factor to the broadened curve and redraw."""
         self.scaling_factor = factor
         self.plot_spectrum()
 
     def set_dual_axis(self, enable):
+        """Toggle a secondary Y-axis for the stick data and redraw."""
         self.use_dual_axis = enable
         # Clear twin axis if disabling
         if not enable and getattr(self, "ax2", None) is not None:
@@ -277,6 +298,7 @@ class SpectrumWidget(QWidget):
         self.plot_spectrum()
 
     def plot_spectrum(self):
+        """Redraw the full plot: broadened curve, sticks, markers and axis ranges."""
         self._is_plotting = True
         try:
             self.canvas.axes.clear()
@@ -663,6 +685,7 @@ class SpectrumWidget(QWidget):
         self.plot_spectrum()
 
     def on_click(self, event):
+        """Select the nearest data point to a click, or clear on a double-click/miss."""
         valid_axes = [self.canvas.axes]
         if getattr(self, "ax2", None) is not None:
             valid_axes.append(self.ax2)

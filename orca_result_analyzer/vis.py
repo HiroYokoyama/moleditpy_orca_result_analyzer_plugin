@@ -1,3 +1,5 @@
+"""Cube file loading and isosurface rendering for MO/NICS visualization."""
+
 import logging
 import numpy as np
 import pyvista as pv
@@ -7,6 +9,8 @@ BOHR_TO_ANG = 0.529177249
 
 
 class CubeVisualizer:
+    """Loads a Gaussian-cube file and renders it as +/- isosurfaces in the 3D view."""
+
     def __init__(self, mw):
         self.mw = mw
         self.plotter = mw.plotter
@@ -14,6 +18,7 @@ class CubeVisualizer:
         self.actors = {}
 
     def load_file(self, filename):
+        """Parse a cube file and build its structured grid; return success as bool."""
         try:
             # Parse using simple internal parser or pyvista if robust
             # We use internal to ensure consistency with our writer
@@ -175,6 +180,7 @@ class CubeVisualizer:
             logging.warning("Iso error: %s", e)
 
     def clear(self, name_prefix="mo_iso"):
+        """Remove the +/- isosurface actors for the given name prefix."""
         self.plotter.remove_actor(f"{name_prefix}_p")
         self.plotter.remove_actor(f"{name_prefix}_n")
         self.plotter.render()

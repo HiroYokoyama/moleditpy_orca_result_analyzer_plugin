@@ -1,3 +1,5 @@
+"""TD-DFT dialog: absorption/CD spectrum plot, gauge selection and transition details."""
+
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -40,6 +42,8 @@ FWHM_TO_SIGMA = 1.6651092223153954
 
 
 class TDDFTDialog(QDialog):
+    """Dialog plotting TD-DFT/TDA absorption or CD spectra with transition details."""
+
     def __init__(self, parent, excitations):
         super().__init__(parent)
         self.setWindowTitle("TDDFT Spectrum")
@@ -501,16 +505,19 @@ class TDDFTDialog(QDialog):
     # ── Existing methods (unchanged logic, dialog removed) ──────────────────
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Save settings before the dialog closes."""
         self.save_settings()
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.
         event.accept()
 
     def load_settings(self):
+        """Restore the saved broadening, sigma unit and toggle preferences."""
         if os.path.exists(self.settings_file):
             settings = load_section(self.settings_file, "tddft_settings")
             try:
@@ -541,6 +548,7 @@ class TDDFTDialog(QDialog):
                 logging.warning("[tddft_analysis.py] Error loading settings: %s", e)
 
     def update_spectrum_sigma(self):
+        """Convert the FWHM spin box value to sigma and apply it to the spectrum."""
         if not self.spectrum:
             return
         val = self.spin_sigma.value()
@@ -555,6 +563,7 @@ class TDDFTDialog(QDialog):
         self.spectrum.update()
 
     def on_sigma_unit_changed(self):
+        """Convert the broadening value between cm-1 and eV when the unit combo changes."""
         curr_idx = self.combo_sigma_unit.currentIndex()
         if curr_idx == self.prev_sigma_unit_idx:
             return
@@ -577,6 +586,7 @@ class TDDFTDialog(QDialog):
         self.switch_spectrum_type()
 
     def save_settings(self):
+        """Persist the broadening, sigma unit and toggle preferences."""
         tddft_settings = {
             "sigma": self.spin_sigma.value(),
             "sigma_unit_idx": self.combo_sigma_unit.currentIndex(),
@@ -594,6 +604,7 @@ class TDDFTDialog(QDialog):
             notify(self, "TDDFT settings saved.", 3000)
 
     def toggle_auto_y(self):
+        """Enable/disable the manual Y-range spin boxes and apply the current mode."""
         is_auto = self.chk_auto_y.isChecked()
         self.spin_y_min.setEnabled(not is_auto)
         self.spin_y_max.setEnabled(not is_auto)
@@ -603,6 +614,7 @@ class TDDFTDialog(QDialog):
             self.update_range()
 
     def update_range(self):
+        """Apply the manual Y-range spin box values to the spectrum."""
         if self.chk_auto_y.isChecked() or not self.spectrum:
             return
         ymin = self.spin_y_min.value()
@@ -610,6 +622,7 @@ class TDDFTDialog(QDialog):
         self.spectrum.set_y_range(ymin, ymax)
 
     def toggle_auto_x(self):
+        """Enable/disable the manual X-range spin boxes and apply the current mode."""
         is_auto = self.chk_auto_x.isChecked()
         self.spin_x_min.setEnabled(not is_auto)
         self.spin_x_max.setEnabled(not is_auto)
@@ -619,6 +632,7 @@ class TDDFTDialog(QDialog):
             self.update_x_range()
 
     def update_x_range(self):
+        """Apply the manual X-range spin box values to the spectrum."""
         if self.chk_auto_x.isChecked() or not self.spectrum:
             return
         xmin = self.spin_x_min.value()
@@ -626,6 +640,7 @@ class TDDFTDialog(QDialog):
         self.spectrum.set_x_range(xmin, xmax)
 
     def save_png(self):
+        """Prompt for a path and export the spectrum plot as a PNG."""
         if not self.spectrum:
             return
         default_path = get_default_export_path(
@@ -638,6 +653,7 @@ class TDDFTDialog(QDialog):
             self.spectrum.save_png(path)
 
     def save_csv(self):
+        """Prompt for a path and export the broadened curve data to CSV."""
         if not self.spectrum:
             return
         default_path = get_default_export_path(
@@ -654,6 +670,7 @@ class TDDFTDialog(QDialog):
                 QMessageBox.warning(self, "Error", "Failed to save CSV.")
 
     def save_sticks(self):
+        """Prompt for a path and export the raw stick transition data to CSV."""
         if not self.spectrum:
             return
         default_path = get_default_export_path(
@@ -670,6 +687,7 @@ class TDDFTDialog(QDialog):
                 QMessageBox.warning(self, "Error", "Failed to export stick data.")
 
     def save_orca_report(self):
+        """Prompt for a path and write a full plain-text excitation report."""
         if not self.excitations:
             QMessageBox.warning(self, "No Data", "No excitation data to export.")
             return
@@ -758,6 +776,7 @@ class TDDFTDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
 
     def reset_defaults(self):
+        """Restore the default broadening, sigma unit and toggle settings."""
         self.spin_sigma.blockSignals(True)
         self.combo_sigma_unit.blockSignals(True)
         self.chk_sticks.blockSignals(True)

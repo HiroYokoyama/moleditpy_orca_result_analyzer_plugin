@@ -1,3 +1,5 @@
+"""SCF Trace dialog: convergence plot per iteration, dispersion and spin-contamination."""
+
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -20,6 +22,8 @@ import logging
 
 
 class SCFTraceDialog(QDialog):
+    """Dialog plotting SCF energy convergence, with dispersion and spin-contamination info."""
+
     def __init__(self, parent, scf_traces, dispersion=None, spin_s2=None):
         super().__init__(parent)
         self.setWindowTitle("SCF Energy Trace")
@@ -110,10 +114,12 @@ class SCFTraceDialog(QDialog):
         self.update_plot()
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Close the matplotlib figure to release its resources."""
         try:
             plt.close(self.figure)
         except (AttributeError, ValueError, NotImplementedError) as e:
@@ -125,6 +131,7 @@ class SCFTraceDialog(QDialog):
         event.accept()
 
     def update_plot(self):
+        """Redraw the SCF energy plot for the selected block (or all blocks)."""
         idx = self.combo_steps.currentData()
         if idx is None:
             return
@@ -215,6 +222,7 @@ class SCFTraceDialog(QDialog):
         self.canvas.draw_idle()
 
     def export_csv(self):
+        """Prompt for a path and write the SCF trace (selected block or all) to CSV."""
         idx = self.combo_steps.currentData()
         if idx is None:
             return
