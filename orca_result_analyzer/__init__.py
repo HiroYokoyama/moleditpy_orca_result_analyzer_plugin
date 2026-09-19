@@ -169,7 +169,7 @@ def initialize(context):
     )
 
 
-def run(mw):
+def run(mw):  # pylint: disable=unused-argument  # host calls run(mw); reopens via module context
     """Legacy run() entry: called from Plugins menu by the host.
 
     Opens the analyzer directly without requiring a file — the user can

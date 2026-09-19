@@ -76,7 +76,12 @@ except ImportError:
 class MODialog(QDialog):
     """Dialog listing MOs, generating their cube files and visualizing them in 3D."""
 
-    def __init__(self, parent, mo_data, result_dir=None):
+    # pylint: disable=attribute-defined-outside-init
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
+
+    def __init__(self, parent, mo_data, result_dir=None):  # pylint: disable=unused-argument
+        # result_dir is unused: get_cube_path() re-derives the cube directory from
+        # parent_dlg.parser.filename instead.
         super().__init__(parent)
         self.mw = None
         if hasattr(parent, "mw"):
@@ -472,7 +477,7 @@ class MODialog(QDialog):
                 if path and os.path.exists(path):
                     bg_color = QColor(240, 255, 240)  # Light Green
             # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.warning(
                     "MO: could not check for an existing cube file for %s: %s",
                     label_id,
@@ -517,12 +522,14 @@ class MODialog(QDialog):
                 break
             iterator += 1
 
-    def on_double_click(self, item, col):
+    def on_double_click(self, item, col):  # pylint: disable=unused-argument
+        # item/col are unused: Qt's itemDoubleClicked signature; uses the tree's current selection.
         """Visualize the double-clicked orbital, generating its cube if needed."""
         # Double click always tries to visualize (generate if needed)
         self.visualize_selected_mos()
 
-    def on_item_changed(self, current, previous):
+    def on_item_changed(self, current, previous):  # pylint: disable=unused-argument
+        # previous is unused: Qt's currentItemChanged signature, only the new item is needed.
         """Auto-load the already-cached cube for the newly selected orbital, if any."""
         # Single click or keyboard change
         if not current:
@@ -542,7 +549,7 @@ class MODialog(QDialog):
             if path and os.path.exists(path):
                 self.show_cube(path)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning(
                 "MO: could not auto-load the cached cube for %s: %s", display_id, e
             )
@@ -641,7 +648,7 @@ class MODialog(QDialog):
             QMessageBox.warning(self, "Unsupported basis set", str(e))
             return None
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
@@ -1069,7 +1076,7 @@ class MODialog(QDialog):
 
                 self.combo_presets.blockSignals(False)
             # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.warning("Error loading settings: %s", e)
 
     def save_settings(self):
@@ -1312,7 +1319,7 @@ class MODialog(QDialog):
             else:
                 logging.info("Data exported to %s", filename)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
 
     def show_mo_diagram(self):
@@ -1445,7 +1452,8 @@ class MODialog(QDialog):
             # We don't have the key here easily unless we parse filename.
             # But the visualization is what matters.
 
-    def generate_specific_orbital(self, index, label, spin_suffix=""):
+    def generate_specific_orbital(self, index, label, spin_suffix=""):  # pylint: disable=unused-argument
+        # label is unused: index + spin_suffix fully identify the orbital to generate.
         """Called from Diagram to generate cube"""
         # Diagram index is index within spin channel.
         # We need to find the MO with that index and spin.

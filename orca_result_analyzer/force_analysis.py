@@ -145,7 +145,8 @@ class ConvergenceGraphDialog(QDialog):
         except (ImportError, OSError, IndexError, ValueError) as e:
             QMessageBox.critical(self, "Export Error", str(e))
 
-    def plot_data(self, traj_steps, current_idx, selection="All"):
+    def plot_data(self, traj_steps, current_idx, selection="All"):  # pylint: disable=unused-argument
+        # current_idx is unused: the graph has no per-step highlight, unlike the trajectory plot.
         """Draw the selected convergence metric(s) with threshold lines and markers."""
         display_keys = {
             "rms gradient": "RMS Grad",
@@ -335,7 +336,7 @@ class ConvergenceGraphDialog(QDialog):
                         zorder=5,
                     )
                 # C++ library boundary: matplotlib rendering exceptions do not map to Python types
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     logging.warning("Failed to draw threshold marker on axis: %s", e)
 
             ax.set_ylabel(name, color=color, fontsize=9)
@@ -367,6 +368,9 @@ class ConvergenceGraphDialog(QDialog):
 
 class ForceViewerDialog(QDialog):
     """Dialog showing gradients/forces per atom with an optional 3D vector overlay."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
 
     def __init__(self, parent_dlg, gradients, parser=None):
         super().__init__(parent_dlg)
@@ -520,7 +524,7 @@ class ForceViewerDialog(QDialog):
                 if self.btn_visualize.isChecked():
                     self.update_vectors()
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning(
                 "Force analysis: could not auto-scale the gradient vector display: %s",
                 e,
@@ -878,7 +882,7 @@ class ForceViewerDialog(QDialog):
                 self.update_vectors()
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to reload data: {e}")
         finally:
             self._reloading = False
@@ -1065,7 +1069,7 @@ class ForceViewerDialog(QDialog):
             mw.plotter.render()
 
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error drawing force vectors: %s", e)
 
     def clear_vectors(self):

@@ -471,7 +471,8 @@ class BasisSetEngine:
 
         self.n_basis = current_idx
 
-    def evaluate_mo_on_grid(self, mo_idx, grid_coords, mo_coeffs_all):
+    def evaluate_mo_on_grid(self, mo_idx, grid_coords, mo_coeffs_all):  # pylint: disable=unused-argument
+        # mo_idx is unused: mo_coeffs_all fully specifies the orbital; kept for caller bookkeeping.
         """
         Evaluate MO on grid (Vectorized Implementation).
         mo_coeffs_all: 1D array of all MO coefficients (must match n_basis)
@@ -664,6 +665,6 @@ class CalcWorker(QThread):
             self.finished_sig.emit(True, self.output_path)
 
         # worker-thread top level: an escaping exception would kill the thread silently
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.exception("MO: cube generation failed for MO %s", self.mo_idx)
             self.finished_sig.emit(False, str(e))

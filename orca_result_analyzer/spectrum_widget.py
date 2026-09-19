@@ -12,7 +12,8 @@ import logging
 class MplCanvas(FigureCanvasQTAgg):
     """Matplotlib figure canvas with a single constrained-layout axes."""
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=5, height=4, dpi=100):  # pylint: disable=unused-argument
+        # parent is unused: layout.addWidget() reparents the canvas once it is added.
         # Use constrained_layout for robust handling of dual axes and labels
         fig = Figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
         self.axes = fig.add_subplot(111)
@@ -21,6 +22,9 @@ class MplCanvas(FigureCanvasQTAgg):
 
 class SpectrumWidget(QWidget):
     """Sticks/Gaussian spectrum plot with click-to-select, zoom sync and export."""
+
+    # pylint: disable=attribute-defined-outside-init,access-member-before-definition
+    # Qt pattern: widget/state attributes are created lazily on first use, not in __init__.
 
     clicked = pyqtSignal(object)
     range_changed = pyqtSignal(
@@ -86,7 +90,8 @@ class SpectrumWidget(QWidget):
         self.canvas.axes.callbacks.connect("xlim_changed", self._on_axes_changed)
         self.canvas.axes.callbacks.connect("ylim_changed", self._on_axes_changed)
 
-    def _on_axes_changed(self, ax):
+    def _on_axes_changed(self, ax):  # pylint: disable=unused-argument
+        # ax is unused: matplotlib's xlim_changed/ylim_changed callback signature.
         if self._is_plotting or not self._initial_plot_done:
             return
 

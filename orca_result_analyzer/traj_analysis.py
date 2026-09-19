@@ -1,4 +1,4 @@
-"""Trajectory/scan analysis dialog: energy profile plot, structure playback, MEP loading and export."""
+"""Trajectory/scan dialog: energy profile plot, structure playback, MEP loading and export."""
 
 import csv
 import os
@@ -48,7 +48,8 @@ except ImportError:
 class MplCanvas(FigureCanvasQTAgg):
     """Matplotlib canvas embedding a single figure/axes for the energy profile plot."""
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=5, height=4, dpi=100):  # pylint: disable=unused-argument
+        # parent is unused: layout.addWidget() reparents the canvas once it is added.
         """Create the figure and single subplot backing this canvas."""
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
@@ -57,6 +58,9 @@ class MplCanvas(FigureCanvasQTAgg):
 
 class TrajectoryResultDialog(QDialog):
     """Trajectory/scan dialog: energy profile plot, structure playback and MEP/export controls."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt pattern: widget attributes are set in init_ui(), called from __init__.
 
     def __init__(
         self,
@@ -187,7 +191,7 @@ class TrajectoryResultDialog(QDialog):
                         loaded = True
                         break
                     # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         logging.warning(
                             "Trajectory: could not auto-load candidate trajectory file %s: %s",
                             path,
@@ -918,7 +922,7 @@ class TrajectoryResultDialog(QDialog):
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
                     # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
                         logging.warning(
                             "Trajectory: could not enable 3D features / minimize the 2D panel: %s",
                             e,
@@ -952,7 +956,7 @@ class TrajectoryResultDialog(QDialog):
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             if not silent:
                 QMessageBox.critical(self, "Error", f"Failed to load TRJ:\n{e}")
 
@@ -1160,7 +1164,7 @@ class TrajectoryResultDialog(QDialog):
                         writer.writerow(row)
                 notify(self, f"Data saved to: {os.path.basename(path)}", 5000)
             # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 QMessageBox.critical(self, "Error", str(e))
 
     # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PyQt6-free
@@ -1256,7 +1260,7 @@ class TrajectoryResultDialog(QDialog):
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
             self._gif_saving = False

@@ -153,7 +153,7 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
             mol.AddBond(orig_i, orig_j, bond.GetBondType())
 
     # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
 
 

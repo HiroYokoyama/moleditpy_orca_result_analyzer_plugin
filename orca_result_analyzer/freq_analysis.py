@@ -1,4 +1,4 @@
-"""Vibrational frequency dialog: mode list, 3D displacement/dipole vectors, animation and IR/Raman spectrum window."""
+"""Vibrational frequency dialog: mode list, 3D vectors, animation and IR/Raman spectrum window."""
 
 from PyQt6.QtWidgets import (
     QDialog,
@@ -452,6 +452,9 @@ class FreqSpectrumWindow(QWidget):
 
 class FrequencyDialog(QDialog):
     """Vibrational frequency dialog: mode list, scaling, 3D vectors and animated displacement."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt pattern: widget attributes are set in init_ui(), called from __init__.
 
     def __init__(self, parent, frequencies, atoms, coords, context=None):
         super().__init__(parent)
@@ -951,7 +954,8 @@ class FrequencyDialog(QDialog):
                 )
             it += 1
 
-    def on_mode_selected(self, current, previous):
+    def on_mode_selected(self, current, previous):  # pylint: disable=unused-argument
+        # previous is unused: Qt's currentItemChanged signature, only the new item is needed.
         """Handle a mode tree selection change: sync the spectrum highlight and redraw the 3D view."""
         if not current:
             return
@@ -1040,7 +1044,7 @@ class FrequencyDialog(QDialog):
 
             self.mw.plotter.render()
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error in FrequencyDialog.update_view: %s", e)
 
     def _clear_dipole_actor(self):
@@ -1184,7 +1188,7 @@ class FrequencyDialog(QDialog):
                     self.vector_actor = None
 
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error in apply_manual_displacement: %s", e)
 
     def start_animation(self):
@@ -1263,7 +1267,7 @@ class FrequencyDialog(QDialog):
                 self.update_vectors_at_displaced_position()
 
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error in animate_frame: %s", e)
 
     def update_vectors_at_displaced_position(self):
@@ -1321,7 +1325,7 @@ class FrequencyDialog(QDialog):
                     name="vib_vectors",
                 )
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error updating vectors: %s", e)
 
     def reset_geometry(self):
@@ -1459,7 +1463,7 @@ class FrequencyDialog(QDialog):
                 notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
             self._gif_saving = False
@@ -1585,7 +1589,7 @@ class FrequencyDialog(QDialog):
                     self.spin_fps.setValue(int(settings["fps"]))
 
             # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.warning("Error loading freq settings: %s", e)
 
     def save_settings(self):

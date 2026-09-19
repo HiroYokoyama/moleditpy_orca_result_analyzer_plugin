@@ -26,7 +26,7 @@ class CubeVisualizer:
             self.current_grid = self._build_grid(meta)
             return True
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error loading cube: %s", e)
             return False
 
@@ -176,7 +176,7 @@ class CubeVisualizer:
 
             self.plotter.render()
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Iso error: %s", e)
 
     def clear(self, name_prefix="mo_iso"):

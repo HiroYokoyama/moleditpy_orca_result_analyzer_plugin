@@ -83,7 +83,7 @@ def open_nics_analyzer(main_window, file_path=None):
         try:
             opener(file_path, context)
             return True, ""
-        except Exception as exc:  # plugin boundary: never take the analyzer down
+        except Exception as exc:  # plugin boundary: never take the analyzer down  # pylint: disable=broad-exception-caught
             logging.warning("NICS Analyzer hand-off failed", exc_info=True)
             return False, f"The ORCA NICS Analyzer could not read this file:\n{exc}"
 

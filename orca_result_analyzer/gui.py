@@ -188,6 +188,9 @@ def build_status_suffix(data):
 class OrcaResultAnalyzerDialog(QDialog):
     """Main plugin window: loads ORCA output, drives the 3D view and analysis dialogs."""
 
+    # pylint: disable=attribute-defined-outside-init,access-member-before-definition
+    # Qt pattern: widget attributes are set in init_ui(), called from __init__.
+
     def __init__(self, parent, parser, file_path, context=None):
         super().__init__(parent)
         self.mw = parent
@@ -726,7 +729,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             diffs = atom_positions - np.array(pick_pos)
             return int(np.argmin((diffs**2).sum(axis=1)))
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.error("GUI _pick_atom_at error: %s", e)
             return None
 
@@ -738,10 +741,12 @@ class OrcaResultAnalyzerDialog(QDialog):
                 return
             self._pending_click_atom = best_idx
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.error("GUI press handler error: %s", e)
 
-    def _on_plotter_click(self, x, y, widget):
+    def _on_plotter_click(self, x, y, widget):  # pylint: disable=unused-argument
+        # x/y/widget are unused: fixed _ClickFilter callback signature, position was
+        # already captured by _on_plotter_press.
         try:
             best_idx = getattr(self, "_pending_click_atom", None)
             self._pending_click_atom = None
@@ -776,7 +781,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             if hasattr(e3d, "update_selection_visuals"):
                 e3d.update_selection_visuals()
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.error("GUI click handler error: %s", e)
 
     def close_all_sub_dialogs(self):
@@ -920,7 +925,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                             5000,
                         )
                 # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     logging.warning(
                         "Could not load the NEB trajectory from %s: %s", trj_path, e
                     )
@@ -942,7 +947,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             notify(self, f"Successfully loaded: {os.path.basename(path)}", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to load file:\n{e}")
 
     def update_file_info_labels(self):
@@ -1215,7 +1220,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                 except (RuntimeError, AttributeError, KeyError, ValueError) as e:
                     logging.warning("3D render update failed: %s", e)
         # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.error(
                 "[gui.py:load_structure_3d] Failed to load 3D structure: %s",
                 e,

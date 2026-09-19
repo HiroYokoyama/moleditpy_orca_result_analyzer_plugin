@@ -115,7 +115,7 @@ class _NMRExportMixin:
             )
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
     def export_table_csv(self):
@@ -153,7 +153,7 @@ class _NMRExportMixin:
 
             notify(self, f"Table data exported to: {os.path.basename(filename)}", 5000)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
     def get_j_coupling_string(self, atom_indices):

@@ -46,7 +46,8 @@ class GradientBar(QWidget):
         self.colors = colors
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # pylint: disable=unused-argument
+        # Qt override signature requires the event argument.
         """Fill the widget with the gradient and draw a border around it."""
         painter = QPainter(self)
         grad = self.get_gradient()
@@ -72,6 +73,9 @@ class GradientBar(QWidget):
 
 class ChargeDialog(QDialog):
     """Dialog listing per-atom charges with 3D color-mapping and CSV export."""
+
+    # pylint: disable=attribute-defined-outside-init,access-member-before-definition
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
 
     def __init__(self, parent, all_charges):
         super().__init__(parent)
@@ -345,7 +349,7 @@ class ChargeDialog(QDialog):
 
             self.parent_dlg.mw.plotter.render()
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.warning(self, "Error", f"Could not add labels: {e}")
             self.chk_show_labels.setChecked(False)
 
@@ -401,7 +405,7 @@ class ChargeDialog(QDialog):
 
             notify(self, "Colors reset to CPK default.", 5000)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to reset colors:\n{e}")
 
     def update_table(self):
@@ -644,7 +648,7 @@ class ChargeDialog(QDialog):
                     },
                 )
             # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.warning("Error adding scalar bar: %s", e)
 
             # Trigger update
@@ -654,7 +658,7 @@ class ChargeDialog(QDialog):
             notify(self, f"Applied '{self.current_scheme}' coloring to 3D view.", 5000)
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to color atoms:\n{e}")
 
     def export_csv(self):
@@ -743,7 +747,7 @@ class ChargeDialog(QDialog):
             # QMessageBox.information(self, "Success", f"Data exported to {filename}")
             notify(self, f"Data exported to {filename}", 5000)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
         finally:
             self._csv_exporting = False

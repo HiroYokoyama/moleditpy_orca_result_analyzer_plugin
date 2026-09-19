@@ -772,7 +772,7 @@ class TDDFTDialog(QDialog):
                 QMessageBox.information(self, "Exported", f"Report saved to:\n{path}")
 
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{e}")
 
     def reset_defaults(self):

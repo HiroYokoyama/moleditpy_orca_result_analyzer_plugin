@@ -78,6 +78,9 @@ DEFAULT_REFERENCE_STANDARDS = {
 class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
     """Enhanced NMR Chemical Shielding Dialog with Spectrum"""
 
+    # pylint: disable=attribute-defined-outside-init
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
+
     # Class-level constants for Nucleus Mapping and Physics
     ISOTOPE_MAP = {
         "H": "1H",
@@ -1271,7 +1274,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         try:
             self.clear_peak_selection()
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning(
                 "NMR: could not clear the peak selection on document reset: %s", e
             )
