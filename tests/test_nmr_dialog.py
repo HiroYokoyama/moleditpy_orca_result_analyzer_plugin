@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gui_harness  # noqa: E402
 
 N = gui_harness.load_isolated("nmr_analysis")
+NE = sys.modules[f"{N.__package__}.nmr_export"]  # export_table_csv now lives here
 
 
 class _FakeItem:
@@ -533,14 +534,14 @@ class TestFilterAndExport(_NMRCase):
         self._set_reference(delta_ref=0.0, sigma_ref=31.8)
         self.dlg.recalc()
         path = os.path.join(self.tmp, "table.csv")
-        with patch.object(N.QFileDialog, "getSaveFileName", return_value=(path, "")):
+        with patch.object(NE.QFileDialog, "getSaveFileName", return_value=(path, "")):
             self.dlg.export_table_csv()
         with open(path, encoding="utf-8") as fh:
             rows = list(csv.reader(fh))
         self.assertEqual(len(rows), 5)  # header + 4 nuclei
 
     def test_export_table_cancelled_writes_nothing(self):
-        with patch.object(N.QFileDialog, "getSaveFileName", return_value=("", "")):
+        with patch.object(NE.QFileDialog, "getSaveFileName", return_value=("", "")):
             self.dlg.export_table_csv()
         self.assertFalse([f for f in os.listdir(self.tmp) if f.endswith(".csv")])
 

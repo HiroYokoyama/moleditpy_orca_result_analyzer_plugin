@@ -73,6 +73,7 @@ def _noop(self, *a, **k):
 # skipped, so names registered here raise AttributeError instead.
 ABSENT_ATTRS = {
     "scaling_factor",
+    "context",  # utils.notify() needs this absent when unset, not a MagicMock
 }
 
 

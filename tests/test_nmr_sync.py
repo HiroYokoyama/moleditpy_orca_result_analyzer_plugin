@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gui_harness  # noqa: E402
 
 N = gui_harness.load_isolated("nmr_analysis")
+NE = sys.modules[f"{N.__package__}.nmr_export"]  # copy_table now lives here
 
 
 def _data():
@@ -168,13 +169,13 @@ class TestShowAllLabels(_SyncCase):
 class TestTableControls(_SyncCase):
     def test_copying_puts_the_table_on_the_clipboard(self):
         clipboard = MagicMock()
-        with patch.object(N.QApplication, "clipboard", return_value=clipboard):
+        with patch.object(NE.QApplication, "clipboard", return_value=clipboard):
             self.dlg.copy_table()
         text = clipboard.setText.call_args.args[0]
         self.assertTrue(text.startswith("Idx\tNucleus\tShielding\tShift\tJ-coupling"))
 
     def test_copying_is_reported(self):
-        with patch.object(N.QApplication, "clipboard", return_value=MagicMock()):
+        with patch.object(NE.QApplication, "clipboard", return_value=MagicMock()):
             self.dlg.copy_table()
         self.context.show_status_message.assert_called()
 
