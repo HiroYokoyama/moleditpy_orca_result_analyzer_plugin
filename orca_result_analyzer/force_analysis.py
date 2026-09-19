@@ -863,7 +863,6 @@ class ForceViewerDialog(QDialog):
 
             # Update force table and vectors
             self.populate_force_table()
-            # self.auto_scale() # Use button only
             if self.btn_visualize.isChecked():
                 self.update_vectors()
 
@@ -1020,9 +1019,6 @@ class ForceViewerDialog(QDialog):
                 # Force = -Gradient
                 force = np.array([-vec[0], -vec[1], -vec[2]])
 
-                # Reverse if requested
-                # if hasattr(self, 'chk_reverse') and self.chk_reverse.isChecked():
-                #     force = -force
                 magnitude = np.linalg.norm(force)
 
                 if magnitude < 1e-12:

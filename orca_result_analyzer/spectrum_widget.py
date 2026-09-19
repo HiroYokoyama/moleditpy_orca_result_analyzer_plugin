@@ -412,8 +412,6 @@ class SpectrumWidget(QWidget):
                         # (handled by min_x range usually)
                         valid_grid = grid_cm[grid_cm > 1.0]
                         valid_curve = curve_y_cm[grid_cm > 1.0]
-                        # x_nm = 1e7 / valid_grid
-                        # np.interp expects sorted x. x_nm will be sorted descending if valid_grid is ascending.
                         curve_y = np.interp(
                             display_x, 1e7 / valid_grid[::-1], valid_curve[::-1]
                         )
@@ -644,10 +642,7 @@ class SpectrumWidget(QWidget):
 
             self._initial_plot_done = True
 
-            # Constrained layout handles padding automatically
-            # try:
-            #     self.canvas.figure.tight_layout()
-            # except: pass
+            # Constrained layout handles padding automatically.
 
             self.canvas.draw_idle()
 
@@ -707,8 +702,7 @@ class SpectrumWidget(QWidget):
         for item in self.data_list:
             x = item.get(self.x_key, 0.0)
             item.get(t_key, 0.0)
-            # Remove intensity check to allow selecting dark states
-            # if abs(y) < 1e-12: continue
+            # No intensity cutoff: dark states must stay selectable.
 
             dist = abs(x - click_x)
             if dist < min_dist:

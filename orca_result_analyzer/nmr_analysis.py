@@ -40,21 +40,10 @@ from .nmr_plot import _NMRPlotMixin
 from .nmr_export import _NMRExportMixin
 from . import PLUGIN_VERSION
 
-# Built-in shielding references, shared by __init__ and save_settings (which
-# subtracts them to work out which entries the user added). They were once
-# duplicated verbatim in both places, so editing one silently reclassified a
-# built-in as a custom reference.
-#
-# Shifts are δ = δ_ref + (σ_ref − σ_sample), so for one nucleus every entry
-# must satisfy the same δ_ref + σ_ref: that sum IS the absolute shielding of
-# the δ=0 point, and the alternative reference compounds are just different
-# parameterizations of it. The values below are anchored on TMS (1H, 13C) and
-# CH3NO2 (15N) and made exactly consistent with it.
-#
-# These are absolute shieldings and therefore method-dependent. They are
-# reasonable for a common GIAO/DFT setup, but for quantitative work compute
-# the reference at the same level of theory as the sample and enter it
-# through "Custom".
+# Shared by __init__ and save_settings, which subtracts these to find the
+# user's own entries. Per nucleus every entry must share one δ_ref + σ_ref:
+# that sum is the absolute shielding at δ=0. Method-dependent, so quantitative
+# work wants a reference computed at the sample's level of theory via "Custom".
 DEFAULT_REFERENCE_STANDARDS = {
     "1H": {
         "No Reference": {"delta_ref": 0.0, "sigma_ref": 0.0},

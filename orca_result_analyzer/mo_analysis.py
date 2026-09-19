@@ -311,19 +311,6 @@ class MODialog(QDialog):
 
         # For now, we keep it Modal, but 'Visualize' updates the background window?
         # If modal, user can't rotate 3D view easily without closing dialog.
-        # Let's add a "Apply/Update" button or just let it update.
-
-        # To make it better:
-        # We'll just show info on right side.
-        # info_panel = QWidget()
-        # info_layout = QVBoxLayout(info_panel)
-        # info_layout.addWidget(QLabel("<b>Selected MO Info</b>"))
-        # self.lbl_info = QLabel("Select an MO to view details.")
-        # self.lbl_info.setWordWrap(True)
-        # info_layout.addWidget(self.lbl_info)
-        # info_layout.addStretch()
-        # main_layout.addWidget(info_panel)
-
         # Populate
         self.normalize_and_populate()
 
@@ -1422,10 +1409,6 @@ class MODialog(QDialog):
 
     def generate_specific_orbital(self, index, label, spin_suffix=""):
         """Called from Diagram to generate cube"""
-        # We need to map index -> Key.
-        # self.mo_list has keys.
-        # Index is 0-based.
-        # But separate by spin?
         # Diagram index is index within spin channel.
         # We need to find the MO with that index and spin.
 
@@ -1454,10 +1437,6 @@ class MODialog(QDialog):
         curr_idx = 0
         mo_key = None
 
-        # Sort self.mo_list by ID to match diagram order?
-        # self.mo_list is appended in loop.
-        # normalize_and_populate sorts keys.
-        # We need to trust the sort order is: Alpha 0..N, Beta 0..N ??
         # Or keys are arbitrary.
         # Let's re-sort to be safe.
 

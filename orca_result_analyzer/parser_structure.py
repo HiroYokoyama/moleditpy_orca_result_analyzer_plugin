@@ -250,7 +250,6 @@ class _StructureParsingMixin:
         def read_coords_from(idx):
             atoms = []
             coords = []
-            # curr = idx + 2 # Skip header and rule
             # ORCA output for coords in opt steps usually:
             # "CARTESIAN COORDINATES (ANGSTROEM)"
             # search forward for coordinates

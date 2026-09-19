@@ -792,17 +792,11 @@ class OrcaResultAnalyzerDialog(QDialog):
         self.close()
 
     def closeEvent(self, event):
-        """Ensure all sub-dialogs close when the main analyzer window is closed.
+        """Close every sub-dialog, drop picking, and deregister the window.
 
-        Accept the event directly instead of calling super().closeEvent():
-        QDialog.closeEvent invokes reject(), and reject() is routed back
-        through close() (so Esc runs this cleanup), which would recurse and
-        leave the window visible. event.accept() closes without re-entering.
-
-        Deregistering is part of the cleanup: picking is installed once in
-        __init__, so a window left in the registry gets re-shown by the
-        Extensions menu with its plotter event filter already removed, and
-        atom clicks stay dead for the rest of the session.
+        accept() rather than super().closeEvent(), which would route back
+        through reject() -> close() and recurse. Deregistering matters: a
+        window left in the registry is re-shown with its event filter gone.
         """
         self._disable_plotter_picking()
         self.close_all_sub_dialogs()

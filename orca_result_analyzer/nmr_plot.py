@@ -679,8 +679,6 @@ class _NMRPlotMixin:
 
         self.figure.tight_layout()
 
-        # self.canvas.mpl_connect('button_press_event', self.on_peak_click)
-
         # Redraw the highlight for the current selection
         if self.selected_peak_indices:
             self.highlight_selected_peaks()

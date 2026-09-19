@@ -102,23 +102,10 @@ def normalize_atom_symbol(raw: str) -> str:
 
 
 def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = True):
-    """Run RDKit bond determination on *mol*, skipping dummy ('*') atoms.
+    """Run RDKit bond determination on *mol* (an RWMol), skipping dummy atoms.
 
-    Builds a sub-molecule containing only real (non-dummy) atoms, calls
-    ``DetermineConnectivity`` (and optionally ``DetermineBondOrders``) on it,
-    then copies the resulting bonds back to the original *mol* (which must be
-    an ``RWMol``).  Any failure is caught and logged — the function is
-    intentionally non-fatal.
-
-    Parameters
-    ----------
-    mol:
-        An RDKit ``RWMol`` with a conformer already attached.
-    charge:
-        Formal charge to pass to ``DetermineBondOrders``.
-    bond_orders:
-        If *True* (default) also determine bond orders.  Pass *False*
-        during animation playback to avoid per-frame latency.
+    Non-fatal: failures are logged. Pass bond_orders=False during animation
+    playback to avoid per-frame latency.
     """
     try:
         from rdkit import Chem
@@ -230,13 +217,7 @@ def list_orca_output_files(directory: str) -> list[str]:
 
 
 def _host_context(owner):
-    """Resolve the host ``PluginContext`` reachable from a dialog or widget.
-
-    Dialogs in this package reach the host through four different spellings
-    depending on how they were constructed: ``self.context`` on the ones the
-    host builds directly, and ``parent_dlg`` / ``freq_dialog`` / ``parent()``
-    on the child dialogs. Callers should not have to know which.
-    """
+    """Resolve the host PluginContext via context/parent_dlg/freq_dialog/parent()."""
     if owner is None:
         return None
     seen = []
@@ -260,11 +241,7 @@ def _host_context(owner):
 
 
 def notify(owner, message, timeout=3000):
-    """Show ``message`` in the host's status bar, or log it if there is no host.
-
-    Returns True when the host displayed it. Never raises: a status message is
-    never important enough to take down the slot that reported it.
-    """
+    """Show *message* in the host status bar, else log it. Never raises."""
     context = _host_context(owner)
     if context is not None:
         try:

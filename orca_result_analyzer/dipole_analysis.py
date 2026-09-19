@@ -225,9 +225,6 @@ class DipoleDialog(QDialog):
 
                 settings = all_settings.get("dipole_settings", {})
 
-                # if "scale" in settings:
-                #    self.spin_scale.setValue(float(settings["scale"]))
-
                 if "res" in settings:
                     self.spin_res.setValue(int(settings["res"]))
 
