@@ -554,12 +554,12 @@ class _PropertyParsingMixin:
                         IndexError,
                         TypeError,
                         ValueError,
-                    ) as _e:
+                    ) as e:
                         # The block is scanned line by line and the numeric
                         # conversion is what separates data rows from the
                         # headers and blank lines around them, so failing
                         # here is the normal case, not a problem to report.
-                        logging.debug("Not a charge row: %r (%s)", line.strip(), _e)
+                        logging.debug("Not a charge row: %r (%s)", line.strip(), e)
                 curr += 1
             return res
 

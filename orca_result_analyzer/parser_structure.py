@@ -167,18 +167,16 @@ class _StructureParsingMixin:
                     parts = line.split()
                     val = int(parts[-1])
                     self.data["charge"] = val
-                except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.debug("Not the charge line: %r (%s)", line.strip(), _e)
+                except (KeyError, IndexError, TypeError, ValueError) as e:
+                    logging.debug("Not the charge line: %r (%s)", line.strip(), e)
 
             if "MULTIPLICITY" in uu:
                 try:
                     parts = line.split()
                     val = int(parts[-1])
                     self.data["mult"] = val
-                except (KeyError, IndexError, TypeError, ValueError) as _e:
-                    logging.debug(
-                        "Not the multiplicity line: %r (%s)", line.strip(), _e
-                    )
+                except (KeyError, IndexError, TypeError, ValueError) as e:
+                    logging.debug("Not the multiplicity line: %r (%s)", line.strip(), e)
             if (
                 "SCF CONVERGED" in uu
                 or "OPTIMIZATION CONVERGED" in uu

@@ -304,8 +304,8 @@ class ConvergenceGraphDialog(QDialog):
                     ]
                     yticks.append(targets[k])
                     ax.set_yticks(yticks)
-                except (IndexError, TypeError, ValueError) as _e:
-                    logging.warning("Failed to add threshold tick: %s", _e)
+                except (IndexError, TypeError, ValueError) as e:
+                    logging.warning("Failed to add threshold tick: %s", e)
 
                 # Draw a triangle marker on the side of the Y-axis
                 try:
@@ -334,8 +334,8 @@ class ConvergenceGraphDialog(QDialog):
                         markersize=7,
                         zorder=5,
                     )
-                except Exception as _e:
-                    logging.warning("Failed to draw threshold marker on axis: %s", _e)
+                except Exception as e:
+                    logging.warning("Failed to draw threshold marker on axis: %s", e)
 
             ax.set_ylabel(name, color=color, fontsize=9)
             ax.tick_params(axis="y", colors=color, labelsize=8)

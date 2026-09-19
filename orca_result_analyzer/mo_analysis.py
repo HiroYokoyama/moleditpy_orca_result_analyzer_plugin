@@ -1462,9 +1462,11 @@ class MODialog(QDialog):
         curr_idx = 0
         mo_key = None
 
-        # Or keys are arbitrary.
-        # Let's re-sort to be safe.
-
+        # The diagram's index is positional within one spin channel, while
+        # mo_list holds whatever order normalize_and_populate appended. Sort
+        # explicitly by (spin, id) rather than trusting that order: picking the
+        # wrong orbital here still renders a perfectly plausible-looking cube,
+        # so the mistake is invisible in the picture.
         sorted_mos = sorted(
             self.mo_list, key=lambda x: (x.get("spin", ""), int(x.get("id", -1)))
         )
