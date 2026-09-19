@@ -149,6 +149,7 @@ def _install_stubs(force=False):
     )
     _orca_utils.list_orca_output_files = lambda directory: []  # no-op stub
     _orca_utils.clear_atom_color_overrides = lambda mw: None  # no-op stub
+    _orca_utils.notify = lambda owner, message, timeout=3000: False  # no-op stub
 
     _orca_spectrum = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _orca_spectrum.SpectrumWidget = MagicMock()

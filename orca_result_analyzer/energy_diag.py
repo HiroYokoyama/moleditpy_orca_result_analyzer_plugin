@@ -1,3 +1,5 @@
+"""Interactive orbital energy level diagram with zoom, pan and cube-file lookup."""
+
 import glob
 import os
 import math
@@ -25,6 +27,7 @@ except ImportError:
 
 
 def calculate_arrow_shifts(items, val_to_y, threshold=15, distance=20):
+    """Compute horizontal offsets so overlapping levels' electron arrows fan out."""
     shifts = {}
     if not items:
         return shifts
@@ -59,6 +62,11 @@ def calculate_arrow_shifts(items, val_to_y, threshold=15, distance=20):
 
 
 class EnergyDiagramDialog(QDialog):
+    """Interactive orbital energy level diagram with zoom, pan and cube-file lookup."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
+
     def __init__(self, mo_data, parent=None, result_dir=None):
         super().__init__(parent)
         self.result_dir = result_dir
@@ -190,6 +198,7 @@ class EnergyDiagramDialog(QDialog):
         self.current_max = gap_center + target_span / 2.0
 
     def wheelEvent(self, event):
+        """Zoom the energy range on Ctrl+wheel, otherwise pan it."""
         # Zoom with Ctrl + Wheel
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             angle_delta = event.angleDelta().y()
@@ -263,7 +272,9 @@ class EnergyDiagramDialog(QDialog):
         self.current_max += change
         self.update()
 
-    def mouseDoubleClickEvent(self, event):
+    def mouseDoubleClickEvent(self, event):  # pylint: disable=unused-argument
+        # Qt override signature requires the event argument.
+        """Reset the view to 3x the HOMO-LUMO gap, centered on the gap."""
         # Reset to 3x HOMO-LUMO gap centered on the gap
         if getattr(self, "homo_energy", None) is not None and hasattr(
             self, "lumo_energy"
@@ -280,6 +291,7 @@ class EnergyDiagramDialog(QDialog):
         self.update()
 
     def mousePressEvent(self, event):
+        """Load or generate the orbital under the click, else start a drag-to-zoom."""
         if event.button() == Qt.MouseButton.LeftButton:
             # Hit Testing with "Closest to Mouse" logic
             pos = event.position()
@@ -311,6 +323,7 @@ class EnergyDiagramDialog(QDialog):
             self.last_mouse_y = event.position().y()
 
     def try_load_cube(self, index, label, spin_suffix=""):
+        """Load the matching cube file for an orbital, or offer to generate one."""
         if not self.result_dir:
             # QMessageBox.information(self, "Info", "No result directory linked.")
             return
@@ -421,6 +434,7 @@ class EnergyDiagramDialog(QDialog):
                     self.parent().generate_specific_orbital(index, label, spin_suffix)
 
     def mouseMoveEvent(self, event):
+        """Show an orbital tooltip on hover, or continue a drag-to-zoom."""
         # Check if hovering over a clickable orbital level (when not dragging)
         if not (getattr(self, "dragging", None) is not None and self.dragging):
             pos = event.position()
@@ -485,10 +499,12 @@ class EnergyDiagramDialog(QDialog):
             self.update()
 
     def mouseReleaseEvent(self, event):
+        """End a drag-to-zoom gesture."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
 
     def contextMenuEvent(self, event):
+        """Show a right-click menu offering to save the diagram as PNG."""
         menu = QMenu(self)
         save_act = QAction("Save as PNG...", self)
         save_act.triggered.connect(self.save_image)
@@ -496,6 +512,7 @@ class EnergyDiagramDialog(QDialog):
         menu.exec(event.globalPos())
 
     def save_image(self):
+        """Prompt for a path and save the diagram (minus controls) as a PNG."""
         fname, _ = QFileDialog.getSaveFileName(
             self, "Save Diagram", "orbital_diagram.png", "Images (*.png)"
         )
@@ -529,10 +546,14 @@ class EnergyDiagramDialog(QDialog):
             for w in widgets_to_restore:
                 w.setVisible(True)
 
-    def update_unit(self, text):
+    def update_unit(self, text):  # pylint: disable=unused-argument
+        # text is unused: connected to the combo box's signal, unit is re-read from the widget.
+        """Repaint the diagram after the energy unit combo box changes."""
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # pylint: disable=unused-argument
+        # Qt override signature requires the event argument.
+        """Draw the axis, energy levels, occupation arrows and orbital labels."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -651,7 +672,9 @@ class EnergyDiagramDialog(QDialog):
         level_w = 50  # Fixed compact width (pixels)
         padding_left = 10  # Space from column start
 
-        def find_somo_indices(energies_a, occ_a, energies_b, occ_b):
+        def find_somo_indices(energies_a, occ_a, energies_b, occ_b):  # pylint: disable=unused-argument
+            # energies_a/energies_b are unused: SOMO is derived from occupation counts alone,
+            # assuming orbitals are already energy-sorted from index 0.
             """Find orbitals where Alpha is occupied but Beta is not (SOMO)"""
             somo_indices = set()
 

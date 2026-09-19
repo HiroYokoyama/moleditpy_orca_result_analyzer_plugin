@@ -47,6 +47,7 @@ def find_nics_module(main_window):
 
 
 def nics_analyzer_available(main_window) -> bool:
+    """Return whether the NICS Analyzer plugin is loaded in the host."""
     return find_nics_module(main_window) is not None
 
 
@@ -82,7 +83,7 @@ def open_nics_analyzer(main_window, file_path=None):
         try:
             opener(file_path, context)
             return True, ""
-        except Exception as exc:  # plugin boundary: never take the analyzer down
+        except Exception as exc:  # plugin boundary: never take the analyzer down  # pylint: disable=broad-exception-caught
             logging.warning("NICS Analyzer hand-off failed", exc_info=True)
             return False, f"The ORCA NICS Analyzer could not read this file:\n{exc}"
 

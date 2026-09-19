@@ -1,3 +1,5 @@
+"""MO Analyzer dialog: orbital list, cube generation/visualization and export."""
+
 import csv
 import os
 import tempfile
@@ -29,8 +31,8 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
-import json
-from .utils import get_default_export_path, save_json_atomic
+from .utils import get_default_export_path
+from .settings import load_section, save_section
 import logging
 
 try:
@@ -72,7 +74,14 @@ except ImportError:
 
 
 class MODialog(QDialog):
-    def __init__(self, parent, mo_data, result_dir=None):
+    """Dialog listing MOs, generating their cube files and visualizing them in 3D."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt/PyVista pattern: label/actor/state attrs are created lazily, not in __init__.
+
+    def __init__(self, parent, mo_data, result_dir=None):  # pylint: disable=unused-argument
+        # result_dir is unused: get_cube_path() re-derives the cube directory from
+        # parent_dlg.parser.filename instead.
         super().__init__(parent)
         self.mw = None
         if hasattr(parent, "mw"):
@@ -95,6 +104,7 @@ class MODialog(QDialog):
         self.setup_ui()
 
     def get_cube_path(self, display_id):
+        """Return the on-disk cube file path for an orbital, if the parser has one."""
         if not hasattr(self.parent_dlg, "parser") or not self.parent_dlg.parser:
             return None
 
@@ -124,6 +134,7 @@ class MODialog(QDialog):
         return None
 
     def setup_ui(self):
+        """Build the orbital tree, visualization controls and action buttons."""
         # Use simpler Vertical Layout to fill the window
         layout = QVBoxLayout(self)
 
@@ -311,23 +322,11 @@ class MODialog(QDialog):
 
         # For now, we keep it Modal, but 'Visualize' updates the background window?
         # If modal, user can't rotate 3D view easily without closing dialog.
-        # Let's add a "Apply/Update" button or just let it update.
-
-        # To make it better:
-        # We'll just show info on right side.
-        # info_panel = QWidget()
-        # info_layout = QVBoxLayout(info_panel)
-        # info_layout.addWidget(QLabel("<b>Selected MO Info</b>"))
-        # self.lbl_info = QLabel("Select an MO to view details.")
-        # self.lbl_info.setWordWrap(True)
-        # info_layout.addWidget(self.lbl_info)
-        # info_layout.addStretch()
-        # main_layout.addWidget(info_panel)
-
         # Populate
         self.normalize_and_populate()
 
     def normalize_and_populate(self):
+        """Sort the parsed orbitals by spin/index and rebuild the orbital tree."""
         self.tree.clear()  # Verify clear first
         self.mo_list = []
 
@@ -388,9 +387,9 @@ class MODialog(QDialog):
         # *count* - 1: fractional-occupation output (FOD, natural orbitals)
         # leaves gaps, and counting labelled a mid-manifold orbital HOMO.
         spin_homo_idx = {}
-        for s in spin_mos:
+        for s, mos in spin_mos.items():
             occupied = []
-            for i, mo in enumerate(spin_mos[s]):
+            for i, mo in enumerate(mos):
                 if mo.get("occ", mo.get("occupation", 0.0)) <= 0.1:
                     continue
                 try:
@@ -427,8 +426,10 @@ class MODialog(QDialog):
             local_idx = -1
             try:
                 local_idx = int(mo_idx_val)
-            except (TypeError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (TypeError, ValueError) as e:
+                logging.warning(
+                    "MO: could not parse MO index %r as an integer: %s", mo_idx_val, e
+                )
 
             if spin in spin_homo_idx:
                 h = spin_homo_idx[spin]
@@ -475,8 +476,13 @@ class MODialog(QDialog):
                 path = self.get_cube_path(label_id)
                 if path and os.path.exists(path):
                     bg_color = QColor(240, 255, 240)  # Light Green
-            except Exception as _e:
-                logging.warning("silenced: %s", _e)
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logging.warning(
+                    "MO: could not check for an existing cube file for %s: %s",
+                    label_id,
+                    e,
+                )
 
             item = QTreeWidgetItem(
                 [label_id, homo_lumo_label, f"{occ:.2f}", f"{e_ev:.3f}", f"{e_eh:.5f}"]
@@ -516,11 +522,15 @@ class MODialog(QDialog):
                 break
             iterator += 1
 
-    def on_double_click(self, item, col):
+    def on_double_click(self, item, col):  # pylint: disable=unused-argument
+        # item/col are unused: Qt's itemDoubleClicked signature; uses the tree's current selection.
+        """Visualize the double-clicked orbital, generating its cube if needed."""
         # Double click always tries to visualize (generate if needed)
         self.visualize_selected_mos()
 
-    def on_item_changed(self, current, previous):
+    def on_item_changed(self, current, previous):  # pylint: disable=unused-argument
+        # previous is unused: Qt's currentItemChanged signature, only the new item is needed.
+        """Auto-load the already-cached cube for the newly selected orbital, if any."""
         # Single click or keyboard change
         if not current:
             return
@@ -538,10 +548,14 @@ class MODialog(QDialog):
             path = self.get_cube_path(display_id)
             if path and os.path.exists(path):
                 self.show_cube(path)
-        except Exception as _e:
-            logging.warning("silenced: %s", _e)
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logging.warning(
+                "MO: could not auto-load the cached cube for %s: %s", display_id, e
+            )
 
     def on_selection_changed(self):
+        """Enable Visualize only when the selected orbital has coefficients."""
         items = self.tree.selectedItems()
         has_coeffs = False
         if items:
@@ -559,8 +573,8 @@ class MODialog(QDialog):
                             # Use key directly
                             if key in self.parent_dlg.parser.data["mo_coeffs"]:
                                 has_coeffs = True
-            except (KeyError, IndexError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (KeyError, IndexError) as e:
+                logging.warning("MO: could not check mo_coeffs for key %r: %s", key, e)
 
         self.btn_vis.setEnabled(has_coeffs)
         if items and not has_coeffs:
@@ -579,6 +593,7 @@ class MODialog(QDialog):
             self.btn_copy_input.setVisible(False)
 
     def copy_orca_input(self):
+        """Copy the ORCA %output block needed for MO coefficients to the clipboard."""
         text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
         QApplication.clipboard().setText(text)
         if self.mw and hasattr(self.mw, "statusBar"):
@@ -591,6 +606,7 @@ class MODialog(QDialog):
             logging.info("ORCA Input block copied to clipboard.")
 
     def get_engine(self):
+        """Build a BasisSetEngine from the parser's basis set, or None on failure."""
         if not BasisSetEngine:
             QMessageBox.critical(self, "Error", "BasisSetEngine not available")
             return None
@@ -631,7 +647,8 @@ class MODialog(QDialog):
             # "Engine Init Failed".
             QMessageBox.warning(self, "Unsupported basis set", str(e))
             return None
-        except Exception as e:
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Engine Init Failed: {e}")
             return None
 
@@ -727,6 +744,7 @@ class MODialog(QDialog):
         self.show_cube(path)
 
     def visualize_selected_mos(self, force=False):
+        """Queue the selected orbitals for cube generation/visualization."""
         # Batch generation for selected items
         selected = self.tree.selectedItems()
         if not selected:
@@ -750,6 +768,7 @@ class MODialog(QDialog):
         self.process_generation_queue()
 
     def process_generation_queue(self):
+        """Generate the cube for the next queued orbital, or finish the batch."""
         if not getattr(self, "generation_queue", None):
             # Done
             if (
@@ -886,8 +905,10 @@ class MODialog(QDialog):
             if not os.path.exists(out_dir):
                 try:
                     os.makedirs(out_dir)
-                except OSError as _e:
-                    logging.warning("silenced: %s", _e)
+                except OSError as e:
+                    logging.warning(
+                        "MO: could not create cube output directory %s: %s", out_dir, e
+                    )
 
         # A silent batch must not steal what the main view is showing: an
         # update_vis_only() afterwards would redraw somebody else's orbital.
@@ -962,7 +983,7 @@ class MODialog(QDialog):
             else:
                 # If one fails, maybe continue?
                 # Or stop? let's continue but warn?
-                logging.warning("Failed: %s", res)
+                logging.warning("MO: cube generation failed: %s", res)
                 QMessageBox.warning(
                     self, "Generation Failed", f"Failed to generate cube:\n{res}"
                 )
@@ -980,6 +1001,7 @@ class MODialog(QDialog):
         self.worker.start()
 
     def pick_color(self, which):
+        """Open a color picker for the +/- lobe and apply it to the swatch button."""
         current_col = QColor("red") if which == "p" else QColor("blue")
         # Try to parse from button style
         try:
@@ -991,8 +1013,12 @@ class MODialog(QDialog):
             if "background-color:" in style:
                 c_str = style.split("background-color:")[1].split(";")[0].strip()
                 current_col = QColor(c_str)
-        except (RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError, IndexError) as e:
+            logging.warning(
+                "MO: could not read the current %s-lobe color from the button style: %s",
+                which,
+                e,
+            )
 
         col = QColorDialog.getColor(current_col, self, "Select Color")
         if col.isValid():
@@ -1012,6 +1038,7 @@ class MODialog(QDialog):
             self.update_vis_only()
 
     def load_settings(self):
+        """Restore saved visualization presets and select the last-used one."""
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
         self.presets = {
             "Default": {
@@ -1025,58 +1052,45 @@ class MODialog(QDialog):
         }
 
         if os.path.exists(self.settings_file):
+            mo_settings = load_section(self.settings_file, "mo_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-                    mo_settings = all_settings.get("mo_settings", {})
+                # Load presets
+                saved_presets = mo_settings.get("presets", {})
+                for name, data in saved_presets.items():
+                    self.presets[name] = data
 
-                    # Load presets
-                    saved_presets = mo_settings.get("presets", {})
-                    for name, data in saved_presets.items():
-                        self.presets[name] = data
+                # Last used
+                last_preset = mo_settings.get("last_preset", "Default")
 
-                    # Last used
-                    last_preset = mo_settings.get("last_preset", "Default")
+                # Populate combo
+                self.combo_presets.blockSignals(True)
+                self.combo_presets.clear()
+                self.combo_presets.addItems(list(self.presets.keys()))
 
-                    # Populate combo
-                    self.combo_presets.blockSignals(True)
-                    self.combo_presets.clear()
-                    self.combo_presets.addItems(list(self.presets.keys()))
+                if last_preset in self.presets:
+                    self.combo_presets.setCurrentText(last_preset)
+                    self.apply_preset(last_preset)
+                else:
+                    self.combo_presets.setCurrentText("Default")
+                    self.apply_preset("Default")
 
-                    if last_preset in self.presets:
-                        self.combo_presets.setCurrentText(last_preset)
-                        self.apply_preset(last_preset)
-                    else:
-                        self.combo_presets.setCurrentText("Default")
-                        self.apply_preset("Default")
-
-                    self.combo_presets.blockSignals(False)
-            except Exception as e:
+                self.combo_presets.blockSignals(False)
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 logging.warning("Error loading settings: %s", e)
 
     def save_settings(self):
+        """Persist the visualization presets and the currently selected one."""
         # Save current presets and selection
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
-
         mo_settings = {
             "presets": {k: v for k, v in self.presets.items() if k != "Default"},
             "last_preset": self.combo_presets.currentText(),
             "smooth_shading": self.check_smooth.isChecked(),
         }
-        all_settings["mo_settings"] = mo_settings
-
-        try:
-            save_json_atomic(self.settings_file, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving settings: %s", e)
+        save_section(self.settings_file, "mo_settings", mo_settings)
 
     def save_preset(self):
+        """Prompt for a name and save the current visualization settings as a preset."""
         name, ok = QInputDialog.getText(self, "Save Preset", "Preset Name:")
         if not ok or not name:
             return
@@ -1104,6 +1118,7 @@ class MODialog(QDialog):
         self.save_settings()
 
     def delete_preset(self):
+        """Delete the currently selected preset (Default cannot be deleted)."""
         curr = self.combo_presets.currentText()
         if curr == "Default":
             QMessageBox.warning(self, "Error", "Cannot delete Default preset.")
@@ -1122,6 +1137,7 @@ class MODialog(QDialog):
         self.save_settings()
 
     def apply_preset(self, name):
+        """Apply a named preset's values to the visualization controls."""
         if name not in self.presets:
             return
         data = self.presets[name]
@@ -1164,6 +1180,7 @@ class MODialog(QDialog):
         self.save_settings()  # Save last used
 
     def get_color_hex(self, which):
+        """Read the +/- lobe's current hex color from its swatch button's stylesheet."""
         # Extract from stylesheet
         btn = self.btn_color_p if which == "p" else self.btn_color_n
         style = btn.styleSheet()
@@ -1172,6 +1189,7 @@ class MODialog(QDialog):
         return "#ff0000" if which == "p" else "#0000ff"
 
     def set_btn_color(self, btn, hex_c):
+        """Paint a swatch button with hex_c, choosing readable text contrast."""
         col = QColor(hex_c)
         brightness = (col.red() * 299 + col.green() * 587 + col.blue() * 114) / 1000
         text_c = "black" if brightness > 128 else "white"
@@ -1180,10 +1198,12 @@ class MODialog(QDialog):
         )
 
     def update_vis_only(self):
+        """Redraw the last-shown cube with the current visualization settings."""
         if self.last_cube_path and os.path.exists(self.last_cube_path):
             self.show_cube(self.last_cube_path)
 
     def show_cube(self, path):
+        """Load a cube file and render its +/- isosurfaces in the 3D view."""
         if not CubeVisualizer:
             logging.warning("Warning: CubeVisualizer module not loaded.")
             QMessageBox.warning(
@@ -1216,6 +1236,7 @@ class MODialog(QDialog):
             self.last_cube_path = path
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
@@ -1225,15 +1246,19 @@ class MODialog(QDialog):
         if getattr(self, "energy_dlg", None) is not None and self.energy_dlg:
             try:
                 self.energy_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning(
+                    "MO: could not close the energy-components sub-dialog: %s", e
+                )
             self.energy_dlg = None
 
         if getattr(self, "compare_dlg", None) is not None and self.compare_dlg:
             try:
                 self.compare_dlg.close()
-            except (RuntimeError, AttributeError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError) as e:
+                logging.warning(
+                    "MO: could not close the MO comparison sub-dialog: %s", e
+                )
             self.compare_dlg = None
 
         if hasattr(self.parent_dlg, "mw"):
@@ -1252,6 +1277,7 @@ class MODialog(QDialog):
         event.accept()
 
     def export_csv(self):
+        """Prompt for a path and write the visible orbital tree to CSV."""
         default_path = get_default_export_path(
             self.parent_dlg.file_path, suffix="_mo_list", extension=".csv"
         )
@@ -1292,10 +1318,12 @@ class MODialog(QDialog):
                     logging.info("Data exported to %s", filename)
             else:
                 logging.info("Data exported to %s", filename)
-        except Exception as e:
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")
 
     def show_mo_diagram(self):
+        """Open the orbital energy level diagram for the current orbitals."""
         if not EnergyDiagramDialog:
             return
 
@@ -1399,14 +1427,18 @@ class MODialog(QDialog):
                 self.compare_dlg.raise_()
                 self.compare_dlg.activateWindow()
                 return
-            except RuntimeError as _e:
+            except RuntimeError as e:
                 # Underlying C++ object already gone; fall through and rebuild.
-                logging.warning("silenced: %s", _e)
+                logging.warning(
+                    "MO: could not reuse the existing MO comparison dialog, rebuilding it: %s",
+                    e,
+                )
 
         self.compare_dlg = MOCompareDialog(self)
         self.compare_dlg.show()
 
     def on_compare_closed(self):
+        """Clear the tracked reference once the MO comparison dialog closes."""
         self.compare_dlg = None
 
     def load_file_by_path(self, path):
@@ -1420,12 +1452,9 @@ class MODialog(QDialog):
             # We don't have the key here easily unless we parse filename.
             # But the visualization is what matters.
 
-    def generate_specific_orbital(self, index, label, spin_suffix=""):
+    def generate_specific_orbital(self, index, label, spin_suffix=""):  # pylint: disable=unused-argument
+        # label is unused: index + spin_suffix fully identify the orbital to generate.
         """Called from Diagram to generate cube"""
-        # We need to map index -> Key.
-        # self.mo_list has keys.
-        # Index is 0-based.
-        # But separate by spin?
         # Diagram index is index within spin channel.
         # We need to find the MO with that index and spin.
 
@@ -1454,13 +1483,11 @@ class MODialog(QDialog):
         curr_idx = 0
         mo_key = None
 
-        # Sort self.mo_list by ID to match diagram order?
-        # self.mo_list is appended in loop.
-        # normalize_and_populate sorts keys.
-        # We need to trust the sort order is: Alpha 0..N, Beta 0..N ??
-        # Or keys are arbitrary.
-        # Let's re-sort to be safe.
-
+        # The diagram's index is positional within one spin channel, while
+        # mo_list holds whatever order normalize_and_populate appended. Sort
+        # explicitly by (spin, id) rather than trusting that order: picking the
+        # wrong orbital here still renders a perfectly plausible-looking cube,
+        # so the mistake is invisible in the picture.
         sorted_mos = sorted(
             self.mo_list, key=lambda x: (x.get("spin", ""), int(x.get("id", -1)))
         )

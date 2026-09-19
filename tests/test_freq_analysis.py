@@ -330,11 +330,15 @@ def _install_stubs():
     _sw = types.ModuleType("orca_result_analyzer.spectrum_widget")
     _sw.SpectrumWidget = MagicMock
 
-    # utils stub
+    # utils stub — notify() is pulled in from the real module (no Qt
+    # dependency) so its owner-chain resolution is genuinely exercised.
+    from orca_result_analyzer.utils import notify as _real_notify
+
     _ut = types.ModuleType("orca_result_analyzer.utils")
     _ut.get_default_export_path = MagicMock(return_value="")
     _ut.clear_atom_color_overrides = MagicMock()
     _ut.save_json_atomic = MagicMock()
+    _ut.notify = _real_notify
 
     # PIL stub — fallback only. This lands in the shared sys.modules for the
     # rest of the session, and matplotlib's Agg backend does

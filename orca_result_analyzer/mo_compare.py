@@ -5,7 +5,6 @@ and style, and renders into its own namespaced pair of actors so all four
 isosurfaces coexist in the host's 3D view.
 """
 
-import json
 import logging
 import os
 
@@ -34,9 +33,9 @@ except ImportError:
         CubeVisualizer = None
 
 try:
-    from .utils import save_json_atomic
+    from .settings import load_section, save_section
 except ImportError:
-    from utils import save_json_atomic
+    from settings import load_section, save_section
 
 
 SLOT_COUNT = 4
@@ -103,11 +102,13 @@ class MOSlot:
 
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("Iso:"))
+        # pylint: disable=duplicate-code  # isovalue spinbox setup mirrors mo_analysis; unrelated dialogs
         self.spin_iso = QDoubleSpinBox()
         self.spin_iso.setRange(0.001, 1.0)
         self.spin_iso.setSingleStep(0.005)
         self.spin_iso.setDecimals(3)
         self.spin_iso.setValue(0.02)
+        # pylint: enable=duplicate-code
         row3.addWidget(self.spin_iso)
 
         row3.addWidget(QLabel("Opacity:"))
@@ -132,6 +133,7 @@ class MOSlot:
         self.set_color("n", colors[1])
 
     def set_color(self, which, hex_c):
+        """Paint the +/- lobe button with hex_c, choosing readable text contrast."""
         btn = self.btn_p if which == "p" else self.btn_n
         btn.setStyleSheet(
             f"background-color: {hex_c}; color: {contrast_text(hex_c)}; "
@@ -139,6 +141,7 @@ class MOSlot:
         )
 
     def color(self, which):
+        """Read the +/- lobe's current hex color from its button's stylesheet."""
         btn = self.btn_p if which == "p" else self.btn_n
         style = btn.styleSheet()
         if "background-color:" in style:
@@ -146,6 +149,7 @@ class MOSlot:
         return "#ff0000" if which == "p" else "#0000ff"
 
     def is_on(self):
+        """Whether this slot's Show checkbox is checked."""
         return self.check_on.isChecked()
 
     def selection(self):
@@ -190,6 +194,8 @@ class MOSlot:
 
 
 class MOCompareDialog(QDialog):
+    """Dialog rendering up to four orbitals' isosurfaces side by side in 3D."""
+
     def __init__(self, parent):
         super().__init__(parent)
         self.parent_dlg = parent
@@ -232,8 +238,10 @@ class MOCompareDialog(QDialog):
             return keys
         try:
             selected = tree.selectedItems() or []
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.warning(
+                "MO compare: could not read the MO table's current selection: %s", e
+            )
             return keys
         for item in selected:
             key = item.data(0, Qt.ItemDataRole.UserRole)
@@ -323,6 +331,7 @@ class MOCompareDialog(QDialog):
             self.btn_update.setStyleSheet("")
 
     def setup_ui(self):
+        """Build the four orbital-slot boxes and the update/close controls."""
         layout = QVBoxLayout(self)
 
         info = QLabel(
@@ -444,15 +453,11 @@ class MOCompareDialog(QDialog):
         return os.path.join(os.path.dirname(__file__), "settings.json")
 
     def load_settings(self):
+        """Restore each slot's saved appearance from settings.json."""
         path = self.settings_path()
         if not os.path.exists(path):
             return
-        try:
-            with open(path, "r", encoding="utf-8") as fh:
-                saved = json.load(fh).get("mo_compare", {})
-        except (OSError, ValueError) as e:
-            logging.warning("Error loading compare settings: %s", e)
-            return
+        saved = load_section(path, "mo_compare")
         slots = saved.get("slots") if isinstance(saved, dict) else None
         if not isinstance(slots, list):
             return
@@ -460,30 +465,19 @@ class MOCompareDialog(QDialog):
             slot.from_settings(data)
 
     def save_settings(self):
+        """Persist each slot's appearance to settings.json."""
         path = self.settings_path()
-        all_settings = {}
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as fh:
-                    all_settings = json.load(fh)
-            except (OSError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
-        if not isinstance(all_settings, dict):
-            all_settings = {}
-
-        all_settings["mo_compare"] = {
-            "slots": [slot.to_settings() for slot in self.slots]
-        }
-        try:
-            save_json_atomic(path, all_settings)
-        except (OSError, TypeError, ValueError) as e:
-            logging.warning("Error saving compare settings: %s", e)
+        save_section(
+            path, "mo_compare", {"slots": [slot.to_settings() for slot in self.slots]}
+        )
 
     def _parent_color(self, which):
         try:
             return self.parent_dlg.get_color_hex(which)
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.warning(
+                "MO compare: could not read the parent dialog's %s color: %s", which, e
+            )
             return DEFAULT_COLORS[0][0 if which == "p" else 1]
 
     def _seed_first_slot(self, slot):
@@ -496,12 +490,16 @@ class MOCompareDialog(QDialog):
             if idx >= 0:
                 slot.combo_style.setCurrentIndex(idx)
             slot.check_smooth.setChecked(parent.check_smooth.isChecked())
-        except (AttributeError, RuntimeError, TypeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError, TypeError) as e:
+            logging.warning(
+                "MO compare: could not copy the MO dialog's render settings into slot 1: %s",
+                e,
+            )
 
     # -- interaction -------------------------------------------------------
 
     def pick_slot_color(self, slot, which):
+        """Open a color picker for a slot's +/- lobe and re-render on acceptance."""
         from PyQt6.QtGui import QColor
 
         col = QColorDialog.getColor(QColor(slot.color(which)), self, "Select Color")
@@ -548,13 +546,17 @@ class MOCompareDialog(QDialog):
             self.refresh_update_button()
 
     def _cube_path(self, display_id):
+        """Resolve a display id to its cube file path via the parent MO dialog."""
         try:
             return self.parent_dlg.get_cube_path(display_id)
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.warning(
+                "MO compare: could not resolve the cube path for %s: %s", display_id, e
+            )
             return None
 
     def render_all(self):
+        """Draw every enabled slot's isosurfaces (skipping any missing cube)."""
         if self._suspend:
             return
         if not CubeVisualizer:
@@ -604,8 +606,10 @@ class MOCompareDialog(QDialog):
 
         try:
             mw.plotter.render()
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.debug(
+                "MO compare: could not render the plotter after showing orbitals: %s", e
+            )
 
         msg = f"Showing {shown} orbital(s)."
         if missing:
@@ -616,6 +620,7 @@ class MOCompareDialog(QDialog):
         self.refresh_update_button()
 
     def clear_all(self):
+        """Turn off every slot and remove all their 3D actors."""
         self._suspend += 1
         try:
             for slot in self.slots:
@@ -626,47 +631,61 @@ class MOCompareDialog(QDialog):
         try:
             if self.mw:
                 self.mw.plotter.render()
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.debug(
+                "MO compare: could not render the plotter after clearing all slots: %s",
+                e,
+            )
         self.lbl_status.setText("")
         self.refresh_update_button()
 
     def _remove_actors(self, prefix):
         try:
             plotter = self.mw.plotter if self.mw else None
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.debug(
+                "MO compare: could not access the 3D plotter to remove actors for %s: %s",
+                prefix,
+                e,
+            )
             return
         if plotter is None:
             return
         for suffix in ("_p", "_n"):
             try:
                 plotter.remove_actor(f"{prefix}{suffix}")
-            except (AttributeError, RuntimeError, KeyError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, RuntimeError, KeyError) as e:
+                logging.debug(
+                    "MO compare: could not remove actor %s%s: %s", prefix, suffix, e
+                )
 
     # -- teardown ----------------------------------------------------------
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Save settings and remove every slot's 3D actors before closing."""
         self.save_settings()
         for slot in self.slots:
             self._remove_actors(slot.prefix)
         try:
             if self.mw:
                 self.mw.plotter.render()
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.debug("MO compare: could not render the plotter on close: %s", e)
 
         # Without this the MO dialog keeps a dead reference and reopening
         # raises the destroyed window instead of building a new one.
         try:
             self.parent_dlg.on_compare_closed()
-        except (AttributeError, RuntimeError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (AttributeError, RuntimeError) as e:
+            logging.warning(
+                "MO compare: could not notify the parent MO dialog that this window closed: %s",
+                e,
+            )
 
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.

@@ -52,10 +52,12 @@ class _CopyableTable(QTableWidget):
         self._col_weights = None
 
     def set_column_weights(self, weights):
+        """Store the per-column width weights and re-apply them immediately."""
         self._col_weights = list(weights)
         self._apply_weights()
 
     def _apply_weights(self):
+        """Resize each column proportionally to its stored weight."""
         if not self._col_weights:
             return
         total = sum(self._col_weights)
@@ -67,16 +69,19 @@ class _CopyableTable(QTableWidget):
                 self.setColumnWidth(c, max(48, int(width * w / total)))
 
     def resizeEvent(self, event):
+        """Re-apply the stored column weights when the table is resized."""
         super().resizeEvent(event)
         self._apply_weights()
 
     def keyPressEvent(self, event):
+        """Copy the current selection as TSV on Ctrl+C, otherwise defer to Qt."""
         if event.matches(QKeySequence.StandardKey.Copy):
             self._copy_selection()
             return
         super().keyPressEvent(event)
 
     def _copy_selection(self):
+        """Put the selected cells on the clipboard as tab-separated rows."""
         items = self.selectedItems()
         if not items:
             return
@@ -156,6 +161,8 @@ def _vdw(sym):
 
 
 class BondAnalysisDialog(QDialog):
+    """Dialog showing Mayer bond orders and NBO results with 3D highlighting."""
+
     def __init__(self, parent, data):
         super().__init__(parent)
         self.parent_dlg = parent  # OrcaResultAnalyzerDialog (has .mw, .parser)
@@ -275,13 +282,15 @@ class BondAnalysisDialog(QDialog):
         for actor in self._actors:
             try:
                 plotter.remove_actor(actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug("Could not remove a bond-highlight actor: %s", e)
         self._actors = []
         try:
             plotter.render()
-        except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+            logging.debug(
+                "Could not render the plotter after clearing bond highlights: %s", e
+            )
 
     def _highlight_atoms(self, indices):
         self._clear_highlight()
@@ -302,8 +311,12 @@ class BondAnalysisDialog(QDialog):
                         plotter.add_mesh(sphere, color="yellow", opacity=0.4)
                     )
             plotter.render()
-        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (ImportError, RuntimeError, AttributeError, IndexError) as e:
+            logging.warning(
+                "Bond analysis: could not highlight atoms %s in the 3D view: %s",
+                indices,
+                e,
+            )
 
     def _highlight_bond(self, i, j):
         self._clear_highlight()
@@ -326,8 +339,13 @@ class BondAnalysisDialog(QDialog):
                     plotter.add_mesh(sphere, color="orange", opacity=0.4)
                 )
             plotter.render()
-        except (ImportError, RuntimeError, AttributeError, IndexError) as _e:
-            logging.warning("silenced: %s", _e)
+        except (ImportError, RuntimeError, AttributeError, IndexError) as e:
+            logging.warning(
+                "Bond analysis: could not highlight the bond %d-%d in the 3D view: %s",
+                i,
+                j,
+                e,
+            )
 
     @staticmethod
     def _single_selected_row(table):
@@ -385,10 +403,12 @@ class BondAnalysisDialog(QDialog):
         QMessageBox.information(self, f"NBO #{o['index']} detail", "\n".join(lines))
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Clear any active 3D highlight before the dialog closes."""
         self._clear_highlight()
         # accept() not super().closeEvent(): QDialog.closeEvent calls reject(),
         # which is routed back through close() and would recurse.

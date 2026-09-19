@@ -1,3 +1,5 @@
+"""Shared helpers: atomic JSON save, default export paths and host status-bar notify."""
+
 import json
 import logging
 import os
@@ -102,23 +104,10 @@ def normalize_atom_symbol(raw: str) -> str:
 
 
 def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = True):
-    """Run RDKit bond determination on *mol*, skipping dummy ('*') atoms.
+    """Run RDKit bond determination on *mol* (an RWMol), skipping dummy atoms.
 
-    Builds a sub-molecule containing only real (non-dummy) atoms, calls
-    ``DetermineConnectivity`` (and optionally ``DetermineBondOrders``) on it,
-    then copies the resulting bonds back to the original *mol* (which must be
-    an ``RWMol``).  Any failure is caught and logged — the function is
-    intentionally non-fatal.
-
-    Parameters
-    ----------
-    mol:
-        An RDKit ``RWMol`` with a conformer already attached.
-    charge:
-        Formal charge to pass to ``DetermineBondOrders``.
-    bond_orders:
-        If *True* (default) also determine bond orders.  Pass *False*
-        during animation playback to avoid per-frame latency.
+    Non-fatal: failures are logged. Pass bond_orders=False during animation
+    playback to avoid per-frame latency.
     """
     try:
         from rdkit import Chem
@@ -163,7 +152,8 @@ def determine_bonds_without_dummies(mol, charge: int = 0, bond_orders: bool = Tr
             orig_j = real_indices[bond.GetEndAtomIdx()]
             mol.AddBond(orig_i, orig_j, bond.GetBondType())
 
-    except Exception as exc:  # noqa: BLE001
+    # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
+    except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
         logging.debug("determine_bonds_without_dummies: non-fatal — %s", exc)
 
 
@@ -227,3 +217,40 @@ def list_orca_output_files(directory: str) -> list[str]:
     except OSError as exc:
         logging.debug("list_orca_output_files: cannot list '%s' — %s", directory, exc)
         return []
+
+
+def _host_context(owner):
+    """Resolve the host PluginContext via context/parent_dlg/freq_dialog/parent()."""
+    if owner is None:
+        return None
+    seen = []
+    candidate = owner
+    for _ in range(4):
+        if candidate is None or any(candidate is s for s in seen):
+            break
+        seen.append(candidate)
+        context = getattr(candidate, "context", None)
+        if context is not None and hasattr(context, "show_status_message"):
+            return context
+        for hop in ("parent_dlg", "freq_dialog", "parent_dialog"):
+            nxt = getattr(candidate, hop, None)
+            if nxt is not None:
+                break
+        else:
+            parent = getattr(candidate, "parent", None)
+            nxt = parent() if callable(parent) else parent
+        candidate = nxt
+    return None
+
+
+def notify(owner, message, timeout=3000):
+    """Show *message* in the host status bar, else log it. Never raises."""
+    context = _host_context(owner)
+    if context is not None:
+        try:
+            context.show_status_message(message, timeout)
+            return True
+        except (AttributeError, TypeError, RuntimeError) as exc:
+            logging.warning("Status message rejected by host: %s", exc)
+    logging.info("%s", message)
+    return False

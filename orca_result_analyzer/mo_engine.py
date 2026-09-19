@@ -1,3 +1,5 @@
+"""Basis-set evaluation engine for MO cubes: grid construction and cube I/O."""
+
 import os
 import logging
 import re
@@ -53,6 +55,8 @@ def read_generation_settings(filepath):
 
 
 class CubeWriter:
+    """Writes a Gaussian-cube file for a computed MO grid."""
+
     @staticmethod
     def write(
         filepath,
@@ -467,7 +471,8 @@ class BasisSetEngine:
 
         self.n_basis = current_idx
 
-    def evaluate_mo_on_grid(self, mo_idx, grid_coords, mo_coeffs_all):
+    def evaluate_mo_on_grid(self, mo_idx, grid_coords, mo_coeffs_all):  # pylint: disable=unused-argument
+        # mo_idx is unused: mo_coeffs_all fully specifies the orbital; kept for caller bookkeeping.
         """
         Evaluate MO on grid (Vectorized Implementation).
         mo_coeffs_all: 1D array of all MO coefficients (must match n_basis)
@@ -544,6 +549,8 @@ class BasisSetEngine:
 
 
 class CalcWorker(QThread):
+    """Background thread that evaluates one MO on a grid and writes its cube file."""
+
     progress_sig = pyqtSignal(int)
     finished_sig = pyqtSignal(bool, str)
 
@@ -570,6 +577,7 @@ class CalcWorker(QThread):
         self._is_cancelled = False
 
     def run(self):
+        """Evaluate the orbital on its grid and write the resulting cube file."""
         try:
             # Guard: with a single grid point per axis span/(n-1) divides by
             # zero, which numpy turns into inf spacing and a silently corrupt
@@ -607,7 +615,7 @@ class CalcWorker(QThread):
             chunk_size = 50000
             result_flat = np.zeros(n_total)
 
-            for i, start in enumerate(range(0, n_total, chunk_size)):
+            for start in range(0, n_total, chunk_size):
                 if self._is_cancelled:
                     return
                 end = min(start + chunk_size, n_total)
@@ -656,6 +664,7 @@ class CalcWorker(QThread):
 
             self.finished_sig.emit(True, self.output_path)
 
-        except Exception as e:
-            logging.exception("silenced")
+        # worker-thread top level: an escaping exception would kill the thread silently
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logging.exception("MO: cube generation failed for MO %s", self.mo_idx)
             self.finished_sig.emit(False, str(e))

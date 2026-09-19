@@ -1,3 +1,5 @@
+"""Trajectory/scan dialog: energy profile plot, structure playback, MEP loading and export."""
+
 import csv
 import os
 import matplotlib
@@ -26,38 +28,40 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 from .parser import OrcaParser
+from .gif_export import Image, HAS_PIL, encode_frames_to_gif
 from .utils import (
     get_default_export_path,
     normalize_atom_symbol,
     determine_bonds_without_dummies,
+    notify,
 )
 import logging
 
 try:
     from rdkit import Chem
     from rdkit.Geometry import Point3D
-    from rdkit.Chem import rdDetermineBonds
 except ImportError:
     Chem = None
     Point3D = None
-    rdDetermineBonds = None
-
-try:
-    from PIL import Image
-
-    HAS_PIL = True
-except ImportError:
-    HAS_PIL = False
 
 
 class MplCanvas(FigureCanvasQTAgg):
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    """Matplotlib canvas embedding a single figure/axes for the energy profile plot."""
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):  # pylint: disable=unused-argument
+        # parent is unused: layout.addWidget() reparents the canvas once it is added.
+        """Create the figure and single subplot backing this canvas."""
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
         super(MplCanvas, self).__init__(self.fig)
 
 
 class TrajectoryResultDialog(QDialog):
+    """Trajectory/scan dialog: energy profile plot, structure playback and MEP/export controls."""
+
+    # pylint: disable=attribute-defined-outside-init
+    # Qt pattern: widget attributes are set in init_ui(), called from __init__.
+
     def __init__(
         self,
         gl_widget,
@@ -156,6 +160,8 @@ class TrajectoryResultDialog(QDialog):
 
     def run_auto_load(self):
         """Attempts to auto-load TRJ if structure is missing."""
+        if getattr(self, "_is_closing", False):
+            return
         # Strict check: Only auto-load if it looks like an NEB calculation (Path Summary)
         # parser.py tags NEB path summary items with type='neb_image'
         if not self.steps:
@@ -184,8 +190,13 @@ class TrajectoryResultDialog(QDialog):
                         self.load_external_trj(path, silent=True)
                         loaded = True
                         break
-                    except Exception as e:
-                        logging.warning("silenced: %s", e)
+                    # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        logging.warning(
+                            "Trajectory: could not auto-load candidate trajectory file %s: %s",
+                            path,
+                            e,
+                        )
 
             if not loaded and self.base_dir:
                 # 2. Heuristic: look for unique *_MEP_trj.xyz in base_dir
@@ -199,14 +210,19 @@ class TrajectoryResultDialog(QDialog):
                         full_path = os.path.join(self.base_dir, f_cands[0])
                         self.load_external_trj(full_path, silent=True)
                         loaded = True
-                except (OSError, IndexError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (OSError, IndexError) as e:
+                    logging.warning(
+                        "Trajectory: could not scan %s for a unique _MEP_trj.xyz file: %s",
+                        self.base_dir,
+                        e,
+                    )
 
             if not loaded:
                 # 3. Last resort: prompt user
                 QTimer.singleShot(200, self.load_mep_trj)
 
     def init_ui(self):
+        """Build the step slider, view/energy/axis toggles and playback/export buttons."""
         # 2. Controls
         ctrl_layout = QHBoxLayout()
 
@@ -392,6 +408,7 @@ class TrajectoryResultDialog(QDialog):
         self.layout().addLayout(btn_layout)
 
     def recalc_energies(self):
+        """Recompute the raw and display energies (and their baseline) for the current step list."""
         # Extract energies
         self.energies = [s["energy"] for s in self.steps]
         # Absolute and Relative energies in current unit
@@ -436,6 +453,7 @@ class TrajectoryResultDialog(QDialog):
         return final_points
 
     def on_traj_mode_changed(self):
+        """Switch between showing all trajectory steps and only the converged scan points."""
         # Only trigger on the newly checked button
         if not self.sender().isChecked():
             return
@@ -481,6 +499,7 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(0)
 
     def on_toggle_mode(self):
+        """Switch the plotted energy between absolute and relative-to-minimum."""
         self.show_relative = self.radio_rel.isChecked()
 
         # Disable Log Scale for Absolute Mode (usually negative energies)
@@ -497,10 +516,12 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(self.slider.value())
 
     def on_log_changed(self):
+        """Toggle log-scale plotting of the energy axis and redraw."""
         self.use_log_scale = self.chk_log.isChecked()
         self.plot_data()
 
     def on_x_axis_mode_changed(self):
+        """Switch the plotted X axis between step index and scan coordinate/path distance."""
         # Trigger fires for both the newly-checked and newly-unchecked button;
         # only act on the newly-checked one.
         sender = self.sender()
@@ -514,12 +535,14 @@ class TrajectoryResultDialog(QDialog):
         self.on_step_changed(self.slider.value())
 
     def on_unit_changed(self, unit):
+        """Switch the displayed energy unit and refresh the plot and step label."""
         self.current_unit = unit
         self.update_display_values()
         self.plot_data()
         self.on_step_changed(self.slider.value())
 
     def update_display_values(self):
+        """Recompute the display-unit energies from the raw Hartree values and current unit/mode."""
         factor = 1.0  # default Eh
         # High precision factors (CODATA 2018 / ORCA consistency)
         if self.current_unit == "kJ/mol":
@@ -535,6 +558,7 @@ class TrajectoryResultDialog(QDialog):
             self.display_energies = [e * factor for e in self.energies]
 
     def plot_data(self):
+        """Redraw the whole energy-profile plot from the current steps, axis mode and unit."""
         self.canvas.axes.clear()
         self._highlight_marker = None
         self._highlight_line = None
@@ -628,17 +652,22 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw()
 
     def highlight_point(self, idx):
+        """Draw the red marker and vertical guide line at the given step's position on the plot."""
         # Remove old markers
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug(
+                    "Trajectory: could not remove the old highlight marker: %s", e
+                )
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug(
+                    "Trajectory: could not remove the old highlight line: %s", e
+                )
 
         if not self.display_energies or idx < 0 or idx >= len(self.display_energies):
             return
@@ -675,6 +704,9 @@ class TrajectoryResultDialog(QDialog):
         self.canvas.draw_idle()
 
     def on_step_changed(self, idx):
+        """Update the highlight, info label and 3D structure for a newly selected step index."""
+        if getattr(self, "_is_closing", False):
+            return
         # Bounds check to prevent IndexError during mode transitions
         if idx < 0 or idx >= len(self.steps) or idx >= len(self.display_energies):
             return
@@ -707,6 +739,7 @@ class TrajectoryResultDialog(QDialog):
         self.update_structure(step["atoms"], step["coords"])
 
     def update_structure(self, atoms, coords):
+        """Build an RDKit molecule from a step's atoms/coordinates and push it to the 3D view."""
         if not atoms:
             return
         # RDKit build
@@ -747,12 +780,16 @@ class TrajectoryResultDialog(QDialog):
             self.gl_widget.draw_molecule_3d(final_mol)
 
     def on_scroll(self, event):
+        """Step the slider one frame per mouse-wheel notch over the plot."""
         if event.button == "up":
             self.slider.setValue(max(self.slider.value() - 1, 0))
         elif event.button == "down":
             self.slider.setValue(min(self.slider.value() + 1, len(self.steps) - 1))
 
     def load_mep_trj(self):
+        """Prompt for an MEP trajectory XYZ file and load it to replace the current steps."""
+        if getattr(self, "_is_closing", False):
+            return
         start_path = self.base_dir if self.base_dir else ""
 
         # Try to suggest a filename if available
@@ -771,6 +808,7 @@ class TrajectoryResultDialog(QDialog):
         self.load_external_trj(path)
 
     def load_external_trj(self, path, silent=False):
+        """Parse an external XYZ trajectory file and replace the dialog's steps with it."""
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 content = f.read()
@@ -865,47 +903,65 @@ class TrajectoryResultDialog(QDialog):
                 if hasattr(mw.ui_manager, "enter_3d_viewer_mode"):
                     try:
                         mw.ui_manager.enter_3d_viewer_mode()
-                    except (AttributeError, RuntimeError) as _e:
-                        logging.warning("[traj_analysis.py] silenced: %s", _e)
+                    except (AttributeError, RuntimeError) as e:
+                        logging.warning(
+                            "Trajectory: could not switch the main window into 3D viewer mode: %s",
+                            e,
+                        )
                 elif hasattr(mw.ui_manager, "_enter_3d_viewer_ui_mode"):
                     try:
                         mw.ui_manager._enter_3d_viewer_ui_mode()
-                    except (AttributeError, RuntimeError) as _e:
-                        logging.warning("silenced: %s", _e)
+                    except (AttributeError, RuntimeError) as e:
+                        logging.warning(
+                            "Trajectory: could not switch the main window into 3D viewer mode: %s",
+                            e,
+                        )
                 else:
                     try:
                         self.context.set_3d_features_enabled(True)
                         if hasattr(mw.ui_manager, "minimize_2d_panel"):
                             mw.ui_manager.minimize_2d_panel()
-                    except Exception as _e:
-                        logging.warning("silenced: %s", _e)
+                    # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        logging.warning(
+                            "Trajectory: could not enable 3D features / minimize the 2D panel: %s",
+                            e,
+                        )
             elif hasattr(mw, "init_manager") and hasattr(mw.init_manager, "splitter"):
                 # Fallback for manual splitter manipulation if ui_manager is missing
                 try:
                     total = mw.init_manager.splitter.width()
                     mw.init_manager.splitter.setSizes([0, total])
-                except IndexError as _e:
-                    logging.warning("silenced: %s", _e)
+                except IndexError as e:
+                    logging.warning(
+                        "Trajectory: could not resize the main-window splitter for 3D mode: %s",
+                        e,
+                    )
 
             # Reset Camera
             if self.context:
                 try:
                     self.context.reset_3d_camera()
-                except (AttributeError, RuntimeError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (AttributeError, RuntimeError) as e:
+                    logging.warning(
+                        "Trajectory: could not reset the 3D camera via the host context: %s",
+                        e,
+                    )
             elif hasattr(mw, "plotter") and mw.plotter:
                 try:
                     mw.plotter.reset_camera()
-                except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                    logging.warning("silenced: %s", _e)
+                except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                    logging.warning("Trajectory: could not reset the 3D camera: %s", e)
 
             # Only show message if manual load (optional, or just show it)
             # QMessageBox.information(self, "Loaded", f"Loaded {len(steps)} frames from TRJ.")
-        except Exception as e:
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+        except Exception as e:  # pylint: disable=broad-exception-caught
             if not silent:
                 QMessageBox.critical(self, "Error", f"Failed to load TRJ:\n{e}")
 
     def on_pick(self, event):
+        """Jump the slider to the plot point clicked by the user."""
         # Disable pick if current steps have no atoms (NEB Summary)
         if self.steps and not self.steps[0].get("atoms", None):
             return
@@ -920,6 +976,7 @@ class TrajectoryResultDialog(QDialog):
             self.slider.setValue(idx)
 
     def on_hover(self, event):
+        """Show or hide the tooltip annotation as the mouse moves over a plotted point."""
         if not self.scatter:
             return
         vis = self.annot.get_visible()
@@ -956,6 +1013,7 @@ class TrajectoryResultDialog(QDialog):
                     self.canvas.draw_idle()
 
     def toggle_play(self):
+        """Start or stop step-by-step playback of the trajectory."""
         # Disable play if no atoms
         if self.steps and not self.steps[0].get("atoms", None):
             return
@@ -984,11 +1042,13 @@ class TrajectoryResultDialog(QDialog):
             self.is_playing = True
 
     def on_fps_changed(self):
+        """Apply a changed FPS spin box value to the running playback timer."""
         if self.is_playing:
             fps = self.spin_fps.value()
             self.timer.start(int(1000 / fps))
 
     def next_frame(self):
+        """Advance the slider one step, looping or stopping playback at the end per the Loop checkbox."""
         idx = self.slider.value() + 1
         if idx >= len(self.steps):
             if self.chk_loop.isChecked():
@@ -1000,6 +1060,7 @@ class TrajectoryResultDialog(QDialog):
         self.slider.setValue(idx)
 
     def prev_frame(self):
+        """Step the slider back one frame, wrapping to the last step if Loop is checked."""
         idx = self.slider.value() - 1
         if idx < 0:
             if self.chk_loop.isChecked():
@@ -1009,16 +1070,19 @@ class TrajectoryResultDialog(QDialog):
         self.slider.setValue(idx)
 
     def go_to_first_frame(self):
+        """Stop playback and jump the slider to the first step."""
         if self.is_playing:
             self.toggle_play()
         self.slider.setValue(0)
 
     def go_to_last_frame(self):
+        """Stop playback and jump the slider to the last step."""
         if self.is_playing:
             self.toggle_play()
         self.slider.setValue(len(self.steps) - 1)
 
     def save_graph(self):
+        """Prompt for a path and save the energy profile plot as an image."""
         # Hide annotation before saving
         was_visible = self.annot.get_visible()
         self.annot.set_visible(False)
@@ -1032,36 +1096,39 @@ class TrajectoryResultDialog(QDialog):
         )
         if path:
             self.canvas.fig.savefig(path, dpi=300)
-            if self.context:
-                self.context.show_status_message(
-                    f"Graph saved to: {os.path.basename(path)}", 5000
-                )
-            else:
-                pass
+            notify(self, f"Graph saved to: {os.path.basename(path)}", 5000)
 
         # Restore annotation visibility
         self.annot.set_visible(was_visible)
         self.canvas.draw()
 
     def clear_selection(self):
+        """Remove the plot's highlight marker/line and clear the step info label."""
         # Remove highlight markers and line
         if getattr(self, "_highlight_marker", None) is not None:
             try:
                 self._highlight_marker.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug(
+                    "Trajectory: could not remove the highlight marker on selection clear: %s",
+                    e,
+                )
             del self._highlight_marker
         if getattr(self, "_highlight_line", None) is not None:
             try:
                 self._highlight_line.remove()
-            except (AttributeError, ValueError, NotImplementedError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (AttributeError, ValueError, NotImplementedError) as e:
+                logging.debug(
+                    "Trajectory: could not remove the highlight line on selection clear: %s",
+                    e,
+                )
             del self._highlight_line
 
         self.lbl_info.setText("Selection Cleared")
         self.canvas.draw()
 
     def save_csv(self):
+        """Prompt for a path and export the step/energy/coordinate data as CSV."""
         default_path = get_default_export_path(
             self.output_path, suffix="_traj_data", extension=".csv"
         )
@@ -1095,14 +1162,14 @@ class TrajectoryResultDialog(QDialog):
                                 cv = step.get("dist")
                             row.insert(1, cv if cv is not None else "")
                         writer.writerow(row)
-                if self.context:
-                    self.context.show_status_message(
-                        f"Data saved to: {os.path.basename(path)}", 5000
-                    )
-            except Exception as e:
+                notify(self, f"Data saved to: {os.path.basename(path)}", 5000)
+            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 QMessageBox.critical(self, "Error", str(e))
 
+    # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PyQt6-free
     def save_gif(self):
+        """Prompt for GIF settings and export a playback loop of all steps as an animated GIF."""
         if not HAS_PIL:
             QMessageBox.warning(self, "Error", "PIL (Pillow) not installed.")
             return
@@ -1189,49 +1256,11 @@ class TrajectoryResultDialog(QDialog):
 
             # Save GIF
             if images:
-                duration = int(1000 / fps)
-                processed_images = []
-                for img in images:
-                    if use_hq:
-                        if transparent:
-                            # Alpha preservation with adaptive palette
-                            alpha = img.split()[3]
-                            img_rgb = img.convert("RGB")
-                            # Quantize to 255 colors to leave room for transparency
-                            img_p = img_rgb.convert(
-                                "P", palette=Image.Palette.ADAPTIVE, colors=255
-                            )
-                            # Set transparency
-                            mask = Image.eval(alpha, lambda a: 255 if a <= 128 else 0)
-                            img_p.paste(255, mask)
-                            img_p.info["transparency"] = 255
-                            processed_images.append(img_p)
-                        else:
-                            processed_images.append(
-                                img.convert(
-                                    "P", palette=Image.Palette.ADAPTIVE, colors=256
-                                )
-                            )
-                    else:
-                        if transparent:
-                            processed_images.append(img.convert("RGBA"))
-                        else:
-                            processed_images.append(img.convert("RGB"))
+                encode_frames_to_gif(images, path, fps, transparent, use_hq)
+                notify(self, f"GIF saved to: {os.path.basename(path)}", 5000)
 
-                processed_images[0].save(
-                    path,
-                    save_all=True,
-                    append_images=processed_images[1:],
-                    duration=duration,
-                    loop=0,
-                    disposal=2,
-                )
-                if self.context:
-                    self.context.show_status_message(
-                        f"GIF saved to: {os.path.basename(path)}", 5000
-                    )
-
-        except Exception as e:
+        # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
+        except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
             self._gif_saving = False
@@ -1241,12 +1270,16 @@ class TrajectoryResultDialog(QDialog):
             if was_playing:
                 self.toggle_play()
 
+    # pylint: enable=duplicate-code
+
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
         """Stop animation, push final structure with full bond orders, then clean up."""
+        self._is_closing = True
         if getattr(self, "timer", None) is not None and self.timer.isActive():
             self.timer.stop()
         self.is_playing = False  # ensure bond orders run in update_structure below

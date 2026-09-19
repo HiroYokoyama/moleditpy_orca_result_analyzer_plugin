@@ -1,3 +1,5 @@
+"""Dialog for defining a custom NMR reference standard (per-nucleus delta/sigma)."""
+
 from PyQt6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -28,6 +30,7 @@ class CustomReferenceDialog(QDialog):
         self.setup_ui()
 
     def setup_ui(self):
+        """Build the reference-name field and per-nucleus delta/sigma rows."""
         main_layout = QVBoxLayout(self)
 
         # Combined reference configuration group

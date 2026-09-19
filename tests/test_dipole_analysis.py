@@ -259,6 +259,56 @@ class TestSettings(unittest.TestCase):
         )
         dlg.load_settings()  # must not raise
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            others = {
+                "mo_settings": {"iso": 0.02},
+                "nmr_settings": {"ref": "TMS"},
+                "thermal_settings": {"show_details": True},
+            }
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump(others, f)
+
+            dlg = _bare_dialog({"vector": [1, 0, 0]}, coords=[[0, 0, 0]])
+            dlg.settings_file = settings
+            dlg.save_settings()
+
+            with open(settings, encoding="utf-8") as f:
+                on_disk = json.load(f)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertIn("dipole_settings", on_disk)
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            dlg = _bare_dialog(
+                {"vector": [1, 0, 0]}, coords=[[0, 0, 0]], show=True, res=17
+            )
+            dlg.arrow_color = "#123456"
+            dlg.settings_file = settings
+            dlg.save_settings()
+
+            section = S.load_section(settings, "dipole_settings")
+            self.assertEqual(section["res"], 17)
+            self.assertEqual(section["color"], "#123456")
+
+    def test_non_numeric_res_does_not_crash_load(self):
+        # int(settings["res"]) raises ValueError; the narrowed handler must
+        # swallow it instead of crashing the dialog.
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump({"dipole_settings": {"res": "not_a_number"}}, f)
+
+            dlg = _bare_dialog({"vector": [1, 0, 0]}, coords=[[0, 0, 0]])
+            dlg.btn_color = MagicMock()
+            dlg.settings_file = settings
+            dlg.load_settings()  # must not raise
+            self.assertEqual(dlg.spin_res.value(), 20)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
+"""Dipole Moment dialog: magnitude/vector display plus a 3D arrow overlay."""
+
 import numpy as np
 import os
-import json
 import pyvista as pv
 from PyQt6.QtWidgets import (
     QDialog,
@@ -15,10 +16,13 @@ from PyQt6.QtWidgets import (
     QGroupBox,
 )
 from PyQt6.QtGui import QColor
+from .settings import load_section, save_section
 import logging
 
 
 class DipoleDialog(QDialog):
+    """Dialog showing the dipole magnitude/vector with a 3D arrow overlay."""
+
     def __init__(self, parent_dlg, dipole_data):
         super().__init__(parent_dlg)
         self.setWindowTitle("Dipole Moment")
@@ -127,12 +131,16 @@ class DipoleDialog(QDialog):
         self.load_settings()
 
     def update_view(self):
+        """Redraw the dipole arrow in 3D from the current settings, or hide it."""
         # Clear old
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug(
+                    "Dipole analysis: could not remove the old dipole arrow actor: %s",
+                    e,
+                )
             self.arrow_actor = None
 
         if not self.chk_show.isChecked():
@@ -183,10 +191,12 @@ class DipoleDialog(QDialog):
             )
             mw.plotter.render()
 
-        except Exception as e:
+        # C++ library boundary: RDKit/VTK/pyvista exceptions do not map to Python types
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logging.warning("Error drawing dipole: %s", e)
 
     def pick_color(self):
+        """Open a color picker and apply the chosen color to the arrow."""
         color = QColorDialog.getColor(
             QColor(self.arrow_color), self, "Select Arrow Color"
         )
@@ -196,20 +206,26 @@ class DipoleDialog(QDialog):
             self.update_view()
 
     def on_res_changed(self, val):
+        """Update the arrow's tessellation resolution and redraw it."""
         self.arrow_res = val
         self.update_view()
 
     def reject(self):
+        """Route Esc through close() so closeEvent cleanup always runs."""
         # Esc must run closeEvent cleanup (QDialog.reject only hides)
         self.close()
 
     def closeEvent(self, event):
+        """Remove the 3D arrow, clear the parent's reference and save settings."""
         if self.arrow_actor:
             try:
                 self.parent_dlg.mw.plotter.remove_actor(self.arrow_actor)
                 self.parent_dlg.mw.plotter.render()
-            except (RuntimeError, AttributeError, KeyError, ValueError) as _e:
-                logging.warning("silenced: %s", _e)
+            except (RuntimeError, AttributeError, KeyError, ValueError) as e:
+                logging.debug(
+                    "Dipole analysis: could not remove the dipole arrow actor on close: %s",
+                    e,
+                )
         # Clean up reference in parent
         if hasattr(self.parent_dlg, "dipole_dlg"):
             self.parent_dlg.dipole_dlg = None
@@ -218,16 +234,10 @@ class DipoleDialog(QDialog):
         event.accept()
 
     def load_settings(self):
+        """Restore the arrow resolution, color, opacity and toggle state."""
         if os.path.exists(self.settings_file):
+            settings = load_section(self.settings_file, "dipole_settings")
             try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-
-                settings = all_settings.get("dipole_settings", {})
-
-                # if "scale" in settings:
-                #    self.spin_scale.setValue(float(settings["scale"]))
-
                 if "res" in settings:
                     self.spin_res.setValue(int(settings["res"]))
 
@@ -246,21 +256,11 @@ class DipoleDialog(QDialog):
                 if "reverse" in settings:
                     self.chk_reverse.setChecked(bool(settings["reverse"]))
 
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logging.warning("Error loading dipole settings: %s", e)
 
     def save_settings(self):
-        all_settings = {}
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    all_settings = json.load(f)
-            except (OSError, ValueError):
-                # settings file may be empty or corrupt; start fresh
-                logging.debug(
-                    "Could not read settings file; starting fresh", exc_info=True
-                )
-
+        """Persist the arrow resolution, color, opacity and toggle state."""
         dipole_settings = {
             # "scale": self.spin_scale.value(),
             "res": self.spin_res.value(),
@@ -270,11 +270,4 @@ class DipoleDialog(QDialog):
             "reverse": self.chk_reverse.isChecked(),
         }
 
-        all_settings["dipole_settings"] = dipole_settings
-
-        try:
-            from .utils import save_json_atomic
-
-            save_json_atomic(self.settings_file, all_settings)
-        except ImportError as e:
-            logging.warning("Error saving dipole settings: %s", e)
+        save_section(self.settings_file, "dipole_settings", dipole_settings)

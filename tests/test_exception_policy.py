@@ -22,12 +22,28 @@ _PKG = os.path.normpath(
 )
 
 # Ratchet. Lower it whenever handlers are narrowed; never raise it without a
-# reason in the commit message. Was 212 before the 3.12.2 narrowing pass.
-_MAX_BROAD_HANDLERS = 50
+# reason in the commit message. Was 212 before the 3.12.2 narrowing pass, 50
+# before the 4.0.0 narrow-or-justify pass.
+_MAX_BROAD_HANDLERS = 46
+
+# A surviving broad handler must name one of these on the `except` line or
+# the line above it (see test_broad_handlers_carry_a_reason_category).
+_REASON_CATEGORIES = (
+    "Qt slot",
+    "plugin boundary",
+    "C++ library boundary",
+    "worker-thread top level",
+)
 
 # parser.py is pure text parsing with no UI slots, so every handler in it can
 # name its types. Verified bit-identical over the 19 sample outputs.
-_FULLY_NARROWED = {"parser.py"}
+_FULLY_NARROWED = {
+    "parser.py",
+    "parser_structure.py",
+    "parser_electronic.py",
+    "parser_properties.py",
+    "parser_spectra.py",
+}
 
 
 def _handlers():
@@ -90,6 +106,28 @@ class TestExceptionPolicy(unittest.TestCase):
             _MAX_BROAD_HANDLERS,
             f"{len(broad)} broad handlers, ceiling is {_MAX_BROAD_HANDLERS}. "
             "Name the exception types, or raise the ratchet deliberately.",
+        )
+
+    def test_broad_handlers_carry_a_reason_category(self):
+        """Every surviving broad handler must be NARROWED or JUSTIFIED."""
+        unjustified = []
+        for fname, ln, caught, _h, _t in _handlers():
+            if not _is_broad(caught):
+                continue
+            path = os.path.join(_PKG, fname)
+            with open(path, encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+            candidates = lines[max(0, ln - 2) : ln]
+            if not any(
+                cat in text for text in candidates for cat in _REASON_CATEGORIES
+            ):
+                unjustified.append(f"{fname}:{ln}")
+        self.assertEqual(
+            unjustified,
+            [],
+            "broad handlers with no reason comment naming a category "
+            f"(Qt slot / plugin boundary / C++ library boundary / "
+            f"worker-thread top level): {unjustified}",
         )
 
     def test_the_ratchet_is_tight(self):

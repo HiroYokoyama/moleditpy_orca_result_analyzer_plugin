@@ -61,32 +61,36 @@ class LoadProgress:
 
     @property
     def cancelled(self):
+        """Whether the user cancelled the progress dialog."""
         return self._cancelled
 
     def _on_cancel(self):
+        """Record that the dialog's Cancel button was clicked."""
         self._cancelled = True
 
     def _pump(self, value, label):
+        """Update the dialog's label and progress value and flush Qt events."""
         self._dlg.setLabelText(label)
         self._dlg.setValue(int(value))
         QApplication.processEvents()
 
     def read_done(self, path):
+        """Advance the bar to the read/parse boundary once the file has been read."""
         self._pump(_READ_FRACTION * 100, f"Parsing {os.path.basename(path)}...")
 
     def on_parse_step(self, done, total, label):
+        """Advance the bar for one parse_all step; raise if the user cancelled."""
         if self._cancelled:
             raise ParseCancelled(label)
         frac = _READ_FRACTION + (1.0 - _READ_FRACTION) * (done / max(total, 1))
         self._pump(frac * 100, label if done >= total else f"{label}...")
 
     def close(self):
+        """Hide and dispose of the progress dialog."""
         try:
             self._dlg.hide()
             self._dlg.deleteLater()
         except (AttributeError, RuntimeError) as exc:
-            import logging
-
             logging.debug("LoadProgress: hide/delete failed — %s", exc)
         self._dlg.close()
 

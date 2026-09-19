@@ -33,6 +33,7 @@ list_orca_output_files = _utils.list_orca_output_files
 clear_atom_color_overrides = _utils.clear_atom_color_overrides
 sync_main_window_file = _utils.sync_main_window_file
 save_json_atomic = _utils.save_json_atomic
+notify = _utils.notify
 
 # ---------------------------------------------------------------------------
 # RDKit availability — used by skipUnless decorators throughout this module
@@ -475,6 +476,91 @@ class TestSaveJsonAtomic(unittest.TestCase):
         with self.assertRaises(TypeError):
             save_json_atomic(self.path, {"bad": object()})
         self.assertFalse(os.path.exists(self.path + ".tmp"))
+
+
+class _Ctx:
+    def __init__(self, boom=None):
+        self.msgs = []
+        self.boom = boom
+
+    def show_status_message(self, message, timeout):
+        if self.boom:
+            raise self.boom
+        self.msgs.append((message, timeout))
+
+
+class _Node:
+    """Stand-in for a dialog; attributes are attached per test."""
+
+
+class TestNotify(unittest.TestCase):
+    """notify() replaces four hand-written spellings of the same host lookup."""
+
+    def test_uses_a_context_on_the_object_itself(self):
+        ctx = _Ctx()
+        owner = _Node()
+        owner.context = ctx
+        self.assertTrue(notify(owner, "hello", 1234))
+        self.assertEqual(ctx.msgs, [("hello", 1234)])
+
+    def test_default_timeout_is_three_seconds(self):
+        ctx = _Ctx()
+        owner = _Node()
+        owner.context = ctx
+        notify(owner, "hi")
+        self.assertEqual(ctx.msgs, [("hi", 3000)])
+
+    def test_walks_parent_dlg_freq_dialog_and_parent_callable(self):
+        for hop, build in (
+            ("parent_dlg", lambda child, top: setattr(child, "parent_dlg", top)),
+            ("freq_dialog", lambda child, top: setattr(child, "freq_dialog", top)),
+            ("parent()", lambda child, top: setattr(child, "parent", lambda: top)),
+        ):
+            with self.subTest(hop=hop):
+                ctx = _Ctx()
+                top = _Node()
+                top.context = ctx
+                child = _Node()
+                build(child, top)
+                self.assertTrue(notify(child, "via " + hop))
+                self.assertEqual(ctx.msgs, [("via " + hop, 3000)])
+
+    def test_logs_instead_of_raising_when_there_is_no_host(self):
+        with self.assertLogs(level="INFO") as cm:
+            self.assertFalse(notify(None, "no host"))
+        self.assertTrue(any("no host" in line for line in cm.output))
+
+    def test_a_context_without_the_method_is_not_used(self):
+        owner = _Node()
+        owner.context = object()
+        with self.assertLogs(level="INFO"):
+            self.assertFalse(notify(owner, "unusable context"))
+
+    def test_a_host_that_raises_is_logged_not_propagated(self):
+        owner = _Node()
+        owner.context = _Ctx(boom=RuntimeError("wrapped C/C++ object deleted"))
+        with self.assertLogs(level="WARNING") as cm:
+            self.assertFalse(notify(owner, "dead window"))
+        self.assertTrue(any("rejected by host" in line for line in cm.output))
+
+    def test_a_parent_cycle_terminates(self):
+        loop = _Node()
+        loop.parent_dlg = loop
+        with self.assertLogs(level="INFO"):
+            self.assertFalse(notify(loop, "cycle"))
+
+    def test_a_chain_longer_than_the_hop_limit_gives_up_quietly(self):
+        ctx = _Ctx()
+        top = _Node()
+        top.context = ctx
+        node = top
+        for _ in range(8):
+            child = _Node()
+            child.parent_dlg = node
+            node = child
+        with self.assertLogs(level="INFO"):
+            self.assertFalse(notify(node, "too deep"))
+        self.assertEqual(ctx.msgs, [])
 
 
 if __name__ == "__main__":

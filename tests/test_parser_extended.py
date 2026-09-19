@@ -8,20 +8,14 @@ All tests load OrcaParser directly (no Qt stubs required).
 
 import os
 import sys
-import importlib.util
 import unittest
 
-_PARSER_SRC = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "orca_result_analyzer", "parser.py")
-)
+sys.path.insert(0, os.path.dirname(__file__))
+from _parser_loader import load_standalone_parser  # noqa: E402
 
 
 def _load_parser():
-    spec = importlib.util.spec_from_file_location("orca_parser_ext", _PARSER_SRC)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["orca_parser_ext"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return load_standalone_parser("orca_parser_ext")
 
 
 _parser_mod = _load_parser()

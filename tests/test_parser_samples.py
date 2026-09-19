@@ -8,8 +8,10 @@ concrete values extracted from those files.
 
 import os
 import sys
-import importlib.util
 import unittest
+
+sys.path.insert(0, os.path.dirname(__file__))
+from _parser_loader import load_standalone_parser  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Bootstrap: load parser without Qt
@@ -17,17 +19,10 @@ import unittest
 
 _HERE = os.path.dirname(__file__)
 _SAMPLES = os.path.join(_HERE, "sample_outputs")
-_PARSER_SRC = os.path.normpath(
-    os.path.join(_HERE, "..", "orca_result_analyzer", "parser.py")
-)
 
 
 def _load_parser():
-    spec = importlib.util.spec_from_file_location("orca_parser_standalone", _PARSER_SRC)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["orca_parser_standalone"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    return load_standalone_parser("orca_parser_standalone")
 
 
 _parser_mod = _load_parser()

@@ -266,6 +266,38 @@ class TestSettings(unittest.TestCase):
             dlg.load_settings()  # must not raise
         self.assertFalse(dlg.chk_details.isChecked())
 
+    def test_save_preserves_several_other_dialogs_sections(self):
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            others = {
+                "mo_settings": {"iso": 0.02},
+                "nmr_settings": {"ref": "TMS"},
+                "dipole_settings": {"res": 20},
+            }
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump(others, f)
+
+            dlg = _bare_dialog({}, show_details=True)
+            dlg.settings_file = settings
+            dlg.save_settings()
+
+            with open(settings, encoding="utf-8") as f:
+                on_disk = json.load(f)
+        for key, val in others.items():
+            self.assertEqual(on_disk[key], val)
+        self.assertTrue(on_disk["thermal_settings"]["show_details"])
+
+    def test_round_trips_through_the_shared_helpers(self):
+        S = gui_harness.load_isolated("settings")
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            dlg = _bare_dialog({}, show_details=True)
+            dlg.settings_file = settings
+            dlg.save_settings()
+
+            section = S.load_section(settings, "thermal_settings")
+            self.assertTrue(section["show_details"])
+
 
 if __name__ == "__main__":
     unittest.main()

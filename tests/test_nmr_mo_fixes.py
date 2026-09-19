@@ -329,6 +329,20 @@ def _install_nmr_stubs():
 
     _utils_mod.save_json_atomic = _save_json_atomic
 
+    def _notify(owner, message, timeout=3000):
+        candidate = owner
+        for _ in range(4):
+            context = getattr(candidate, "context", None)
+            if context is not None and hasattr(context, "show_status_message"):
+                context.show_status_message(message, timeout)
+                return True
+            candidate = getattr(candidate, "parent_dlg", None)
+            if candidate is None:
+                break
+        return False
+
+    _utils_mod.notify = _notify
+
     _custom_ref = types.ModuleType("orca_result_analyzer.nmr_custom_ref_dialog")
     _custom_ref.CustomReferenceDialog = MagicMock
 
@@ -359,8 +373,24 @@ def _install_nmr_stubs():
     )
 
 
+def _load_sibling(name):
+    """Load orca_result_analyzer/<name>.py as orca_result_analyzer.<name>."""
+    mod_name = f"orca_result_analyzer.{name}"
+    if mod_name in sys.modules:
+        return sys.modules[mod_name]
+    path = os.path.join(_SRC_DIR, "orca_result_analyzer", f"{name}.py")
+    spec = importlib.util.spec_from_file_location(mod_name, path)
+    mod = importlib.util.module_from_spec(spec)
+    mod.__package__ = "orca_result_analyzer"
+    sys.modules[mod_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _load_nmr():
     _install_nmr_stubs()
+    for _name in ("settings", "nmr_merge", "nmr_plot", "nmr_export"):
+        _load_sibling(_name)
     path = os.path.join(_SRC_DIR, "orca_result_analyzer", "nmr_analysis.py")
     spec = importlib.util.spec_from_file_location("nmr_analysis_fix_mod", path)
     mod = importlib.util.module_from_spec(spec)
@@ -767,11 +797,12 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
     (previously None entered the set and ', '.join(...) raised TypeError)."""
 
     def setUp(self):
-        self._orig_msgbox = _nmr_mod.QMessageBox
-        _nmr_mod.QMessageBox = MagicMock()
+        self._merge_mod = sys.modules["orca_result_analyzer.nmr_merge"]
+        self._orig_msgbox = self._merge_mod.QMessageBox
+        self._merge_mod.QMessageBox = MagicMock()
 
     def tearDown(self):
-        _nmr_mod.QMessageBox = self._orig_msgbox
+        self._merge_mod.QMessageBox = self._orig_msgbox
 
     def test_missing_symbol_does_not_block_merge_or_crash(self):
         data = [
@@ -783,7 +814,7 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
         dlg.merge_selected_peaks()  # crashed with TypeError before the fix
 
-        _nmr_mod.QMessageBox.critical.assert_not_called()
+        self._merge_mod.QMessageBox.critical.assert_not_called()
         self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])
         # v3.9.1: merges are no longer auto-saved — only flagged dirty
         dlg.save_merged_peaks.assert_not_called()
@@ -800,8 +831,8 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
         dlg.merge_selected_peaks()
 
-        _nmr_mod.QMessageBox.critical.assert_called_once()
-        msg = _nmr_mod.QMessageBox.critical.call_args[0][2]
+        self._merge_mod.QMessageBox.critical.assert_called_once()
+        msg = self._merge_mod.QMessageBox.critical.call_args[0][2]
         self.assertIn("H", msg)
         self.assertIn("C", msg)
         self.assertEqual(dlg.merged_peaks, [])
@@ -816,7 +847,7 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
         dlg.merge_selected_peaks()
 
-        _nmr_mod.QMessageBox.critical.assert_not_called()
+        self._merge_mod.QMessageBox.critical.assert_not_called()
         self.assertEqual(dlg.merged_peaks, [{"indices": [0, 1]}])
 
 
@@ -827,11 +858,12 @@ class TestNMRMergeSelectedPeaksSymbols(unittest.TestCase):
 
 class TestNMRMergeExplicitSave(unittest.TestCase):
     def setUp(self):
-        self._orig_msgbox = _nmr_mod.QMessageBox
-        _nmr_mod.QMessageBox = MagicMock()
+        self._merge_mod = sys.modules["orca_result_analyzer.nmr_merge"]
+        self._orig_msgbox = self._merge_mod.QMessageBox
+        self._merge_mod.QMessageBox = MagicMock()
 
     def tearDown(self):
-        _nmr_mod.QMessageBox = self._orig_msgbox
+        self._merge_mod.QMessageBox = self._orig_msgbox
 
     def _dirty_dialog(self):
         data = [
