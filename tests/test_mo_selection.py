@@ -388,3 +388,94 @@ class TestTreeContextMenu(_RegenCase):
             with patch.object(self.dlg, "_generate_single_mo") as gen:
                 self.dlg.show_tree_context_menu(MagicMock())
         gen.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# One batch at a time, and Cancel
+# ---------------------------------------------------------------------------
+
+
+class _Running:
+    """A worker stand-in that reports it is still computing."""
+
+    def __init__(self):
+        self.cancelled = False
+
+    def isRunning(self):
+        return True
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class TestGenerationBusyGuard(_RegenCase):
+    def test_visualise_is_refused_while_a_worker_runs(self):
+        self.dlg.worker = _Running()
+        self._select(1)
+        with patch.object(M, "notify") as note, patch.object(
+            self.dlg, "_generate_single_mo"
+        ) as gen:
+            self.dlg.visualize_selected_mos()
+        gen.assert_not_called()
+        self.assertIn("already in progress", note.call_args[0][1])
+
+    def test_generate_cubes_is_refused_but_still_calls_back(self):
+        self.dlg.worker = _Running()
+        self.dlg.generation_queue = ["kept"]
+        seen = []
+        with patch.object(M, "notify"):
+            self.dlg.generate_cubes(["1"], on_done=lambda: seen.append(True))
+        self.assertEqual(seen, [True])
+        self.assertEqual(self.dlg.generation_queue, ["kept"])
+
+    def test_a_stub_worker_does_not_count_as_running(self):
+        self.dlg.worker = MagicMock()
+        self.assertFalse(self.dlg._generation_busy())
+
+    def test_a_deleted_worker_does_not_count_as_running(self):
+        class _Gone:
+            def isRunning(self):
+                raise RuntimeError("wrapped C/C++ object has been deleted")
+
+        self.dlg.worker = _Gone()
+        self.assertFalse(self.dlg._generation_busy())
+
+
+class TestCancelGeneration(_RegenCase):
+    def test_cancel_drops_the_queue_and_stops_the_worker(self):
+        worker = _Running()
+        self.dlg.worker = worker
+        self.dlg.generation_queue = ["2", "3"]
+        self.dlg.cancel_generation()
+        self.assertEqual(self.dlg.generation_queue, [])
+        self.assertTrue(worker.cancelled)
+
+    def test_the_progress_cancel_button_is_wired(self):
+        self.dlg.progress_dialog = None
+        self.dlg.generation_force = True
+        with patch.object(M, "QProgressDialog") as progress:
+            self.dlg._generate_single_mo("1")
+        progress.return_value.canceled.connect.assert_called_once_with(
+            self.dlg.cancel_generation
+        )
+
+    def _finish(self, success, message):
+        self.dlg.progress_dialog = None
+        self.dlg.generation_force = True
+        with patch.object(M, "QProgressDialog"):
+            self.dlg._generate_single_mo("1")
+        on_finished = self.worker.return_value.finished_sig.connect.call_args[0][0]
+        with patch.object(M.QMessageBox, "warning") as warn, patch.object(
+            self.dlg, "process_generation_queue"
+        ) as nxt:
+            on_finished(success, message)
+        return warn, nxt
+
+    def test_a_cancelled_worker_is_not_reported_as_a_failure(self):
+        warn, nxt = self._finish(False, M.CANCELLED)
+        warn.assert_not_called()
+        nxt.assert_called_once_with()
+
+    def test_a_real_failure_is_still_reported(self):
+        warn, _ = self._finish(False, "disk full")
+        self.assertIn("disk full", warn.call_args[0][2])

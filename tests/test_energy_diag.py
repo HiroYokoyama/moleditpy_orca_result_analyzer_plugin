@@ -680,3 +680,33 @@ class TestDialogMisc(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCubeLookupStaysWithTheLoadedFile(TestTryLoadCube):
+    def _host_for(self, out_name):
+        host = self._host()
+        parser = types.SimpleNamespace(filename=os.path.join(self.dir, out_name))
+        host.parent_dlg = types.SimpleNamespace(parser=parser)
+        return host
+
+    def test_another_jobs_cube_folder_is_not_searched(self):
+        self._touch("other_MO_5.cube", subdir="other_cubes")
+        host = self._host_for("job.out")
+        with patch.object(E.QMessageBox, "question", return_value="no"):
+            self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_not_called()
+
+    def test_the_loaded_files_own_cube_folder_is_searched(self):
+        path = self._touch("job_MO_5.cube", subdir="job_cubes")
+        host = self._host_for("job.out")
+        self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_called_once_with(path)
+
+
+class TestDoubleClickReset(unittest.TestCase):
+    def test_a_degenerate_gap_keeps_a_visible_window(self):
+        dlg = _make_dialog(_rhf_data())
+        dlg.homo_energy = dlg.lumo_energy = -0.3
+        dlg.update = MagicMock()
+        dlg.mouseDoubleClickEvent(None)
+        self.assertGreaterEqual(dlg.current_max - dlg.current_min, 0.2)

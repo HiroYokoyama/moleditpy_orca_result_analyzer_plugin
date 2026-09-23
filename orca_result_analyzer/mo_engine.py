@@ -108,7 +108,13 @@ class CubeWriter:
                 if not isinstance(s, str):
                     return int(s)
                 sym = normalize_atom_symbol(s)
-                return 0 if sym == "*" else pt.GetAtomicNumber(sym)
+                if sym == "*":
+                    return 0
+                try:
+                    return pt.GetAtomicNumber(sym)
+                except RuntimeError:
+                    # RDKit's "Element not found" post-condition violation.
+                    return 0
         except (ImportError, AttributeError, RuntimeError):
             # Fallback simple map if RDKit fails (unlikely)
             def to_z(s):

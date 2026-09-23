@@ -230,3 +230,18 @@ class TestLoadOrcaParser(_LoadingCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReadOrcaTextFallbacks(_LoadingCase):
+    def test_a_utf16_big_endian_bom_is_honoured(self):
+        path = os.path.join(self.tmp, "be.out")
+        with open(path, "wb") as fh:
+            fh.write(b"\xfe\xff" + "ORCA TERMINATED\r\n".encode("utf-16-be"))
+        self.assertEqual(M.read_orca_text(path), "ORCA TERMINATED\n")
+
+    def test_the_replacement_fallback_is_used_when_every_codec_fails(self):
+        path = self._write("e.out", "TERMINATED\n")
+        with patch.object(M, "ENCODINGS", ("ascii",)):
+            with open(path, "ab") as fh:
+                fh.write(b"\xff")
+            self.assertIn("TERMINATED", M.read_orca_text(path))

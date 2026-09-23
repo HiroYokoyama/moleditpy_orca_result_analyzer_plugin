@@ -301,3 +301,24 @@ class TestSettings(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestExportFailure(unittest.TestCase):
+    def test_a_failed_export_is_reported_to_the_user(self):
+        dlg = _bare_dialog({"gibbs": -76.5})
+        dlg.update_table()
+        with tempfile.TemporaryDirectory() as d:
+            blocker = os.path.join(d, "a_file")
+            with open(blocker, "w", encoding="utf-8") as fh:
+                fh.write("x")
+            saved_fd, saved_mb = T.QFileDialog, T.QMessageBox
+            T.QFileDialog, T.QMessageBox = MagicMock(), MagicMock()
+            T.QFileDialog.getSaveFileName.return_value = (
+                os.path.join(blocker, "thermo.csv"),
+                "",
+            )
+            try:
+                dlg.export_csv()
+                T.QMessageBox.critical.assert_called_once()
+            finally:
+                T.QFileDialog, T.QMessageBox = saved_fd, saved_mb

@@ -617,3 +617,44 @@ class TestCalcWorkerGridGuard(unittest.TestCase):
         # later stage — but never the grid-resolution message.
         args = worker.finished_sig.emit.call_args[0]
         self.assertNotIn("at least 2 points", str(args[1]))
+
+
+class TestCalcWorkerCancel(unittest.TestCase):
+    def test_a_cancelled_worker_reports_back_instead_of_going_silent(self):
+        worker = _mod.CalcWorker(
+            engine=MagicMock(),
+            mo_idx=0,
+            n_points=2,
+            margin=3.0,
+            atoms_sym=["H"],
+            atoms_coords=[[0.0, 0.0, 0.0]],
+            mo_coeffs=[1.0],
+            output_path=os.path.join("unused_dir", "x.cube"),
+        )
+        worker.finished_sig = MagicMock()
+        worker.progress_sig = MagicMock()
+        worker.cancel()
+        worker.run()
+        worker.finished_sig.emit.assert_called_once_with(False, _mod.CANCELLED)
+        worker.engine.evaluate_mo_on_grid.assert_not_called()
+
+
+class TestCubeWriterGhostAtoms(unittest.TestCase):
+    def test_a_dummy_atom_is_written_as_z_zero(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ghost.cube")
+            _mod.CubeWriter.write(
+                path,
+                ["X", "H"],
+                [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]],
+                np.zeros(3),
+                np.eye(3),
+                np.zeros((2, 2, 2)),
+            )
+            with open(path, encoding="utf-8") as fh:
+                lines = fh.read().splitlines()
+        # Line 7 is the first atom; a GetAtomicNumber("X") failure used to
+        # abort the write before any file existed.
+        self.assertEqual(lines[6].split()[0], "0")

@@ -132,3 +132,57 @@ class TestTDDFTTakesTheLastRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMalformedCoordinateRows(unittest.TestCase):
+    _GEOM = """
+---------------------------------
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  O      0.000000    0.000000    0.117300
+  H      0.000000    ***garbage  -0.469200
+  H      0.000000   -0.757200   -0.469200
+
+"""
+
+    def test_a_bad_row_is_skipped_instead_of_failing_the_load(self):
+        data = _parse(self._GEOM, "parse_basic")
+        self.assertEqual(data["atoms"], ["O", "H"])
+        self.assertEqual(data["coords"][1], [0.0, -0.7572, -0.4692])
+
+    def test_short_rows_are_not_coordinates(self):
+        self.assertIsNone(OrcaParser._parse_xyz_row("O 0.0 0.0"))
+
+
+class TestScanStepGeometry(unittest.TestCase):
+    def test_a_step_without_its_own_block_falls_back_to_the_next_one(self):
+        text = """
+        *               RELAXED SURFACE SCAN STEP   1               *
+FINAL SINGLE POINT ENERGY       -1.000000
+        *               RELAXED SURFACE SCAN STEP   2               *
+---------------------------------
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  H      0.000000    0.000000    0.000000
+
+"""
+        steps = _parse(text, "parse_trajectory")["scan_steps"]
+        first = next(s for s in steps if s["scan_step_id"] == 1)
+        self.assertEqual(first["atoms"], ["H"])
+
+
+class TestSCFTraceLabels(unittest.TestCase):
+    def test_scan_step_label_takes_the_number_not_the_banner_asterisk(self):
+        text = """
+        *               RELAXED SURFACE SCAN STEP   3               *
+--------------
+SCF ITERATIONS
+--------------
+ITER       Energy         Delta-E
+               ***  Starting incremental Fock matrix formation  ***
+  0     -79.000000000000     0.000000
+  1     -79.100000000000     0.100000
+
+"""
+        traces = _parse(text, "parse_scf_trace")["scf_traces"]
+        self.assertEqual(traces[0]["step"], "Scan Step 3")

@@ -421,3 +421,19 @@ class TestChargeSettingsHelpers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMissingSavedScheme(unittest.TestCase):
+    def test_a_vanished_saved_scheme_falls_back_instead_of_crashing(self):
+        import json
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        saved = _C.__file__
+        _C.__file__ = os.path.join(tmp.name, "charge_analysis.py")
+        self.addCleanup(lambda: setattr(_C, "__file__", saved))
+        with open(os.path.join(tmp.name, "settings.json"), "w", encoding="utf-8") as fh:
+            json.dump({"charge_settings": {"last_charge_scheme": "Custom: Gone"}}, fh)
+
+        dlg = ChargeDialog(_make_host([[0, 0, 0]] * 3, 3), _charges())
+        self.assertEqual(dlg.current_scheme, "Red(-) - White - Blue(+)")
