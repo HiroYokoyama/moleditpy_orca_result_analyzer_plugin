@@ -1439,7 +1439,11 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def show_nics_analysis(self):
         """Hand the current file to the NICS Analyzer plugin, if installed."""
-        ok, message = open_nics_analyzer(self._nics_host(), self.file_path)
+        ok, message = open_nics_analyzer(
+            self._nics_host(),
+            self.file_path,
+            exclude_action=getattr(self, "nics_action", None),
+        )
         if not ok:
             QMessageBox.information(self, "NICS Analysis", message)
         self._refresh_nics_action()

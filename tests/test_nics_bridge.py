@@ -140,6 +140,22 @@ class TestOpenNicsAnalyzer(unittest.TestCase):
         other.trigger.assert_not_called()
         mod._open_file.assert_not_called()
 
+    def test_the_analyzers_own_nics_entry_is_never_fired(self):
+        # findChildren is recursive and reaches the analyzer's own
+        # "NICS Analysis..." action, which must not re-trigger itself.
+        mod = _fake_nics_module()
+        host = _host([{"name": "nics", "module": mod}])
+        own = MagicMock()
+        own.text.return_value = "NICS Analysis..."
+        plugin = MagicMock()
+        plugin.text.return_value = "ORCA NICS Analyzer..."
+        host.findChildren.return_value = [own, plugin]
+        with self._qtgui():
+            ok, _ = bridge.open_nics_analyzer(host, None, exclude_action=own)
+        self.assertTrue(ok)
+        own.trigger.assert_not_called()
+        plugin.trigger.assert_called_once_with()
+
     def test_no_menu_entry_and_no_file_reports_failure(self):
         mod = _fake_nics_module()
         host = _host([{"name": "nics", "module": mod}])
