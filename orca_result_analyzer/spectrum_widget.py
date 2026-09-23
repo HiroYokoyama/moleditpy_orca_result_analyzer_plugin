@@ -729,13 +729,9 @@ class SpectrumWidget(QWidget):
         best_item = None
         min_dist = float("inf")
 
-        # Use active Y key for validity check
-        t_key = self.y_key_sticks if self.y_key_sticks else self.y_key
-
         for item in self.data_list:
-            x = item.get(self.x_key, 0.0)
-            item.get(t_key, 0.0)
             # No intensity cutoff: dark states must stay selectable.
+            x = item.get(self.x_key, 0.0)
 
             dist = abs(x - click_x)
             if dist < min_dist:

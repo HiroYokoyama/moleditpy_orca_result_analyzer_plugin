@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QAbstractItemView,
     QFileDialog,
+    QMessageBox,
 )
 import os
 import csv
@@ -55,7 +56,7 @@ class ThermalTableDialog(QDialog):
         layout.addWidget(btn_csv)
 
         btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.accept)
+        btn_close.clicked.connect(self.close)  # accept() skips closeEvent (Qt >= 6.3)
         layout.addWidget(btn_close)
 
         self.update_table()
@@ -203,5 +204,8 @@ class ThermalTableDialog(QDialog):
                         v = self.table.item(r, 1).text()
                         writer.writerow([p, v])
                 notify(self, f"Data exported to {path}", 5000)
-            except (OSError, IndexError, ValueError):
-                logging.debug("Thermochemistry export failed", exc_info=True)
+            except (OSError, IndexError, ValueError) as e:
+                logging.warning("Thermochemistry: exporting to %s failed: %s", path, e)
+                QMessageBox.critical(
+                    self, "Export Error", f"Failed to export CSV:\n{e}"
+                )
