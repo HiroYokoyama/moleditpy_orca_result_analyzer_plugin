@@ -133,6 +133,18 @@ class TestReadOrcaText(_LoadingCase):
             fh.write(OUT_TEXT.encode("utf-8") + b"\xff\xfe\x00rubbish")
         self.assertIn("TERMINATED", M.read_orca_text(path))
 
+    def test_a_bomless_8bit_file_is_not_read_as_utf16(self):
+        # Even-length cp1252 bytes decode "successfully" as UTF-16 into CJK
+        # garbage; that used to win before the 8-bit codecs were tried.
+        path = self._write("c.out", "Å TERMINATED\n", encoding="cp1252")
+        self.assertEqual(M.read_orca_text(path), "Å TERMINATED\n")
+
+    def test_crlf_line_endings_are_normalized(self):
+        path = os.path.join(self.tmp, "d.out")
+        with open(path, "wb") as fh:
+            fh.write(b"line1\r\nline2\r\n")
+        self.assertEqual(M.read_orca_text(path), "line1\nline2\n")
+
     def test_a_missing_file_raises(self):
         with self.assertRaises(OSError):
             M.read_orca_text(os.path.join(self.tmp, "nope.out"))

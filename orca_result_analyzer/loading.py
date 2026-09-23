@@ -12,7 +12,13 @@ from PyQt6.QtWidgets import QApplication, QProgressDialog
 
 from .parser import OrcaParser, ParseCancelled
 
-ENCODINGS = ("utf-8", "utf-16", "latin-1", "cp1252")
+#: Tried in order for BOM-less files. UTF-16 is deliberately absent: almost any
+#: even-length byte string decodes as UTF-16, so a cp1252 file used to come back
+#: as CJK garbage instead of reaching the 8-bit codecs. latin-1 never fails, so
+#: it must stay last.
+ENCODINGS = ("utf-8", "cp1252", "latin-1")
+
+_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
 
 #: Reading counts as this fraction of the whole load in the progress bar.
 _READ_FRACTION = 0.25
@@ -21,20 +27,24 @@ _READ_FRACTION = 0.25
 _MIN_DURATION_MS = 300
 
 
-def read_orca_text(path):
+def read_orca_text(path: str) -> str:
     """Return the text of *path*, trying several encodings.
 
+    UTF-16 is used only when the file starts with its byte-order mark.
     Undecodable bytes are replaced rather than failing the load; I/O errors
     propagate.
     """
+    with open(path, "rb") as f:
+        raw = f.read()
+    if raw.startswith(_UTF16_BOMS):
+        return raw.decode("utf-16", errors="replace").replace("\r\n", "\n")
     for enc in ENCODINGS:
         try:
-            with open(path, "r", encoding=enc) as f:
-                return f.read()
+            text = raw.decode(enc)
         except UnicodeError:
             continue
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return f.read()
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+    return raw.decode("utf-8", errors="replace")
 
 
 class LoadProgress:
@@ -89,10 +99,10 @@ class LoadProgress:
         """Hide and dispose of the progress dialog."""
         try:
             self._dlg.hide()
+            self._dlg.close()
             self._dlg.deleteLater()
         except (AttributeError, RuntimeError) as exc:
-            logging.debug("LoadProgress: hide/delete failed — %s", exc)
-        self._dlg.close()
+            logging.debug("LoadProgress: hide/close/delete failed — %s", exc)
 
 
 def load_orca_parser(path, parent):
