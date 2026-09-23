@@ -20,11 +20,12 @@ class _SpectraParsingMixin:
         self.data["nmr_couplings"] = []
 
         # Look for "CHEMICAL SHIELDING SUMMARY (PPM)" or individual nucleus blocks
+        # Last block wins, like every other section: an optimization + NMR
+        # job, or a compound job, can print more than one summary.
         summary_start = -1
         for i, line in enumerate(self.lines):
             if "CHEMICAL SHIELDING SUMMARY (PPM)" in line.upper():
                 summary_start = i
-                break
 
         if summary_start != -1:
             curr = summary_start + 1
@@ -75,7 +76,6 @@ class _SpectraParsingMixin:
             if "SUMMARY OF ISOTROPIC COUPLING CONSTANTS" in upper_line:
                 start_idx = i
                 header_found = True
-                break
 
         if header_found:
             curr = start_idx + 1
@@ -207,9 +207,33 @@ class _SpectraParsingMixin:
         # -------------------------------------------------------------------------
         current_state_id = -1
 
-        for i, line in enumerate(self.lines):
+        # Only the last TD-DFT run counts (an excited-state optimization
+        # prints one per cycle); states from earlier runs used to linger
+        # whenever a later run reported fewer roots.
+        header_re = re.compile(
+            r"^[A-Z0-9/\-\s]*EXCITED STATES(\s*\((SINGLETS|TRIPLETS)\))?$"
+        )
+        singlet_heads = [
+            i
+            for i, line in enumerate(self.lines)
+            if header_re.match(line.strip()) and "TRIPLETS" not in line
+        ]
+        run_start = singlet_heads[-1] if singlet_heads else 0
+
+        # Triplet states restart at STATE 1 and used to overwrite the singlet
+        # of the same number; they carry no oscillator strength, so skip them.
+        in_triplets = False
+        for i in range(run_start, len(self.lines)):
+            line = self.lines[i]
             line_strip = line.strip()
             line_upper = line.upper()
+
+            if header_re.match(line_strip):
+                in_triplets = "TRIPLETS" in line_strip
+                current_state_id = -1
+                continue
+            if in_triplets:
+                continue
 
             # Detect State Header
             match_state = re.search(r"STATE\s+(\d+)\s*:", line_upper)
@@ -323,9 +347,16 @@ class _SpectraParsingMixin:
                         # arrow+5: Value (Strength)
 
                         if len(parts) > arrow_idx + 5:
-                            # 1. State ID
+                            # 1. State ID. "0-1A -> 1-3A" is a
+                            # spin-forbidden triplet whose number clashes
+                            # with singlet 1; skip multiplicity changes.
                             target_state_str = parts[arrow_idx + 1]
-                            match = re.search(r"^(\d+)", target_state_str)
+                            src = re.match(r"^\d+-(\d+)", parts[arrow_idx - 1])
+                            dst = re.match(r"^\d+-(\d+)", target_state_str)
+                            if src and dst and src.group(1) != dst.group(1):
+                                match = None
+                            else:
+                                match = re.search(r"^(\d+)", target_state_str)
                             if match:
                                 s_id = int(match.group(1))
                                 entry = get_state(s_id)
@@ -419,9 +450,13 @@ class _SpectraParsingMixin:
 
                 curr += 1
 
-        # Locate tables and parse SPECIFIC gauges
-        for i, line in enumerate(self.lines):
-            line_upper = line.upper()
+        # Locate tables and parse SPECIFIC gauges, from the last run only.
+        # SOC-corrected spectra number spin-orbit states differently and used
+        # to overwrite the spin-free strengths of the same index.
+        for i in range(run_start, len(self.lines)):
+            line_upper = self.lines[i].upper()
+            if "SOC" in line_upper or "SPIN ORBIT" in line_upper:
+                continue
 
             # Absorption Spectrum
             if "ABSORPTION SPECTRUM" in line_upper:
@@ -660,10 +695,17 @@ class _SpectraParsingMixin:
 
                 curr += 1
 
+        # IR, Raman and normal modes are read only after the last frequency
+        # block, so a later run without (say) an IR table cannot inherit an
+        # earlier run's intensities onto its own modes.
+        if freq_start == -1:
+            return
+        after_freqs = range(freq_start + 1, len(self.lines))
+
         # 2. IR Spectrum
         ir_start = -1
-        for i, line in enumerate(self.lines):
-            if "IR SPECTRUM" in line.upper():
+        for i in after_freqs:
+            if "IR SPECTRUM" in self.lines[i].upper():
                 ir_start = i
 
         if ir_start != -1:
@@ -700,8 +742,8 @@ class _SpectraParsingMixin:
 
         # 3. Raman
         raman_start = -1
-        for i, line in enumerate(self.lines):
-            if "RAMAN SPECTRUM" in line.upper():
+        for i in after_freqs:
+            if "RAMAN SPECTRUM" in self.lines[i].upper():
                 raman_start = i
 
         if raman_start != -1:
@@ -733,9 +775,8 @@ class _SpectraParsingMixin:
 
         # 4. Normal Modes
         modes_start = -1
-        for i, line in enumerate(self.lines):
-            uu = line.upper()
-            if "NORMAL MODES" in uu:
+        for i in after_freqs:
+            if "NORMAL MODES" in self.lines[i].upper():
                 modes_start = i
 
         if modes_start != -1 and self.data["atoms"]:
