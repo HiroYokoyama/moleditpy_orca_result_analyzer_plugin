@@ -14,6 +14,9 @@ except ImportError:  # module loaded flat (test harness / Rust port)
 #: Shell letters ORCA can print, indexed by angular momentum.
 SHELL_LETTERS = "SPDFGHIK"
 
+#: finished_sig message for a worker stopped by CalcWorker.cancel().
+CANCELLED = "Cancelled"
+
 
 class UnsupportedBasisError(ValueError):
     """The basis set uses shells this engine cannot evaluate exactly.
@@ -92,10 +95,20 @@ class CubeWriter:
         try:
             from rdkit import Chem
 
+            try:
+                from .utils import normalize_atom_symbol
+            except ImportError:  # module loaded flat (test harness)
+                from utils import normalize_atom_symbol
+
             pt = Chem.GetPeriodicTable()
 
             def to_z(s):
-                return pt.GetAtomicNumber(s) if isinstance(s, str) else int(s)
+                # Ghost/dummy labels ("X", "DA", "H:") made GetAtomicNumber
+                # raise and failed the whole cube; they are Z=0 in a cube.
+                if not isinstance(s, str):
+                    return int(s)
+                sym = normalize_atom_symbol(s)
+                return 0 if sym == "*" else pt.GetAtomicNumber(sym)
         except (ImportError, AttributeError, RuntimeError):
             # Fallback simple map if RDKit fails (unlikely)
             def to_z(s):
@@ -576,6 +589,10 @@ class CalcWorker(QThread):
         self.output_path = output_path
         self._is_cancelled = False
 
+    def cancel(self) -> None:
+        """Ask the worker to stop at the next grid chunk; it then emits finished_sig(False, CANCELLED)."""
+        self._is_cancelled = True
+
     def run(self):
         """Evaluate the orbital on its grid and write the resulting cube file."""
         try:
@@ -617,6 +634,8 @@ class CalcWorker(QThread):
 
             for start in range(0, n_total, chunk_size):
                 if self._is_cancelled:
+                    # Still report back, or the dialog's queue never advances.
+                    self.finished_sig.emit(False, CANCELLED)
                     return
                 end = min(start + chunk_size, n_total)
                 chunk_pts = grid_points[start:end]

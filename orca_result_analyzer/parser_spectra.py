@@ -10,7 +10,9 @@ IMAGINARY_FREQ_THRESHOLD = 10.0
 
 
 class _SpectraParsingMixin:
-    def parse_nmr(self):
+    """NMR, TD-DFT, thermochemistry and frequency parsing for OrcaParser."""
+
+    def parse_nmr(self) -> None:
         """Extract NMR shielding and spin-spin coupling values into self.data."""
         self.data[
             "nmr_shielding"
