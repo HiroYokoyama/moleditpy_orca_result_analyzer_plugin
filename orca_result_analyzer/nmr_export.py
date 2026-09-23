@@ -26,7 +26,9 @@ class _NMRExportMixin:
                 notify(
                     self, f"Spectrum exported to: {os.path.basename(filename)}", 5000
                 )
-            except OSError as e:
+            # ValueError: savefig rejects an unsupported extension typed in
+            # the file dialog, which previously escaped the slot.
+            except (OSError, ValueError) as e:
                 QMessageBox.critical(self, "Error", f"Export failed:\n{e}")
 
     def export_spectrum_csv(self):

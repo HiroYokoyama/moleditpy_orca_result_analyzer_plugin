@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QGroupBox,
     QFileDialog,
+    QMessageBox,
 )
 from matplotlib.backends.backend_qtagg import (
     FigureCanvasQTAgg as FigureCanvas,
@@ -108,7 +109,7 @@ class SCFTraceDialog(QDialog):
 
         # Close Button
         btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.accept)
+        btn_close.clicked.connect(self.close)  # accept() skips closeEvent (Qt >= 6.3)
         layout.addWidget(btn_close)
 
         self.update_plot()
@@ -265,4 +266,5 @@ class SCFTraceDialog(QDialog):
             notify(self, f"Data exported to {path}", 5000)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logging.warning("Error exporting CSV: %s", e)
+            logging.warning("SCF: exporting the trace to %s failed: %s", path, e)
+            QMessageBox.critical(self, "Export Error", f"Failed to export CSV:\n{e}")

@@ -1467,7 +1467,8 @@ class FrequencyDialog(QDialog):
             QMessageBox.critical(self, "Error", f"Failed to save GIF:\n{e}")
         finally:
             self._gif_saving = False
-            self.btn_gif.setEnabled(True)
+            # Manual displacement mode keeps GIF disabled (toggle_manual_displacement).
+            self.btn_gif.setEnabled(HAS_PIL and not self.chk_manual_displ.isChecked())
             self.setCursor(Qt.CursorShape.ArrowCursor)
             self.reset_geometry()
             if was_playing:

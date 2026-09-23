@@ -31,12 +31,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QBrush
-from .utils import get_default_export_path
+from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import logging
 
 try:
     from .mo_engine import (
+        CANCELLED,
         BasisSetEngine,
         CalcWorker,
         UnsupportedBasisError,
@@ -46,6 +47,7 @@ try:
 except ImportError:
     try:
         from mo_engine import (
+            CANCELLED,
             BasisSetEngine,
             CalcWorker,
             UnsupportedBasisError,
@@ -53,6 +55,7 @@ except ImportError:
         )
         from vis import CubeVisualizer
     except ImportError:
+        CANCELLED = "Cancelled"
         BasisSetEngine = None
         CalcWorker = None
         CubeVisualizer = None
@@ -229,7 +232,9 @@ class MODialog(QDialog):
         self.spin_margin = QDoubleSpinBox()
         self.spin_margin.setRange(1.0, 15.0)
         self.spin_margin.setValue(4.0)
-        self.spin_margin.setSuffix(" Bohr")  # Correct unit
+        # CalcWorker converts this value from Angstrom; the old " Bohr" label
+        # understated the real margin by 1.89x.
+        self.spin_margin.setSuffix(" Å")
         calc_layout.addRow("Calc Boundary Margin:", self.spin_margin)
 
         vis_layout.addWidget(calc_grp)
@@ -309,7 +314,9 @@ class MODialog(QDialog):
         btn_layout.addWidget(btn_csv)
 
         btn_close = QPushButton("Close")
-        btn_close.clicked.connect(self.accept)
+        # close(), not accept(): since Qt 6.3 done() swallows the QCloseEvent,
+        # so accept() skipped closeEvent and left the isosurfaces in the view.
+        btn_close.clicked.connect(self.close)
         btn_layout.addWidget(btn_close)
 
         # Add Stretch to push buttons to right or keep centered?
@@ -596,14 +603,7 @@ class MODialog(QDialog):
         """Copy the ORCA %output block needed for MO coefficients to the clipboard."""
         text = "%output\n  Print[P_Basis] 2\n  Print[P_Mos] 1\nend"
         QApplication.clipboard().setText(text)
-        if self.mw and hasattr(self.mw, "statusBar"):
-            sb = self.mw.statusBar()
-            if sb:
-                sb.showMessage("ORCA Input block copied to clipboard.", 5000)
-            else:
-                logging.info("ORCA Input block copied to clipboard.")
-        else:
-            logging.info("ORCA Input block copied to clipboard.")
+        notify(self, "ORCA Input block copied to clipboard.", 5000)
 
     def get_engine(self):
         """Build a BasisSetEngine from the parser's basis set, or None on failure."""
@@ -669,7 +669,7 @@ class MODialog(QDialog):
         grid = info.get("grid")
         margin = info.get("margin")
         grid_s = f"{grid} pts" if grid is not None else "unknown grid"
-        margin_s = f"{margin:.2f} Bohr" if margin is not None else "unknown margin"
+        margin_s = f"{margin:.2f} Å" if margin is not None else "unknown margin"
         version = info.get("version")
         version_s = f" — v{version}" if version else ""
         return f"Cached: {grid_s}, margin {margin_s}{version_s}"
@@ -727,6 +727,11 @@ class MODialog(QDialog):
         The compare dialog draws the orbitals itself, so this reuses the
         sequential worker queue but suppresses show_cube for the batch.
         """
+        if self._generation_busy():
+            notify(self, "Cube generation already in progress; try again when it finishes.", 5000)
+            if on_done:
+                on_done()
+            return
         self.generation_queue = [k for k in keys if k is not None]
         if not self.generation_queue:
             if on_done:
@@ -736,6 +741,28 @@ class MODialog(QDialog):
         self.generation_silent = True
         self.generation_done_cb = on_done
         self.process_generation_queue()
+
+    def _generation_busy(self) -> bool:
+        """Whether a CalcWorker is still computing a cube.
+
+        Starting a second batch meanwhile replaced self.worker, dropping the
+        last reference to a running QThread (a hard crash when it is
+        collected), and interleaved two queues.
+        """
+        worker = getattr(self, "worker", None)
+        try:
+            # `is True`: a real QThread returns a bool; anything else is not
+            # a running worker.
+            return worker is not None and worker.isRunning() is True
+        except RuntimeError:
+            return False
+
+    def cancel_generation(self) -> None:
+        """Stop the running cube batch: drop the queue and cancel the worker."""
+        self.generation_queue = []
+        worker = getattr(self, "worker", None)
+        if worker is not None and hasattr(worker, "cancel"):
+            worker.cancel()
 
     def _display_cube(self, path):
         """show_cube unless the running batch asked for files only."""
@@ -748,6 +775,9 @@ class MODialog(QDialog):
         # Batch generation for selected items
         selected = self.tree.selectedItems()
         if not selected:
+            return
+        if self._generation_busy():
+            notify(self, "Cube generation already in progress; try again when it finishes.", 5000)
             return
 
         # Build Queue
@@ -940,6 +970,7 @@ class MODialog(QDialog):
             )
             self.progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
             self.progress_dialog.setAutoClose(False)  # Keep open for batch
+            self.progress_dialog.canceled.connect(self.cancel_generation)
             self.progress_dialog.show()
 
         self.progress_dialog.setLabelText(f"Generating {display_id}...")
@@ -980,9 +1011,9 @@ class MODialog(QDialog):
                     self.diag_dlg.status_label.setText(
                         f"Generated: {os.path.basename(res)}"
                     )
+            elif res == CANCELLED:
+                logging.info("MO: cube generation cancelled by the user")
             else:
-                # If one fails, maybe continue?
-                # Or stop? let's continue but warn?
                 logging.warning("MO: cube generation failed: %s", res)
                 QMessageBox.warning(
                     self, "Generation Failed", f"Failed to generate cube:\n{res}"
@@ -1108,7 +1139,6 @@ class MODialog(QDialog):
         self.presets[name] = data
 
         # Update combo
-        self.combo_presets.currentText()
         self.combo_presets.blockSignals(True)
         self.combo_presets.clear()
         self.combo_presets.addItems(list(self.presets.keys()))
@@ -1309,15 +1339,7 @@ class MODialog(QDialog):
                     row = [item.text(c) for c in range(5)]
                     writer.writerow(row)
                     it += 1
-            # QMessageBox.information(self, "Success", f"Data exported to {filename}")
-            if self.mw and hasattr(self.mw, "statusBar"):
-                sb = self.mw.statusBar()
-                if sb:
-                    sb.showMessage(f"Data exported to {filename}", 5000)
-                else:
-                    logging.info("Data exported to %s", filename)
-            else:
-                logging.info("Data exported to %s", filename)
+            notify(self, f"Data exported to {filename}", 5000)
         # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
         except Exception as e:  # pylint: disable=broad-exception-caught
             QMessageBox.critical(self, "Error", f"Failed to export CSV: {e}")

@@ -161,6 +161,12 @@ class ChargeDialog(QDialog):
         scheme_row.addWidget(btn_custom)
         view_layout.addLayout(scheme_row)
 
+        # A saved scheme that no longer exists (deleted or malformed custom
+        # entry) used to KeyError here and abort opening the dialog.
+        if self.current_scheme not in self.schemes:
+            self.current_scheme = "Red(-) - White - Blue(+)"
+            self.combo_scheme.setCurrentText(self.current_scheme)
+
         # Gradient Bar
         self.grad_bar = GradientBar(self, self.schemes[self.current_scheme])
         view_layout.addWidget(self.grad_bar)
@@ -213,7 +219,7 @@ class ChargeDialog(QDialog):
 
         btn_close = QPushButton("Close")
         btn_close.setFixedWidth(100)
-        btn_close.clicked.connect(self.accept)
+        btn_close.clicked.connect(self.close)  # accept() skips closeEvent (Qt >= 6.3)
         bottom_row.addWidget(btn_close)
 
         main_layout.addLayout(bottom_row)

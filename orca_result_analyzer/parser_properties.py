@@ -10,7 +10,9 @@ AU_TO_DEBYE = 2.541746473
 
 
 class _PropertyParsingMixin:
-    def parse_dipole(self):
+    """Dipole, charge, NBO, Mayer and energy-component parsing for OrcaParser."""
+
+    def parse_dipole(self) -> None:
         """Extract the total dipole moment (and per-origin dipoles) into self.data."""
         # Look for "Total Dipole Moment"
         self.data["dipoles"] = None
@@ -626,9 +628,12 @@ class _PropertyParsingMixin:
                         TypeError,
                         ValueError,
                     ) as e:
+                        # Log the row, not `sym`: if int(parts[0]) fails on the
+                        # first row, `sym` is unbound and the handler itself
+                        # raised UnboundLocalError out of parse_all.
                         logging.warning(
-                            "Mayer charges: could not parse the valency row for atom %r: %s",
-                            sym,
+                            "Mayer charges: could not parse the valency row %r: %s",
+                            line,
                             e,
                         )
                 curr += 1

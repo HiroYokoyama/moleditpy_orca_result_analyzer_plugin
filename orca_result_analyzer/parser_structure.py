@@ -5,7 +5,25 @@ import logging
 
 
 class _StructureParsingMixin:
-    def parse_xyz_content(self, content):
+    """Geometry, trajectory, gradient and scan parsing for OrcaParser."""
+
+    @staticmethod
+    def _parse_xyz_row(line: str) -> tuple[str, list[float]] | None:
+        """(symbol, [x, y, z]) from a "SYM X Y Z" row, or None if it is not one.
+
+        A malformed row used to raise ValueError straight out of parse_all and
+        fail the whole file load.
+        """
+        parts = line.split()
+        if len(parts) < 4:
+            return None
+        try:
+            return parts[0], [float(parts[1]), float(parts[2]), float(parts[3])]
+        except ValueError:
+            logging.debug("Not a coordinate row: %r", line)
+            return None
+
+    def parse_xyz_content(self, content: str) -> list[dict]:
         """Parse multi-frame XYZ content."""
         lines = content.splitlines()
         steps = []
@@ -220,12 +238,10 @@ class _StructureParsingMixin:
                     l_geo = self.lines[curr].strip()
                     if not l_geo or "---" in l_geo:
                         break
-                    parts = l_geo.split()
-                    if len(parts) >= 4:
-                        self.data["atoms"].append(parts[0])
-                        self.data["coords"].append(
-                            [float(parts[1]), float(parts[2]), float(parts[3])]
-                        )
+                    xyz = self._parse_xyz_row(l_geo)
+                    if xyz is not None:
+                        self.data["atoms"].append(xyz[0])
+                        self.data["coords"].append(xyz[1])
                     curr += 1
         self.parse_termination_status()
 
@@ -269,34 +285,37 @@ class _StructureParsingMixin:
         current_scan_step = None
 
         # Helper to find coords after a header
+        def read_block_at(header_idx):
+            atoms, coords = [], []
+            c_idx = header_idx + 2
+            while c_idx < len(self.lines):
+                cl = self.lines[c_idx].strip()
+                if not cl or "-------" in cl:
+                    break
+                xyz = self._parse_xyz_row(cl)
+                if xyz is not None:
+                    atoms.append(xyz[0])
+                    coords.append(xyz[1])
+                c_idx += 1
+            return atoms, coords
+
         def read_coords_from(idx):
-            atoms = []
-            coords = []
-            # ORCA output for coords in opt steps usually:
-            # "CARTESIAN COORDINATES (ANGSTROEM)"
-            # search forward for coordinates
-            limit = 1000  # Search limit
-            found_coords = False
-            for k in range(limit):
-                if idx + k >= len(self.lines):
-                    break
-                line = self.lines[idx + k].strip()
-                if "CARTESIAN COORDINATES (ANGSTROEM)" in line.upper():
-                    c_idx = idx + k + 2
-                    found_coords = True
-                    while c_idx < len(self.lines):
-                        cl = self.lines[c_idx].strip()
-                        if not cl or "-------" in cl:
-                            break
-                        parts = cl.split()
-                        if len(parts) >= 4:
-                            atoms.append(parts[0])
-                            coords.append(
-                                [float(parts[1]), float(parts[2]), float(parts[3])]
-                            )
-                        c_idx += 1
-                    break
-            return atoms, coords, found_coords
+            # First "CARTESIAN COORDINATES (ANGSTROEM)" block within 1000 lines.
+            for k in range(idx, min(idx + 1000, len(self.lines))):
+                if "CARTESIAN COORDINATES (ANGSTROEM)" in self.lines[k].upper():
+                    atoms, coords = read_block_at(k)
+                    return atoms, coords, True
+            return [], [], False
+
+        def read_last_coords_between(start, end):
+            # A relaxed-scan step optimizes its geometry, so the step's
+            # structure is the last block before the next step, not the first
+            # (which is the unrelaxed starting point).
+            for k in range(end - 1, start - 1, -1):
+                if "CARTESIAN COORDINATES (ANGSTROEM)" in self.lines[k].upper():
+                    atoms, coords = read_block_at(k)
+                    return atoms, coords, True
+            return read_coords_from(start)
 
         for i, line in enumerate(self.lines):
             uu_line = line.upper()
@@ -476,7 +495,7 @@ class _StructureParsingMixin:
                 # Fallback: if not found between markers, maybe it's slightly before the marker?
                 # Or just use the one closest to the coordinate block.
 
-                atoms, coords, found = read_coords_from(i)
+                atoms, coords, found = read_last_coords_between(i, next_marker)
                 if found:
                     self.data["scan_steps"].append(
                         {

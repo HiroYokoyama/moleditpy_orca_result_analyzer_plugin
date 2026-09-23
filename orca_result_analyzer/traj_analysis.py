@@ -827,6 +827,18 @@ class TrajectoryResultDialog(QDialog):
                 for s in steps
                 if s.get("energy") is not None and abs(s["energy"]) > 1e-9
             ]
+            if not steps:
+                # Frames without an energy in their comment line are dropped
+                # above; with none left the dialog used to empty itself
+                # without a word.
+                if not silent:
+                    QMessageBox.warning(
+                        self,
+                        "Error",
+                        "The XYZ file has no frames with an energy in their "
+                        "comment line.",
+                    )
+                return
 
             # Merge dist from existing steps into new steps if lengths match
             # (Preserves Path Summary distances even if XYZ lacks them)

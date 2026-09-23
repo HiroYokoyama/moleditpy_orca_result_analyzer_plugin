@@ -244,7 +244,7 @@ class TestContextMenuLabel(_CompareCase):
         )
         head = self._labels()[0]
         self.assertIn("40 pts", head)
-        self.assertIn("4.00 Bohr", head)
+        self.assertIn("4.00 Å", head)
         self.assertIn("9.9.9", head)
 
     def test_an_ungenerated_orbital_says_so(self):

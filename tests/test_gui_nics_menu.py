@@ -77,7 +77,9 @@ class TestLaunch(_NicsCase):
         with patch.object(G, "open_nics_analyzer", return_value=(True, "")) as opener:
             with patch.object(G.QMessageBox, "information") as info:
                 self.dlg.show_nics_analysis()
-        opener.assert_called_once_with(self.mw, self.path)
+        opener.assert_called_once_with(
+            self.mw, self.path, exclude_action=self.dlg.nics_action
+        )
         info.assert_not_called()
 
     def test_a_failure_is_explained_to_the_user(self):

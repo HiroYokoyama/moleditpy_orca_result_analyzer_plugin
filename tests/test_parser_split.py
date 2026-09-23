@@ -28,6 +28,7 @@ _EXPECTED = {
     "_StructureParsingMixin": (
         _pstruct._StructureParsingMixin,
         [
+            "_parse_xyz_row",
             "parse_xyz_content",
             "parse_basic",
             "parse_termination_status",

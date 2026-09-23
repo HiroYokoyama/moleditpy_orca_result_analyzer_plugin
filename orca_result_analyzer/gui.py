@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .loading import load_orca_parser
+from .parser import IMAGINARY_FREQ_THRESHOLD
 from .utils import (
     normalize_atom_symbol,
     determine_bonds_without_dummies,
@@ -168,16 +169,18 @@ class _DirectoryFilePicker(QDialog):
             self.accept()
 
 
-def build_status_suffix(data):
+def build_status_suffix(data: dict) -> tuple[str, int]:
     """Suffix for the status label: imaginary-mode count.
 
     Returns (suffix, imaginary_count). suffix is "" when there is no
-    frequency data or no imaginary modes.
+    frequency data or no imaginary modes. Uses the parser's noise threshold,
+    as the thermochemistry count does, so an unprojected -3 cm-1 rotation
+    does not flag a minimum as a saddle point.
     """
     freqs = data.get("frequencies") or []
     if not freqs:
         return "", 0
-    imag = [f for f in freqs if f.get("freq", 0) < 0]
+    imag = [f for f in freqs if f.get("freq", 0) < -IMAGINARY_FREQ_THRESHOLD]
     if not imag:
         return "", 0
     n = len(imag)
@@ -1436,7 +1439,11 @@ class OrcaResultAnalyzerDialog(QDialog):
 
     def show_nics_analysis(self):
         """Hand the current file to the NICS Analyzer plugin, if installed."""
-        ok, message = open_nics_analyzer(self._nics_host(), self.file_path)
+        ok, message = open_nics_analyzer(
+            self._nics_host(),
+            self.file_path,
+            exclude_action=getattr(self, "nics_action", None),
+        )
         if not ok:
             QMessageBox.information(self, "NICS Analysis", message)
         self._refresh_nics_action()

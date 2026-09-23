@@ -945,22 +945,11 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         if not current_ref:
             return
 
-        # Check if it is a built-in standard
-        default_standards = {
-            "1H": ["TMS", "CDCl3", "DMSO-d6"],
-            "13C": ["TMS", "CDCl3", "DMSO-d6"],
-            "15N": ["CH3NO2", "NH3"],
-            "31P": ["H3PO4 (85%)"],
-            "19F": ["CFCl3"],
-        }
-
-        # Also check hardcoded defaults in save_settings to be safe
-        is_default = False
-        if (
-            current_nucleus in default_standards
-            and current_ref in default_standards[current_nucleus]
-        ):
-            is_default = True
+        # Built-ins come from the one shared table; a second hand-kept copy
+        # here could drift out of sync with it.
+        is_default = current_ref in DEFAULT_REFERENCE_STANDARDS.get(
+            current_nucleus, {}
+        )
 
         # Prevent deletion of "Custom" placeholder AND "No Reference"
         if current_ref in ["Custom", "No Reference"]:

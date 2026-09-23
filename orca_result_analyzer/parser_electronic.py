@@ -5,7 +5,9 @@ import logging
 
 
 class _ElectronicParsingMixin:
-    def parse_mo_coeffs(self):
+    """MO coefficient, orbital energy, basis set and SCF trace parsing for OrcaParser."""
+
+    def parse_mo_coeffs(self) -> None:
         """Extract per-orbital coefficients, energy, occupancy and spin into self.data."""
         self.data[
             "mo_coeffs"
@@ -72,7 +74,11 @@ class _ElectronicParsingMixin:
                 if "--------" in line:
                     curr += 1
                     continue
-                if "ORBITALS" in line and "--------" in self.lines[curr + 1]:
+                if (
+                    "ORBITALS" in line
+                    and curr + 1 < len(self.lines)
+                    and "--------" in self.lines[curr + 1]
+                ):
                     break  # Next block
 
                 parts = line.split()
@@ -483,10 +489,12 @@ class _ElectronicParsingMixin:
                 except IndexError:
                     current_step_label = "Opt Cycle"
             elif "SCAN STEP" in uu:
-                try:
-                    current_step_label = f"Scan Step {line.split()[-1]}"
-                except IndexError:
-                    current_step_label = "Scan Step"
+                # The banner is "*   RELAXED SURFACE SCAN STEP   1   *"; the
+                # last token is the closing asterisk, not the step number.
+                m_step = re.search(r"SCAN STEP\s+(\d+)", uu)
+                current_step_label = (
+                    f"Scan Step {m_step.group(1)}" if m_step else "Scan Step"
+                )
             elif "ORCA PROPERTIES" in uu or "ORCA PROPERTY" in uu:
                 current_step_label = "Property/Final"
             elif "OPTIMIZATION HAS CONVERGED" in uu:
@@ -543,10 +551,15 @@ class _ElectronicParsingMixin:
 
                         # Heuristic: if last trace in self.data["scf_traces"] has same label,
                         # suffix the new one if they are distinct blocks.
-                        same_label_count = 0
-                        for t in self.data["scf_traces"]:
-                            if t["step"].startswith(current_step_label):
-                                same_label_count += 1
+                        # Exact match or an earlier "(n)" suffix of it: a bare
+                        # startswith() counted "Cycle 10".."Cycle 19" as
+                        # repeats of "Cycle 1".
+                        same_label_count = sum(
+                            1
+                            for t in self.data["scf_traces"]
+                            if t["step"] == current_step_label
+                            or t["step"].startswith(f"{current_step_label} (")
+                        )
 
                         label = current_step_label
                         if same_label_count > 0:

@@ -51,12 +51,19 @@ def nics_analyzer_available(main_window) -> bool:
     return find_nics_module(main_window) is not None
 
 
-def _trigger_menu_action(main_window) -> bool:
-    """Fire the NICS plugin's own menu entry (used when we have no file)."""
+def _trigger_menu_action(main_window, exclude=None) -> bool:
+    """Fire the NICS plugin's own menu entry (used when we have no file).
+
+    *exclude* is the analyzer's own "NICS Analysis..." action: findChildren is
+    recursive and the analyzer window is a child of the main window, so without
+    it the search could find and re-trigger the entry that called us.
+    """
     try:
         from PyQt6.QtGui import QAction
 
         for action in main_window.findChildren(QAction):
+            if exclude is not None and action is exclude:
+                continue
             if "nics" in action.text().lower():
                 action.trigger()
                 return True
@@ -65,10 +72,11 @@ def _trigger_menu_action(main_window) -> bool:
     return False
 
 
-def open_nics_analyzer(main_window, file_path=None):
+def open_nics_analyzer(main_window, file_path=None, exclude_action=None):
     """Open the NICS Analyzer, on *file_path* when one is loaded.
 
     Returns ``(ok, message)``; *message* explains the failure when not ok.
+    *exclude_action* is never triggered by the menu fallback.
     """
     module = find_nics_module(main_window)
     if module is None:
@@ -87,6 +95,6 @@ def open_nics_analyzer(main_window, file_path=None):
             logging.warning("NICS Analyzer hand-off failed", exc_info=True)
             return False, f"The ORCA NICS Analyzer could not read this file:\n{exc}"
 
-    if _trigger_menu_action(main_window):
+    if _trigger_menu_action(main_window, exclude=exclude_action):
         return True, ""
     return False, "The ORCA NICS Analyzer plugin could not be opened."
