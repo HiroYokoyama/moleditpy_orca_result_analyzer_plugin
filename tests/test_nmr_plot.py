@@ -554,6 +554,118 @@ class TestPlotSpectrumSmoke(_DialogBase):
 
 
 # ===========================================================================
+# Coupling simulation — worker thread and cancel
+# ===========================================================================
+
+
+def _nmrsim_installed():
+    try:
+        import nmrsim  # noqa: F401  pylint: disable=unused-import,import-outside-toplevel
+    except ImportError:
+        return False
+    return True
+
+
+class _FakeProgress:
+    """QProgressDialog stand-in whose show() can press Cancel."""
+
+    press_cancel = False
+
+    def __init__(self, *a, **k):
+        self._on_cancel = None
+        self.canceled = MagicMock()
+        self.canceled.connect.side_effect = self._connect
+        self.closed = False
+
+    def _connect(self, slot):
+        self._on_cancel = slot
+
+    def show(self):
+        if self.press_cancel and self._on_cancel:
+            self._on_cancel()
+
+    def close(self):
+        self.closed = True
+
+    def __getattr__(self, name):
+        return MagicMock()
+
+
+class TestSimulateLineshape(unittest.TestCase):
+    def setUp(self):
+        self.NP = sys.modules[N.__package__ + ".nmr_plot"]
+
+    @unittest.skipUnless(_nmrsim_installed(), "nmrsim not installed")
+    def test_matches_nmrsims_own_lorentzian_sum(self):
+        import threading
+        import numpy as np
+        from nmrsim import Multiplet
+        from nmrsim.math import add_lorentzians
+
+        x = np.linspace(1150.0, 1250.0, 2048)
+        specs = [(1200.0, 2.0, [(7.0, 2), (2.5, 1)]), (1180.0, 1.0, [])]
+        y = self.NP._simulate_lineshape(specs, x, 1.0, threading.Event())
+        expected = sum(
+            add_lorentzians(x, Multiplet(v, i, j).peaklist(), 1.0)
+            for v, i, j in specs
+        )
+        np.testing.assert_allclose(y, expected, rtol=1e-9)
+
+    def test_returns_none_once_cancelled(self):
+        import threading
+        import numpy as np
+
+        cancel = threading.Event()
+        cancel.set()
+        with patch.object(
+            self.NP, "first_order_multiplet", lambda sig, cpl: [sig]
+        ):
+            y = self.NP._simulate_lineshape(
+                [(100.0, 1.0, [])], np.linspace(0, 200, 64), 1.0, cancel
+            )
+        self.assertIsNone(y)
+
+
+class TestCouplingSimulationDialog(TestPlotSpectrumSmoke):
+    def setUp(self):
+        super().setUp()
+        self.NP = sys.modules[N.__package__ + ".nmr_plot"]
+        chk = self.dlg.chk_real_spectrum
+        chk.isChecked.return_value = True
+        chk.setChecked.side_effect = lambda v: setattr(
+            chk.isChecked, "return_value", v
+        )
+        self.dlg.sel_timer = MagicMock()
+        self.dlg.current_nucleus = "H"
+        patches = [
+            patch.object(self.NP, "first_order_multiplet", lambda sig, cpl: [sig]),
+            patch.object(self.NP, "QProgressDialog", _FakeProgress),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.addCleanup(setattr, _FakeProgress, "press_cancel", False)
+
+    def test_simulation_draws_the_coupled_spectrum(self):
+        self.dlg.plot_spectrum()
+        ax = self.dlg.figure.axes[0]
+        self.assertGreater(max(ax.lines[0].get_ydata()), 0)
+        self.assertTrue(self.dlg.chk_real_spectrum.isChecked())
+
+    def test_selection_poller_is_paused_and_restarted(self):
+        self.dlg.plot_spectrum()
+        self.dlg.sel_timer.stop.assert_called()
+        self.dlg.sel_timer.start.assert_called_with(200)
+
+    def test_cancel_unticks_simulation_and_falls_back_to_sticks(self):
+        _FakeProgress.press_cancel = True
+        self.dlg.plot_spectrum()
+        self.assertFalse(self.dlg.chk_real_spectrum.isChecked())
+        ax = self.dlg.figure.axes[0]
+        self.assertIn("NMR", ax.get_title())
+
+
+# ===========================================================================
 # on_peak_click
 # ===========================================================================
 

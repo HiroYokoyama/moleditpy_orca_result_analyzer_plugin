@@ -1011,20 +1011,9 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
         # Update default X range for this nucleus
         self.update_x_range_defaults(nucleus)
 
+        # Coupling simulation stays off until the user ticks "Simulate Coupling":
+        # nmrsim is too slow on large molecules and merged peaks to run unasked.
         self.apply_filter()
-
-        # User Request: Auto-enable coupling when switching to any nucleus (if coupling exists)
-        # We do this AFTER apply_filter (which calls recalc) so we know if coupons exist for THIS nucleus.
-        if (
-            nucleus != "All"
-            and getattr(self, "chk_real_spectrum", None) is not None
-            and self.chk_real_spectrum.isEnabled()
-        ):
-            self.chk_real_spectrum.blockSignals(True)
-            self.chk_real_spectrum.setChecked(True)
-            self.chk_real_spectrum.blockSignals(False)
-            # Since we blocked signals, manually trigger one plot update if we just checked it
-            self.plot_spectrum()
 
     def update_x_range_defaults(self, nucleus):
         """Set appropriate default X range based on nucleus type"""

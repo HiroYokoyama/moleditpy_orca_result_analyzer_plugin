@@ -33,6 +33,8 @@ _EXPECTED = {
         [
             "plot_spectrum",
             "plot_real_spectrum",
+            "_run_coupling_simulation",
+            "_cancel_coupling_simulation",
             "_get_current_peaks",
             "highlight_selected_peaks",
             "reset_zoom",

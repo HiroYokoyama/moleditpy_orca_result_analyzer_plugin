@@ -2,19 +2,48 @@
 
 import re
 import logging
-from PyQt6.QtWidgets import QApplication
+import threading
+from PyQt6.QtWidgets import QApplication, QProgressDialog
 from PyQt6.QtCore import Qt
 import pyvista as pv
 import numpy as np
 
 try:
-    from nmrsim import Multiplet, Spectrum
+    from nmrsim.firstorder import multiplet as first_order_multiplet
 except ImportError as e:
     logging.warning("NMR: nmrsim not available — multiplet simulation disabled (%s)", e)
-    Multiplet = None
-    Spectrum = None
+    first_order_multiplet = None
 
 from matplotlib.ticker import MaxNLocator
+
+from .utils import notify
+
+# Lines broadcast against the grid at once: bounds memory and cancel latency
+_LINE_CHUNK = 256
+
+
+def _simulate_lineshape(specs, x_grid, width_hz, cancel):
+    """Sum nmrsim first-order multiplets as Lorentzians on x_grid; None if cancelled.
+
+    specs is [(centre_hz, intensity, [(J, n_nuclei), ...]), ...]. The line
+    shape is nmrsim's lorentz(), evaluated directly on the plot grid.
+    """
+    y = np.zeros_like(x_grid)
+    hw2 = (0.5 * width_hz) ** 2
+    scale = 0.5 / width_hz
+    for centre, intensity, couplings in specs:
+        if cancel.is_set():
+            return None
+        peaks = np.asarray(
+            first_order_multiplet((centre, intensity), couplings), dtype=float
+        )
+        for i in range(0, len(peaks), _LINE_CHUNK):
+            if cancel.is_set():
+                return None
+            v0 = peaks[i : i + _LINE_CHUNK, 0][:, None]
+            amp = peaks[i : i + _LINE_CHUNK, 1][:, None]
+            y += (scale * amp * hw2 / (hw2 + (x_grid - v0) ** 2)).sum(axis=0)
+    return y
 
 # Import RDKit for VDW radii calculation
 try:
@@ -455,6 +484,68 @@ class _NMRPlotMixin:
         if getattr(self, "canvas", None) is not None:
             self.canvas.draw_idle()
 
+    def _run_coupling_simulation(self, specs, x_grid, width_hz):
+        """Simulate on a worker thread behind a cancellable dialog; None if cancelled."""
+        cancel = threading.Event()
+        done = threading.Event()
+        result = {}
+
+        def work():
+            try:
+                result["y"] = _simulate_lineshape(specs, x_grid, width_hz, cancel)
+            # worker-thread top level: an uncaught error would leave the dialog spinning
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logging.error(
+                    "NMR: coupling simulation of %d multiplets failed: %s",
+                    len(specs),
+                    e,
+                )
+            finally:
+                done.set()
+
+        busy = QProgressDialog(
+            "Simulating J-coupling...\n"
+            "Large molecules and merged peaks can take a while.",
+            "Cancel",
+            0,
+            0,
+            self,
+        )
+        busy.setWindowTitle("Simulating NMR Spectrum")
+        busy.setWindowModality(Qt.WindowModality.WindowModal)
+        busy.setMinimumDuration(0)
+        busy.setAutoClose(False)
+        busy.setAutoReset(False)
+        # A signal, not wasCanceled(): a permissive test stub's MagicMock is truthy
+        busy.canceled.connect(cancel.set)
+
+        # The selection poller would redraw over a half-built spectrum
+        sel_timer = getattr(self, "sel_timer", None)
+        if sel_timer is not None:
+            sel_timer.stop()
+        threading.Thread(target=work, name="nmr-coupling-sim", daemon=True).start()
+        busy.show()
+        try:
+            while not done.wait(0.03) and not cancel.is_set():
+                QApplication.processEvents()
+        finally:
+            busy.close()
+            if sel_timer is not None:
+                sel_timer.start(200)
+
+        if cancel.is_set():
+            return None
+        return result.get("y", np.zeros_like(x_grid))
+
+    def _cancel_coupling_simulation(self):
+        """Fall back to the stick spectrum after the user cancelled the simulation."""
+        self.chk_real_spectrum.blockSignals(True)
+        self.chk_real_spectrum.setChecked(False)
+        self.chk_real_spectrum.blockSignals(False)
+        self.toggle_simulation_controls()
+        notify(self, "Coupling simulation cancelled.", 5000)
+        self.plot_spectrum()
+
     def plot_real_spectrum(self, ax):
         """Draw the spectrum with J-coupling applied"""
 
@@ -582,16 +673,10 @@ class _NMRPlotMixin:
                     if avg_J > 0.1:
                         couplings_list.append((avg_J, n_partner))
 
-            if Multiplet:
-                try:
-                    m = Multiplet(shift * spectrometer_freq, intensity, couplings_list)
-                    m.w = width_hz
-                    all_multiplets.append(m)
-                # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-                except Exception as e:  # pylint: disable=broad-exception-caught
-                    logging.error(
-                        "NMR: Multiplet creation failed for shift=%.3f: %s", shift, e
-                    )
+            # The splitting itself is exponential, so it runs on the worker
+            all_multiplets.append(
+                (shift * spectrometer_freq, intensity, couplings_list)
+            )
 
         # --- Plot range ---
         if self.chk_auto_x.isChecked():
@@ -619,16 +704,14 @@ class _NMRPlotMixin:
 
         # --- nmrsim, or the Lorentzian fallback ---
         nmrsim_success = False
-        if all_multiplets and Spectrum:
-            try:
-                spec = Spectrum(all_multiplets)
-                x_sim, y_sim = spec.lineshape(points=points)
-                y_total = np.interp(x_hz_grid, x_sim, y_sim, left=0, right=0)
-                if np.max(y_total) >= 1e-9:
-                    nmrsim_success = True
-            # Qt slot: a slot must never crash the app (CONTRIBUTING.md 4B)
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                logging.error("NMR: nmrsim Spectrum simulation failed: %s", e)
+        if all_multiplets and first_order_multiplet is not None:
+            y_sim = self._run_coupling_simulation(all_multiplets, x_hz_grid, width_hz)
+            if y_sim is None:
+                self._cancel_coupling_simulation()
+                return
+            y_total = y_sim
+            if np.max(y_total) >= 1e-9:
+                nmrsim_success = True
 
         if not nmrsim_success:
             all_peaks = []
