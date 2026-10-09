@@ -183,6 +183,18 @@ class TestLoadFile(_LoadCase):
 
 
 class TestNebTrajectoryAutoload(_LoadCase):
+    def _write(self, name, text, encoding="utf-8"):
+        if name == "neb.out":
+            text += "\nNUDGED ELASTIC BAND\n"
+        return super()._write(name, text, encoding)
+
+    def test_non_neb_output_ignores_a_stale_sibling_trajectory(self):
+        path = self._write("plain.out", OUT_TEXT)
+        self._write("plain_MEP_trj.xyz", _xyz([(-100.0, 9.0)]))
+        self.dlg.load_file(path)
+        self.assertEqual(self.dlg.parser.data["scan_steps"], [])
+        self.assertAlmostEqual(self.dlg.parser.data["coords"][1][0], 0.96)
+
     def test_a_sibling_mep_trajectory_is_picked_up(self):
         path = self._write("neb.out", OUT_TEXT)
         self._write("neb_MEP_trj.xyz", _xyz([(-100.0, 0.96), (-100.5, 0.97)]))

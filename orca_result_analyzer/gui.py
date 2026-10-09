@@ -901,7 +901,8 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             # Fallback: Standard naming
             base, _ext = os.path.splitext(path)
-            potential_paths.append(base + "_MEP_trj.xyz")
+            if new_parser.data.get("is_neb"):
+                potential_paths.append(base + "_MEP_trj.xyz")
 
             trj_path = None
             for p in potential_paths:
