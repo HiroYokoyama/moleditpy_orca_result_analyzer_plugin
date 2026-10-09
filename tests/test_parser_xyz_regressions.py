@@ -34,22 +34,21 @@ def _frame(comment, atom_lines=("O 0.0 0.0 0.11779", "H 0.0 0.75545 -0.47116")):
 
 class TestXYZFrameValidation(unittest.TestCase):
     def test_invalid_counts_cannot_rewind_the_parser(self):
-        visits = 0
+        class BoundedLines(list):
+            reads = 0
 
-        def bounded_trace(frame, event, _arg):
-            nonlocal visits
-            if frame.f_code.co_name == "parse_xyz_content" and event == "line":
-                visits += 1
-                if visits > 1000:
+            def __getitem__(self, index):
+                self.reads += 1
+                if self.reads > 100:
                     raise AssertionError("XYZ parser did not advance")
-            return bounded_trace
+                return super().__getitem__(index)
 
-        previous = sys.gettrace()
-        sys.settrace(bounded_trace)
-        try:
-            steps = OrcaParser().parse_xyz_content("-2\nTS\n0\nCI\n" + _frame("E -76.1"))
-        finally:
-            sys.settrace(previous)
+        class BoundedText(str):
+            def splitlines(self, keepends=False):
+                return BoundedLines(super().splitlines(keepends))
+
+        content = BoundedText("-2\nTS\n-1\nCI\n0\nCI\n" + _frame("E -76.1"))
+        steps = OrcaParser().parse_xyz_content(content)
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0]["atoms"], ["O", "H"])
 

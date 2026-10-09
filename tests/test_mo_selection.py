@@ -244,6 +244,14 @@ class _RegenCase(_MOCase):
 
 
 class TestGenerationShutdown(_RegenCase):
+    def test_closed_dialog_cannot_restart_the_generation_queue(self):
+        self.dlg.closeEvent(MagicMock())
+        with patch.object(self.dlg, "_generate_single_mo") as generate:
+            self.dlg.process_generation_queue()
+        generate.assert_not_called()
+        self.assertIsNone(self.dlg.progress_dialog)
+        self.assertEqual(self.dlg.generation_queue, [])
+
     def test_close_cancels_the_worker_and_discards_the_batch(self):
         self.dlg.progress_dialog = None
         self.dlg._generate_single_mo("1")

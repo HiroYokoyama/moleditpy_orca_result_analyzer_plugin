@@ -539,6 +539,50 @@ class TestReadOrcaFile(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestOpenOrcaFileExistingWindow(unittest.TestCase):
+    def setUp(self):
+        self.ctx = StubContext()
+        self.previous = MagicMock()
+        self.ctx.register_window("analyzer", self.previous)
+        self.parser = object()
+        self.loading = types.ModuleType("orca_result_analyzer.loading")
+        self.loading.load_orca_parser = MagicMock(return_value=self.parser)
+        self.utils = types.ModuleType("orca_result_analyzer.utils")
+        self.utils.clear_atom_color_overrides = MagicMock()
+        self.utils.sync_main_window_file = MagicMock()
+        self.gui = types.ModuleType("orca_result_analyzer.gui")
+        self.gui.OrcaResultAnalyzerDialog = MagicMock()
+        siblings = {
+            "orca_result_analyzer.loading": self.loading,
+            "orca_result_analyzer.utils": self.utils,
+            "orca_result_analyzer.gui": self.gui,
+        }
+        modules = patch.dict(sys.modules, siblings)
+        modules.start()
+        self.addCleanup(modules.stop)
+
+    def test_rejected_close_preserves_existing_result(self):
+        self.previous.close.return_value = False
+        _init_mod._open_orca_file("new.out", self.ctx)
+        self.previous.close.assert_called_once()
+        self.assertIs(self.ctx.get_window("analyzer"), self.previous)
+        self.gui.OrcaResultAnalyzerDialog.assert_not_called()
+        self.utils.clear_atom_color_overrides.assert_not_called()
+        self.utils.sync_main_window_file.assert_not_called()
+
+    def test_accepted_close_replaces_the_window_and_draws_the_new_result(self):
+        self.previous.close.return_value = True
+        _init_mod._open_orca_file("new.out", self.ctx)
+        self.previous.close.assert_called_once()
+        window = self.gui.OrcaResultAnalyzerDialog.return_value
+        self.assertIs(self.ctx.get_window("analyzer"), window)
+        self.assertIs(self.gui.OrcaResultAnalyzerDialog.call_args.args[1], self.parser)
+        self.utils.clear_atom_color_overrides.assert_called_once()
+        self.assertEqual(self.utils.sync_main_window_file.call_args.args[1], "new.out")
+        window.show.assert_called_once()
+        window.load_structure_3d.assert_called_once_with(fit_camera=True)
+
+
 class TestOpenAnalyzerEmptyReuseBranch(unittest.TestCase):
     """_open_orca_analyzer_empty() re-shows a registered window instead of
     rebuilding it, so a closed window MUST have left the registry — otherwise
