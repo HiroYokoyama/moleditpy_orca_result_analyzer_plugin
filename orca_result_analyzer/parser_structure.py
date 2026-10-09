@@ -43,6 +43,11 @@ class _StructureParsingMixin:
                 i += 1
                 continue
 
+            if natoms <= 0:
+                logging.warning("XYZ: ignoring invalid atom count %d", natoms)
+                i += 1
+                continue
+
             i += 1
             if i >= n_lines:
                 break

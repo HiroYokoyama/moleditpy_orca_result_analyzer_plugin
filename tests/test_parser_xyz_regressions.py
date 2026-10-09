@@ -32,6 +32,28 @@ def _frame(comment, atom_lines=("O 0.0 0.0 0.11779", "H 0.0 0.75545 -0.47116")):
     return "\n".join([str(len(atom_lines)), comment, *atom_lines]) + "\n"
 
 
+class TestXYZFrameValidation(unittest.TestCase):
+    def test_invalid_counts_cannot_rewind_the_parser(self):
+        visits = 0
+
+        def bounded_trace(frame, event, _arg):
+            nonlocal visits
+            if frame.f_code.co_name == "parse_xyz_content" and event == "line":
+                visits += 1
+                if visits > 1000:
+                    raise AssertionError("XYZ parser did not advance")
+            return bounded_trace
+
+        previous = sys.gettrace()
+        sys.settrace(bounded_trace)
+        try:
+            steps = OrcaParser().parse_xyz_content("-2\nTS\n0\nCI\n" + _frame("E -76.1"))
+        finally:
+            sys.settrace(previous)
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0]["atoms"], ["O", "H"])
+
+
 class TestEnergyLabelWordBoundary(unittest.TestCase):
     """Bug 1: bare-'E' alternative must not match the tail of another word."""
 
