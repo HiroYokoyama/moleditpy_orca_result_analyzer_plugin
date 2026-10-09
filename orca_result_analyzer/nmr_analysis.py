@@ -1198,7 +1198,13 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
 
             # Request: For "All", disable coupling (it's confusing/invalid to mix them)
             # ALSO: If reference does not exist, disable (meaningless ppm)
-            if self.current_nucleus == "All":
+            if nmrsim is None:
+                self.chk_real_spectrum.setChecked(False)
+                self.chk_real_spectrum.setEnabled(False)
+                self.chk_real_spectrum.setToolTip(
+                    "Coupling simulation requires the nmrsim library"
+                )
+            elif self.current_nucleus == "All":
                 self.chk_real_spectrum.setChecked(False)
                 self.chk_real_spectrum.setEnabled(False)
                 self.chk_real_spectrum.setToolTip(
