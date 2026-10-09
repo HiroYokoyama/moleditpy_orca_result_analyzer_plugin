@@ -53,6 +53,15 @@ class TestXYZFrameValidation(unittest.TestCase):
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0]["atoms"], ["O", "H"])
 
+    def test_scientific_notation_in_labels(self):
+        steps = OrcaParser().parse_xyz_content(_frame("Energy: -1.23e+02 Dist 1e-2"))
+        self.assertAlmostEqual(steps[0]["energy"], -123.0)
+        self.assertAlmostEqual(steps[0]["scan_coord"], 0.01)
+
+    def test_scientific_notation_in_fallback_energy(self):
+        steps = OrcaParser().parse_xyz_content(_frame("Frame 1 -1.23E+02"))
+        self.assertAlmostEqual(steps[0]["energy"], -123.0)
+
 
 class TestEnergyLabelWordBoundary(unittest.TestCase):
     """Bug 1: bare-'E' alternative must not match the tail of another word."""

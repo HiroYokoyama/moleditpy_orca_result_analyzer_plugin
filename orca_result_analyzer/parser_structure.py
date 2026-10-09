@@ -3,6 +3,8 @@
 import re
 import logging
 
+_XYZ_NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+
 
 class _StructureParsingMixin:
     """Geometry, trajectory, gradient and scan parsing for OrcaParser."""
@@ -84,7 +86,7 @@ class _StructureParsingMixin:
             # preceding word (e.g. "Coordinate 1.2") matches the bare-"E"
             # alternative case-insensitively and steals the wrong number.
             e_match = re.search(
-                r"\b(?:Energy|E)\b[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                rf"\b(?:Energy|E)\b[=:\s]+({_XYZ_NUMBER})",
                 comment,
                 re.IGNORECASE,
             )
@@ -99,7 +101,7 @@ class _StructureParsingMixin:
                     )
             else:
                 # Fallback: Just take the last float (usually energy)
-                floats = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+\.?", comment)
+                floats = re.findall(_XYZ_NUMBER, comment)
                 if floats:
                     try:
                         energy = float(floats[-1])
@@ -112,7 +114,7 @@ class _StructureParsingMixin:
 
             # 2. Look for Distance/Coordinate Label: "Dist 1.2" or "Coord 1.2"
             d_match = re.search(
-                r"\b(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+([-+]?\d*\.\d+|[-+]?\d+\.?)",
+                rf"\b(?:Dist(?:ance)?|Coord(?:inate)?|Scan)[=:\s]+({_XYZ_NUMBER})",
                 comment,
                 re.IGNORECASE,
             )
