@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import gui_harness  # noqa: E402
 
 N = gui_harness.load_isolated("nmr_analysis")
+NM = sys.modules[f"{N.__package__}.nmr_merge"]
 NE = sys.modules[f"{N.__package__}.nmr_export"]  # export_table_csv now lives here
 
 
@@ -454,6 +455,22 @@ class TestMerge(_NMRCase):
 
 
 class TestMergePersistence(_NMRCase):
+    def test_failed_explicit_save_keeps_changes_dirty(self):
+        self.dlg.merged_peaks = [{"indices": [1, 2]}]
+        self.dlg._merged_dirty = True
+        self.dlg.btn_save_merge.setEnabled(True)
+        # A parent that is a file makes the destination genuinely unwritable.
+        blocker = os.path.join(self.tmp, "blocker")
+        with open(blocker, "w", encoding="utf-8") as fh:
+            fh.write("file")
+        self.dlg.merged_peaks_file = os.path.join(blocker, "merges.json")
+        with patch.object(N.QMessageBox, "warning") as warning, patch.object(NM, "notify") as note:
+            self.dlg.save_merges_clicked()
+        self.assertTrue(self.dlg._merged_dirty)
+        self.assertTrue(self.dlg.btn_save_merge.isEnabled())
+        warning.assert_called_once()
+        note.assert_not_called()
+
     def test_saving_writes_the_groups(self):
         self.dlg.merged_peaks = [{"indices": [1, 2, 3]}]
         self.dlg.save_merged_peaks()

@@ -1,7 +1,7 @@
 """Plugin entry points and metadata for the ORCA Result Analyzer plugin."""
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "4.1.0"
+PLUGIN_VERSION = "4.1.1"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=4.0.0, <5.0.0"
@@ -46,7 +46,8 @@ def _open_orca_file(path, context):
     existing = context.get_window("analyzer")
     if existing is not None:
         try:
-            existing.close()
+            if existing.close() is False:
+                return
         except (RuntimeError, AttributeError) as e:
             logging.warning("Could not close the previous analyzer window: %s", e)
 

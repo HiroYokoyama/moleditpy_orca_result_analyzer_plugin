@@ -231,6 +231,9 @@ class _RegenCase(_MOCase):
         self.worker_cls = patch.object(M, "CalcWorker")
         self.worker = self.worker_cls.start()
         self.addCleanup(self.worker_cls.stop)
+        retained = patch.object(M, "_RUNNING_WORKERS", set())
+        retained.start()
+        self.addCleanup(retained.stop)
 
     def _write_cached_cube(self):
         path = self.dlg.get_cube_path("1")
@@ -238,6 +241,37 @@ class _RegenCase(_MOCase):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("stale cube\n")
         return path
+
+
+class TestGenerationShutdown(_RegenCase):
+    def test_close_cancels_the_worker_and_discards_the_batch(self):
+        self.dlg.progress_dialog = None
+        self.dlg._generate_single_mo("1")
+        worker = self.worker.return_value
+        self.dlg.generation_queue = ["2"]
+        done = MagicMock()
+        self.dlg.generation_done_cb = done
+        progress = self.dlg.progress_dialog
+        with patch.object(progress, "close") as close_progress:
+            self.dlg.closeEvent(MagicMock())
+        worker.cancel.assert_called_once()
+        self.assertEqual(self.dlg.generation_queue, [])
+        self.assertIsNone(self.dlg.generation_done_cb)
+        close_progress.assert_called_once()
+        self.assertIn(worker, M._RUNNING_WORKERS)
+
+    def test_late_results_cannot_redraw_or_advance_the_closed_dialog(self):
+        self.dlg._generate_single_mo("1")
+        worker = self.worker.return_value
+        result = worker.finished_sig.connect.call_args.args[0]
+        self.dlg.closeEvent(MagicMock())
+        with patch.object(self.dlg, "process_generation_queue") as advance:
+            result(True, "old.cube")
+        self.assertEqual(self.shown, [])
+        advance.assert_not_called()
+        self.assertIn(worker, M._RUNNING_WORKERS)
+        worker.finished.connect.call_args.args[0]()
+        self.assertNotIn(worker, M._RUNNING_WORKERS)
 
 
 class TestRegenerateOverwrites(_RegenCase):

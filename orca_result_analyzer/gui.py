@@ -810,7 +810,8 @@ class OrcaResultAnalyzerDialog(QDialog):
                 dlg = getattr(self, attr)
                 if dlg is not None:
                     try:
-                        dlg.close()
+                        if dlg.close() is False:
+                            return False
                     except (RuntimeError, AttributeError) as e:
                         logging.warning(
                             "Could not close the %s dialog while resetting the document: %s",
@@ -818,6 +819,7 @@ class OrcaResultAnalyzerDialog(QDialog):
                             e,
                         )
                 setattr(self, attr, None)
+        return True
 
     def reject(self):
         """Route Esc through close() so closeEvent cleanup always runs."""
@@ -831,8 +833,10 @@ class OrcaResultAnalyzerDialog(QDialog):
         through reject() -> close() and recurse. Deregistering matters: a
         window left in the registry is re-shown with its event filter gone.
         """
+        if not self.close_all_sub_dialogs():
+            event.ignore()
+            return
         self._disable_plotter_picking()
-        self.close_all_sub_dialogs()
         if self.context is not None:
             try:
                 self.context.register_window("analyzer", None)
@@ -872,7 +876,8 @@ class OrcaResultAnalyzerDialog(QDialog):
     def load_file(self, path):
         """Load a file and update UI"""
         # Close existing dialogs to prevent confusion
-        self.close_all_sub_dialogs()
+        if not self.close_all_sub_dialogs():
+            return
 
         # New result loaded — any atom colors applied to the previous
         # molecule's indices must not bleed onto this (possibly
@@ -896,7 +901,8 @@ class OrcaResultAnalyzerDialog(QDialog):
 
             # Fallback: Standard naming
             base, _ext = os.path.splitext(path)
-            potential_paths.append(base + "_MEP_trj.xyz")
+            if new_parser.data.get("is_neb"):
+                potential_paths.append(base + "_MEP_trj.xyz")
 
             trj_path = None
             for p in potential_paths:
@@ -1415,7 +1421,8 @@ class OrcaResultAnalyzerDialog(QDialog):
             )
             return
         if getattr(self, "nmr_dlg", None) is not None and self.nmr_dlg is not None:
-            self.nmr_dlg.close()
+            if self.nmr_dlg.close() is False:
+                return
         self.nmr_dlg = NMRDialog(
             self, data, couplings=couplings, file_path=self.file_path
         )
