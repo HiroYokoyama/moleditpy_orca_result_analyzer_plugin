@@ -76,6 +76,10 @@ except ImportError:
     MOCompareDialog = None
 
 
+# Retain threads until QThread.finished, which follows the result signal.
+_RUNNING_WORKERS = set()
+
+
 class MODialog(QDialog):
     """Dialog listing MOs, generating their cube files and visualizing them in 3D."""
 
@@ -97,6 +101,7 @@ class MODialog(QDialog):
         self.resize(550, 750)
         self.mos = mo_data
         self.parent_dlg = parent
+        self._is_closing = False
         self.last_cube_path = None
         self.generation_queue = []  # Init queue
         self.generation_force = False  # Overwrite cached cubes for this batch
@@ -799,6 +804,8 @@ class MODialog(QDialog):
 
     def process_generation_queue(self):
         """Generate the cube for the next queued orbital, or finish the batch."""
+        if getattr(self, "_is_closing", False) is True:
+            return
         if not getattr(self, "generation_queue", None):
             # Done
             if (
@@ -986,10 +993,15 @@ class MODialog(QDialog):
             dense_vec,
             out_path,
         )
+        worker = self.worker
+        _RUNNING_WORKERS.add(worker)
+        worker.finished.connect(lambda: _RUNNING_WORKERS.discard(worker))
 
         self.worker.progress_sig.connect(self.progress_dialog.setValue)
 
         def on_finished(success, res):
+            if getattr(self, "_is_closing", False) is True:
+                return
             if success:
                 self._display_cube(res)
                 # Highlight
@@ -1272,6 +1284,12 @@ class MODialog(QDialog):
 
     def closeEvent(self, event):
         """Clean up 3D actors when closing"""
+        self._is_closing = True
+        self.cancel_generation()
+        self.generation_done_cb = None
+        if getattr(self, "progress_dialog", None) is not None:
+            self.progress_dialog.close()
+            self.progress_dialog = None
         # Clean up tracked sub-dialogs
         if getattr(self, "energy_dlg", None) is not None and self.energy_dlg:
             try:
