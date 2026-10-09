@@ -567,7 +567,7 @@ def _nmrsim_installed():
 
 
 class _FakeProgress:
-    """QProgressDialog stand-in whose show() can press Cancel."""
+    """Model Qt cancellation both from the button and from closing the dialog."""
 
     press_cancel = False
 
@@ -575,10 +575,15 @@ class _FakeProgress:
         self._on_cancel = None
         self.canceled = MagicMock()
         self.canceled.connect.side_effect = self._connect
+        self.canceled.disconnect.side_effect = self._disconnect
         self.closed = False
 
     def _connect(self, slot):
         self._on_cancel = slot
+
+    def _disconnect(self, slot):
+        if self._on_cancel == slot:
+            self._on_cancel = None
 
     def show(self):
         if self.press_cancel and self._on_cancel:
@@ -586,6 +591,8 @@ class _FakeProgress:
 
     def close(self):
         self.closed = True
+        if self._on_cancel:
+            self._on_cancel()
 
     def __getattr__(self, name):
         return MagicMock()
@@ -647,7 +654,9 @@ class TestCouplingSimulationDialog(TestPlotSpectrumSmoke):
         self.addCleanup(setattr, _FakeProgress, "press_cancel", False)
 
     def test_simulation_draws_the_coupled_spectrum(self):
-        self.dlg.plot_spectrum()
+        with patch.object(self.NP, "notify") as status:
+            self.dlg.plot_spectrum()
+        status.assert_not_called()
         ax = self.dlg.figure.axes[0]
         self.assertGreater(max(ax.lines[0].get_ydata()), 0)
         self.assertTrue(self.dlg.chk_real_spectrum.isChecked())
@@ -659,10 +668,46 @@ class TestCouplingSimulationDialog(TestPlotSpectrumSmoke):
 
     def test_cancel_unticks_simulation_and_falls_back_to_sticks(self):
         _FakeProgress.press_cancel = True
-        self.dlg.plot_spectrum()
+        with patch.object(self.NP, "notify") as status:
+            self.dlg.plot_spectrum()
+        status.assert_called_once_with(
+            self.dlg, "Coupling simulation cancelled.", 5000
+        )
         self.assertFalse(self.dlg.chk_real_spectrum.isChecked())
         ax = self.dlg.figure.axes[0]
         self.assertIn("NMR", ax.get_title())
+
+
+class TestCouplingControls(_DialogBase):
+    def test_recalc_keeps_simulation_disabled_without_nmrsim(self):
+        self.dlg.current_nucleus = "H"
+        self.dlg.displayed_data = [d for d in _data() if d["atom_sym"] == "H"]
+        self.dlg.chk_real_spectrum.setChecked(True)
+        with patch.object(N, "nmrsim", None):
+            self.dlg.recalc()
+        self.assertFalse(self.dlg.chk_real_spectrum.isEnabled())
+        self.assertFalse(self.dlg.chk_real_spectrum.isChecked())
+        self.assertIn("nmrsim", self.dlg.chk_real_spectrum.toolTip())
+        self.assertFalse(self.dlg.spin_real_width.isEnabled())
+        self.assertFalse(self.dlg.spin_mhz.isEnabled())
+
+    def test_toggle_controls_and_switch_to_all_view(self):
+        self.dlg.current_nucleus = "H"
+        self.dlg.displayed_data = [d for d in _data() if d["atom_sym"] == "H"]
+        with patch.object(N, "nmrsim", object()):
+            self.dlg.recalc()
+            self.assertTrue(self.dlg.chk_real_spectrum.isEnabled())
+            for checked in (True, False, True):
+                self.dlg.chk_real_spectrum.setChecked(checked)
+                self.dlg.toggle_simulation_controls()
+                self.assertEqual(self.dlg.spin_real_width.isEnabled(), checked)
+                self.assertEqual(self.dlg.spin_mhz.isEnabled(), checked)
+            self.dlg.current_nucleus = "All"
+            self.dlg.recalc()
+        self.assertFalse(self.dlg.chk_real_spectrum.isEnabled())
+        self.assertFalse(self.dlg.chk_real_spectrum.isChecked())
+        self.assertFalse(self.dlg.spin_real_width.isEnabled())
+        self.assertFalse(self.dlg.spin_mhz.isEnabled())
 
 
 # ===========================================================================

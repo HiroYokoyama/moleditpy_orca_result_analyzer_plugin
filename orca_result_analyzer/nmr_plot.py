@@ -529,6 +529,9 @@ class _NMRPlotMixin:
             while not done.wait(0.03) and not cancel.is_set():
                 QApplication.processEvents()
         finally:
+            # Qt emits canceled when close() dismisses the dialog too. Only
+            # user cancellation during the calculation should discard its result.
+            busy.canceled.disconnect(cancel.set)
             busy.close()
             if sel_timer is not None:
                 sel_timer.start(200)
