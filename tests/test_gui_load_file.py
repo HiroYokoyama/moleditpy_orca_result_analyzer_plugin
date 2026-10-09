@@ -72,6 +72,26 @@ class _LoadCase(unittest.TestCase):
 
 
 class TestLoadFile(_LoadCase):
+    def test_a_rejected_child_close_keeps_the_current_result(self):
+        child = MagicMock()
+        child.close.return_value = False
+        self.dlg.nmr_dlg = child
+        before = self.dlg.file_path
+        with patch.object(G, "load_orca_parser") as load:
+            self.dlg.load_file(self._write("second.out", OUT_TEXT))
+        load.assert_not_called()
+        self.assertEqual(self.dlg.file_path, before)
+        self.assertIs(self.dlg.nmr_dlg, child)
+
+    def test_a_rejected_child_close_keeps_the_analyzer_open(self):
+        child = MagicMock()
+        child.close.return_value = False
+        self.dlg.nmr_dlg = child
+        event = MagicMock()
+        self.dlg.closeEvent(event)
+        event.ignore.assert_called_once()
+        event.accept.assert_not_called()
+
     def test_the_file_becomes_the_current_result(self):
         path = self._write("second.out", OUT_TEXT)
         self.dlg.load_file(path)

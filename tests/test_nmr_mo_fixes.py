@@ -940,6 +940,18 @@ class TestNMRCloseEventSavePrompt(unittest.TestCase):
         dlg.save_merged_peaks.assert_called_once()
         self.assertFalse(dlg._merged_dirty)
 
+    def test_failed_save_prevents_close_and_keeps_changes_dirty(self):
+        dlg = self._closing_dialog(dirty=True)
+        dlg.save_merged_peaks.return_value = False
+        self.msgbox.question.return_value = 4
+        event = MagicMock()
+        dlg.closeEvent(event)
+        self.assertTrue(dlg._merged_dirty)
+        event.ignore.assert_called_once()
+        event.accept.assert_not_called()
+        dlg.clear_atom_labels.assert_not_called()
+        self.assertTrue(dlg.sel_timer.isActive())
+
     def test_dirty_close_discard_choice_does_not_save(self):
         dlg = self._closing_dialog(dirty=True)
         self.msgbox.question.return_value = 8

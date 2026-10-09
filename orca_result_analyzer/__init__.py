@@ -46,7 +46,8 @@ def _open_orca_file(path, context):
     existing = context.get_window("analyzer")
     if existing is not None:
         try:
-            existing.close()
+            if existing.close() is False:
+                return
         except (RuntimeError, AttributeError) as e:
             logging.warning("Could not close the previous analyzer window: %s", e)
 

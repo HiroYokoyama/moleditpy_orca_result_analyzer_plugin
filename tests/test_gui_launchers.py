@@ -77,6 +77,16 @@ class _LauncherCase(unittest.TestCase):
 
 
 class TestLaunchers(_LauncherCase):
+    def test_reopening_nmr_respects_a_failed_save(self):
+        self.parser.data = {"nmr_shielding": [{"atom_idx": 0}]}
+        previous = MagicMock()
+        previous.close.return_value = False
+        self.dlg.nmr_dlg = previous
+        with patch.object(G, "NMRDialog") as dialog:
+            self.dlg.show_nmr()
+        dialog.assert_not_called()
+        self.assertIs(self.dlg.nmr_dlg, previous)
+
     def test_each_launcher_opens_its_window(self):
         for method, cls, attr, data in LAUNCHERS:
             with self.subTest(method):

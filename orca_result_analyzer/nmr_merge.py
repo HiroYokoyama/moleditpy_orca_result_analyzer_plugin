@@ -166,7 +166,8 @@ class _NMRMergeMixin:
 
     def save_merges_clicked(self):
         """Persist merged peak groups to disk (explicit user action)."""
-        self.save_merged_peaks()
+        if not self.save_merged_peaks():
+            return
         self._merged_dirty = False
         btn = getattr(self, "btn_save_merge", None)
         if btn:
@@ -174,11 +175,14 @@ class _NMRMergeMixin:
         notify(self, "Merged peaks saved.", 3000)
 
     def save_merged_peaks(self):
-        """Save merged peaks to JSON file"""
+        """Save merged peaks to JSON file and return whether it succeeded."""
         try:
             save_json_atomic(self.merged_peaks_file, self.merged_peaks)
+            return True
         except (OSError, TypeError, ValueError) as e:
             logging.warning("Error saving merged peaks: %s", e)
+            QMessageBox.warning(self, "Save Failed", f"Could not save merged peaks:\n{e}")
+            return False
 
     def load_merged_peaks(self):
         """Load merged peaks from JSON file"""

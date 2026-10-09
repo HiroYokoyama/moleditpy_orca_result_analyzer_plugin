@@ -1279,7 +1279,10 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
                 QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard,
             )
             if reply == QMessageBox.StandardButton.Save:
-                self.save_merged_peaks()
+                if not self.save_merged_peaks():
+                    self.sel_timer.start(200)
+                    event.ignore()
+                    return
             self._merged_dirty = False
 
         self.save_settings()
