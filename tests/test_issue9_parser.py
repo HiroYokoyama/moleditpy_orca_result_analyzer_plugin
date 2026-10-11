@@ -37,3 +37,24 @@ def test_final_basis_and_coefficients_have_matching_size():
     size = sum(2 * shell["l"] + 1 for shell in parser.data["basis_set_shells"])
     assert size == 522
     assert all(len(mo["coeffs"]) == size for mo in parser.data["mo_coeffs"].values())
+
+
+@pytest.mark.parametrize("first,last", [
+    ("benzene-opt-ene.out", "benzene-opt-eneQZ.out"),
+    ("o2-opt_orb.out", "benzene-opt-ene.out"),
+    ("benzene-opt-ene.out", "o2-opt_orb.out"),
+])
+def test_final_job_matches_loading_it_alone(first, last):
+    combined, final = OrcaParser(), OrcaParser()
+    combined.load_from_memory(output(first) + "\n" + output(last))
+    final.load_from_memory(output(last))
+    assert combined.data == final.data
+
+
+def test_compound_job_does_not_inherit_previous_results():
+    parser = OrcaParser()
+    parser.load_from_memory(output("o2-opt_orb.out") + "\nJOB NUMBER 2\n")
+    assert parser.data["atoms"] == []
+    assert parser.data["mo_coeffs"] == {}
+    assert not parser.data.get("spin_s2")
+    assert parser.data["version"] == "6.1.1"

@@ -43,6 +43,13 @@ class _ElectronicParsingMixin:
         if not start_indices:
             return
 
+        generic_starts = [idx for idx, spin in start_indices if spin == "restricted"]
+        if generic_starts:
+            start_indices = [
+                (idx, spin) for idx, spin in start_indices
+                if idx >= generic_starts[-1]
+            ]
+
         # Only keep the LAST occurrence for each spin type
         final_indices = {}
         for idx, spin in start_indices:
@@ -259,6 +266,13 @@ class _ElectronicParsingMixin:
 
         if not start_indices:
             return
+
+        generic_starts = [idx for idx, spin in start_indices if spin == "restricted"]
+        if generic_starts:
+            start_indices = [
+                (idx, spin) for idx, spin in start_indices
+                if idx >= generic_starts[-1]
+            ]
 
         # Only keep the LAST occurrence for each spin type
         final_indices = {}

@@ -1,5 +1,7 @@
 """OrcaParser: assembles the parsing mixins and drives parse_all's step order."""
 
+import re
+
 from .parser_structure import _StructureParsingMixin
 from .parser_electronic import _ElectronicParsingMixin
 from .parser_properties import _PropertyParsingMixin, AU_TO_DEBYE
@@ -80,7 +82,19 @@ class OrcaParser(
         """Store the ORCA output text and run parse_all on it."""
         self.filename = filename
         self.raw_content = content
-        self.lines = content.splitlines()
+        lines = content.splitlines()
+        # Concatenated runs and compound jobs must not share final properties.
+        start = 0
+        version_line = None
+        for i, line in enumerate(lines):
+            if re.match(r"^\s*Program Version\s+\d", line):
+                start = i
+                version_line = line
+            elif re.match(r"^\s*\*?\s*JOB NUMBER\s+\d+\s*\*?\s*$", line):
+                start = i
+        self.lines = lines[start:]
+        if version_line and not any("Program Version" in line for line in self.lines):
+            self.lines.insert(0, version_line)
         self.parse_all(progress=progress)
 
     def parse_all(self, progress=None):
