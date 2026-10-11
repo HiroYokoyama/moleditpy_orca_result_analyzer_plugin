@@ -281,9 +281,7 @@ class _StructureParsingMixin:
 
     def parse_trajectory(self):
         """Parse Optimization, Scan, and NEB Trajectories."""
-        # Already initialized in parse_all, but keep for robustness if called standalone
-        if "scan_steps" not in self.data:
-            self.data["scan_steps"] = []
+        self.data["scan_steps"] = []
 
         # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE" or "NEB"
         # And capture Energy + Geometry

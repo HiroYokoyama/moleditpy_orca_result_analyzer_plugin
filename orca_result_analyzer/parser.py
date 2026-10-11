@@ -31,6 +31,10 @@ class OrcaParser(
         self.filename = ""
         self.raw_content = ""
         self.lines = []
+        self._reset_data()
+
+    def _reset_data(self):
+        """Discard every result derived from the previous input."""
         self.data = {
             "scf_traces": [],  # List of SCF energy values per iteration
             "converged": False,
@@ -80,6 +84,7 @@ class OrcaParser(
 
     def load_from_memory(self, content, filename="", progress=None):
         """Store the ORCA output text and run parse_all on it."""
+        self._reset_data()
         self.filename = filename
         self.raw_content = content
         lines = content.splitlines()

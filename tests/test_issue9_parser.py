@@ -21,6 +21,18 @@ def test_every_mo_has_all_basis_coefficients(name):
     assert all(len(mo["coeffs"]) == size for mo in parser.data["mo_coeffs"].values())
 
 
+@pytest.mark.parametrize("first,last", [
+    ("benzene-opt-ene.out", "benzene-opt-eneQZ.out"),
+    ("o2-opt_orb.out", "benzene-opt-ene.out"),
+    ("benzene-opt-ene.out", "o2-opt_orb.out"),
+])
+def test_final_job_matches_loading_it_alone(first, last):
+    combined, final = OrcaParser(), OrcaParser()
+    combined.load_from_memory(output(first) + "\n" + output(last))
+    final.load_from_memory(output(last))
+    assert combined.data == final.data
+
+
 def test_latest_equal_sized_basis_parameters():
     parser = OrcaParser()
     parser.data.update(atoms=["H"], coords=[[0, 0, 0]])
@@ -39,18 +51,6 @@ def test_final_basis_and_coefficients_have_matching_size():
     assert all(len(mo["coeffs"]) == size for mo in parser.data["mo_coeffs"].values())
 
 
-@pytest.mark.parametrize("first,last", [
-    ("benzene-opt-ene.out", "benzene-opt-eneQZ.out"),
-    ("o2-opt_orb.out", "benzene-opt-ene.out"),
-    ("benzene-opt-ene.out", "o2-opt_orb.out"),
-])
-def test_final_job_matches_loading_it_alone(first, last):
-    combined, final = OrcaParser(), OrcaParser()
-    combined.load_from_memory(output(first) + "\n" + output(last))
-    final.load_from_memory(output(last))
-    assert combined.data == final.data
-
-
 def test_compound_job_does_not_inherit_previous_results():
     parser = OrcaParser()
     parser.load_from_memory(output("o2-opt_orb.out") + "\nJOB NUMBER 2\n")
@@ -58,6 +58,18 @@ def test_compound_job_does_not_inherit_previous_results():
     assert parser.data["mo_coeffs"] == {}
     assert not parser.data.get("spin_s2")
     assert parser.data["version"] == "6.1.1"
+
+
+def test_repeated_load_resets_all_previous_results():
+    parser = OrcaParser()
+    parser.load_from_memory(output("acetone-opt.out"))
+    assert len(parser.data["scan_steps"]) == 6
+    parser.parse_trajectory()
+    assert len(parser.data["scan_steps"]) == 6
+    parser.load_from_memory("Program Version 6.1.1\n")
+    fresh = OrcaParser()
+    fresh.load_from_memory("Program Version 6.1.1\n")
+    assert parser.data == fresh.data
 
 
 def test_incomplete_cycle_keeps_geometry_without_inventing_energy():
