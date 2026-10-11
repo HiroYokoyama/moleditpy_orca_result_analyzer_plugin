@@ -978,6 +978,7 @@ class NMRDialog(QDialog, _NMRMergeMixin, _NMRPlotMixin, _NMRExportMixin):
                     del self.reference_standards[current_nucleus][current_ref]
                     self.save_settings()
                     self.update_reference_combo()
+                    self.recalc()
                     notify(self, f"Reference '{current_ref}' removed.", 5000)
                 else:
                     # Should not happen if UI is consistent
