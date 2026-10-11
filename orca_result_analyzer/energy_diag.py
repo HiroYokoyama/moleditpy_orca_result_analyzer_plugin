@@ -346,9 +346,6 @@ class EnergyDiagramDialog(QDialog):
         else:
             # RHF/RKS: "16" -> "16"
             patterns.append(f"*_MO_{target_idx}.cube")
-            patterns.append(
-                f"*_MO_{target_idx}_*.cube"
-            )  # For extended labels if any? No, safe_id is strict.
             patterns.append(f"{target_idx:03d}_*.cube")  # Legacy
             patterns.append(f"{index:03d}_*.cube")  # Legacy 0-based
 
@@ -357,6 +354,7 @@ class EnergyDiagramDialog(QDialog):
 
         # 1. Try to find the exact _cubes subfolder from parser filename
         own_cube_dir_name = None
+        base = None
         parent_dlg = self.parent()
         if parent_dlg and hasattr(parent_dlg, "parent_dlg") and parent_dlg.parent_dlg:
             main_dlg = parent_dlg.parent_dlg
@@ -392,7 +390,19 @@ class EnergyDiagramDialog(QDialog):
 
         files = []
         for s_dir in search_dirs:
-            for p in patterns:
+            search_patterns = patterns
+            if base:
+                exact_patterns = [
+                    p.replace("*_MO_", f"{glob.escape(base)}_MO_")
+                    for p in patterns if p.startswith("*_MO_")
+                ]
+                # Legacy names have provenance only inside this job's cube folder.
+                search_patterns = exact_patterns
+                if os.path.basename(s_dir) == own_cube_dir_name:
+                    search_patterns = exact_patterns + [
+                        p for p in patterns if not p.startswith("*_MO_")
+                    ]
+            for p in search_patterns:
                 full_p = os.path.join(s_dir, p)
                 files = glob.glob(full_p)
                 if files:
