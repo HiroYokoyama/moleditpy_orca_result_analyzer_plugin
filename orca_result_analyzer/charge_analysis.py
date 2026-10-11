@@ -609,8 +609,8 @@ class ChargeDialog(QDialog):
             # Add scalar bar legend showing charge scale with color gradient
             try:
                 # Create a mesh with charge values to display scalar bar
-                vmin = min(charges)
-                vmax = max(charges)
+                vmin = -max_c
+                vmax = max_c
 
                 # Convert scheme colors to colormap
                 cmap_colors = [mcolors.to_rgb(QColor(c).name()) for c in colors]

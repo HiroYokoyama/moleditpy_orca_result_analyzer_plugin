@@ -710,3 +710,34 @@ class TestDoubleClickReset(unittest.TestCase):
         dlg.update = MagicMock()
         dlg.mouseDoubleClickEvent(None)
         self.assertGreaterEqual(dlg.current_max - dlg.current_min, 0.2)
+
+
+class TestSharedDirectoryCubeProvenance(TestCubeLookupStaysWithTheLoadedFile):
+    def test_foreign_cube_in_result_directory_is_not_loaded(self):
+        self._touch("other_MO_5.cube")
+        self._touch("005_HOMO.cube")
+        host = self._host_for("current.out")
+        with patch.object(E.QMessageBox, "question", return_value=E.QMessageBox.StandardButton.Yes):
+            self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_not_called()
+        host.generate_specific_orbital.assert_called_once_with(5, "HOMO", "")
+
+    def test_exact_current_cube_wins_over_foreign_file(self):
+        self._touch("other_MO_5.cube")
+        path = self._touch("current_MO_5.cube")
+        host = self._host_for("current.out")
+        self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_called_once_with(path)
+
+    def test_restricted_request_does_not_load_spin_cube(self):
+        self._touch("current_MO_5_b.cube")
+        host = self._host_for("current.out")
+        with patch.object(E.QMessageBox, "question", return_value="no"):
+            self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_not_called()
+
+    def test_legacy_cube_inside_current_folder_is_supported(self):
+        path = self._touch("005_HOMO.cube", subdir="current_cubes")
+        host = self._host_for("current.out")
+        self._dialog(host).try_load_cube(5, "HOMO")
+        host.load_file_by_path.assert_called_once_with(path)

@@ -43,6 +43,13 @@ class _ElectronicParsingMixin:
         if not start_indices:
             return
 
+        generic_starts = [idx for idx, spin in start_indices if spin == "restricted"]
+        if generic_starts:
+            start_indices = [
+                (idx, spin) for idx, spin in start_indices
+                if idx >= generic_starts[-1]
+            ]
+
         # Only keep the LAST occurrence for each spin type
         final_indices = {}
         for idx, spin in start_indices:
@@ -189,6 +196,10 @@ class _ElectronicParsingMixin:
                             curr += 1
                             continue
 
+                        val_strs = re.findall(
+                            r"[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[Ee][+-]?\d+)?",
+                            " ".join(val_strs),
+                        )
                         if len(val_strs) == len(current_mos):
                             for k, v_str in enumerate(val_strs):
                                 mo_idx = current_mos[k]
@@ -255,6 +266,13 @@ class _ElectronicParsingMixin:
 
         if not start_indices:
             return
+
+        generic_starts = [idx for idx, spin in start_indices if spin == "restricted"]
+        if generic_starts:
+            start_indices = [
+                (idx, spin) for idx, spin in start_indices
+                if idx >= generic_starts[-1]
+            ]
 
         # Only keep the LAST occurrence for each spin type
         final_indices = {}
@@ -347,9 +365,8 @@ class _ElectronicParsingMixin:
         # Look for "BASIS SET IN INPUT FORMAT"
         start_idx = -1
         for i, line in enumerate(self.lines):
-            if "BASIS SET IN INPUT FORMAT" in line:
+            if line.strip() == "BASIS SET IN INPUT FORMAT":
                 start_idx = i
-                break
 
         if start_idx == -1:
             return

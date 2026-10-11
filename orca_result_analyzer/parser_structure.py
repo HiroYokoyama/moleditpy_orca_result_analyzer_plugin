@@ -281,9 +281,7 @@ class _StructureParsingMixin:
 
     def parse_trajectory(self):
         """Parse Optimization, Scan, and NEB Trajectories."""
-        # Already initialized in parse_all, but keep for robustness if called standalone
-        if "scan_steps" not in self.data:
-            self.data["scan_steps"] = []
+        self.data["scan_steps"] = []
 
         # Look for "RELAXED SURFACE SCAN STEP" or "GEOMETRY OPTIMIZATION CYCLE" or "NEB"
         # And capture Energy + Geometry
@@ -402,7 +400,7 @@ class _StructureParsingMixin:
                         next_marker = m
                         break
 
-                en = 0.0
+                en = None
                 conv_info = {}
                 coord_val = None
                 for k in range(i, next_marker):
@@ -542,7 +540,7 @@ class _StructureParsingMixin:
                         next_marker = m
                         break
 
-                en = 0.0
+                en = None
                 conv_info = {}
 
                 for k in range(i, next_marker):
@@ -656,7 +654,7 @@ class _StructureParsingMixin:
 
             elif "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in uu_line:
                 # Read energy from this section
-                final_en = 0.0
+                final_en = None
                 for k in range(i, min(i + 1500, len(self.lines))):
                     uu_k = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu_k:

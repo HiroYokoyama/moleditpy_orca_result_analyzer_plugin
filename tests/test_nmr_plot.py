@@ -780,3 +780,19 @@ class TestOnPeakClick(_DialogBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNucleusSimulationFrequency(_DialogBase):
+    def test_two_letter_and_explicit_isotope_frequencies(self):
+        import numpy as np
+        np_mod = sys.modules[N.__package__ + ".nmr_plot"]
+        for symbol, isotope in [("Si", "29Si"), ("Cl", "35Cl"), ("Na", "23Na"), ("15N", "15N"), ("2H", "2H")]:
+            with self.subTest(symbol=symbol):
+                self.dlg.current_nucleus = symbol
+                self.dlg.data = [{"atom_idx": 0, "atom_sym": symbol, "shielding": 0}]
+                self.dlg.displayed_data = self.dlg.data
+                self.dlg.spin_mhz.setValue(400)
+                self.dlg._get_current_peaks = lambda: [(1.0, 1.0, False, [0])]
+                with patch.object(np_mod, "first_order_multiplet", object()), patch.object(self.dlg, "_run_coupling_simulation", return_value=np.ones(8192)) as simulate:
+                    self.dlg.plot_real_spectrum(MagicMock())
+                self.assertAlmostEqual(simulate.call_args.args[0][0][0], 400 * abs(self.dlg.GAMMA[isotope]) / self.dlg.GAMMA["H"])

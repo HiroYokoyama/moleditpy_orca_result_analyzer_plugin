@@ -729,9 +729,12 @@ class ForceViewerDialog(QDialog):
         else:
             # Historical step
             step = self.traj_steps[val]
-            energy = step.get("energy", 0.0)
+            energy = step.get("energy")
             self.traj_label.setText(f"Step {val + 1}/{num_steps}")
-            self.traj_info.setText(f"Energy: {energy:.8f} Eh")
+            self.traj_info.setText(
+                f"Energy: {energy:.8f} Eh" if energy is not None
+                else "Energy: not available"
+            )
 
             # Update convergence info
             self._update_conv_label(step.get("convergence", {}))
