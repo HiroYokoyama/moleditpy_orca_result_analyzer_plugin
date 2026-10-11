@@ -351,9 +351,8 @@ class _ElectronicParsingMixin:
         # Look for "BASIS SET IN INPUT FORMAT"
         start_idx = -1
         for i, line in enumerate(self.lines):
-            if "BASIS SET IN INPUT FORMAT" in line:
+            if line.strip() == "BASIS SET IN INPUT FORMAT":
                 start_idx = i
-                break
 
         if start_idx == -1:
             return
