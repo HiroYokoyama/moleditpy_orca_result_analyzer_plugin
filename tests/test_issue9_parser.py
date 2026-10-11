@@ -58,3 +58,17 @@ def test_compound_job_does_not_inherit_previous_results():
     assert parser.data["mo_coeffs"] == {}
     assert not parser.data.get("spin_s2")
     assert parser.data["version"] == "6.1.1"
+
+
+def test_incomplete_cycle_keeps_geometry_without_inventing_energy():
+    text = output("acetone-opt.out")
+    start = text.index("GEOMETRY OPTIMIZATION CYCLE   2")
+    stop = text.index("CARTESIAN COORDINATES (A.U.)", start)
+    parser = OrcaParser()
+    parser.load_from_memory(text[:stop])
+    step = parser.data["scan_steps"][-1]
+    assert step["step"] == 2
+    assert len(step["atoms"]) == 10
+    assert len(step["coords"]) == 10
+    assert step["energy"] is None
+    assert parser.data["scan_steps"][0]["energy"] < -192

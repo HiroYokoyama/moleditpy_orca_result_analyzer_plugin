@@ -402,7 +402,7 @@ class _StructureParsingMixin:
                         next_marker = m
                         break
 
-                en = 0.0
+                en = None
                 conv_info = {}
                 coord_val = None
                 for k in range(i, next_marker):
@@ -542,7 +542,7 @@ class _StructureParsingMixin:
                         next_marker = m
                         break
 
-                en = 0.0
+                en = None
                 conv_info = {}
 
                 for k in range(i, next_marker):
@@ -656,7 +656,7 @@ class _StructureParsingMixin:
 
             elif "FINAL ENERGY EVALUATION AT THE STATIONARY POINT" in uu_line:
                 # Read energy from this section
-                final_en = 0.0
+                final_en = None
                 for k in range(i, min(i + 1500, len(self.lines))):
                     uu_k = self.lines[k].strip().upper()
                     if "FINAL SINGLE POINT ENERGY" in uu_k:

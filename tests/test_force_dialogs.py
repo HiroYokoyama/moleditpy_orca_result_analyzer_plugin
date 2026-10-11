@@ -373,3 +373,17 @@ class TestForceViewer(_ForceCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnavailableCycleEnergy(_ForceCase):
+    def test_missing_energy_is_explicit_and_geometry_still_updates(self):
+        self.dlg.traj_steps[0]["energy"] = None
+        with patch.object(self.dlg, "update_structure") as structure:
+            self.dlg.on_trajectory_change(0)
+        self.assertEqual(self.dlg.traj_info.text(), "Energy: not available")
+        structure.assert_called_once_with(self.dlg.traj_steps[0]["atoms"], self.dlg.traj_steps[0]["coords"])
+
+    def test_zero_is_a_valid_energy_when_explicitly_present(self):
+        self.dlg.traj_steps[0]["energy"] = 0.0
+        self.dlg.on_trajectory_change(0)
+        self.assertEqual(self.dlg.traj_info.text(), "Energy: 0.00000000 Eh")
