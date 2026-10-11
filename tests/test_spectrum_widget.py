@@ -365,3 +365,33 @@ class TestCurveCsvKeepsNegativeIntensity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStickCsvMatchesPlot(unittest.TestCase):
+    def test_raw_stick_key_and_units_are_exported(self):
+        import csv
+        for key, unit, value in [("osc_len", "Oscillator strength", 0.1), ("rot", "Rotatory strength", -2.0)]:
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                widget = _widget([{ "energy_nm": 400, "processed_y": 23150000.0, key: value}], y_key="processed_y")
+                widget.y_key_sticks = key
+                widget.y_unit_sticks = unit
+                widget.y_unit = "Curve units"
+                path = os.path.join(tmp, "sticks.csv")
+                self.assertTrue(widget.save_sticks_csv(path))
+                with open(path, encoding="utf-8") as file:
+                    rows = list(csv.reader(file))
+                self.assertEqual(rows[0], ["Wavelength (nm)", unit])
+                self.assertEqual(float(rows[1][1]), value)
+
+    def test_fallback_uses_curve_key_and_units(self):
+        import csv
+        with tempfile.TemporaryDirectory() as tmp:
+            widget = _widget()
+            widget.y_key_sticks = None
+            widget.y_unit = "Oscillator strength"
+            path = os.path.join(tmp, "sticks.csv")
+            self.assertTrue(widget.save_sticks_csv(path))
+            with open(path, encoding="utf-8") as file:
+                rows = list(csv.reader(file))
+            self.assertEqual(rows[0][1], "Oscillator strength")
+            self.assertEqual([float(row[1]) for row in rows[1:]], [0.2, 0.05])

@@ -257,10 +257,12 @@ class SpectrumWidget(QWidget):
     def save_sticks_csv(self, path):
         """Write the raw (unbroadened) stick data points to CSV."""
         # Filter valid data
+        stick_key = self.y_key_sticks or self.y_key
+        stick_unit = self.y_unit_sticks if self.y_key_sticks else self.y_unit
         points = []
         for item in self.data_list:
             x = item.get(self.x_key, 0.0)
-            y = item.get(self.y_key, 0.0)
+            y = item.get(stick_key, 0.0)
             if abs(y) > 1e-12:
                 points.append((x, y))
 
@@ -275,7 +277,7 @@ class SpectrumWidget(QWidget):
                 writer = csv.writer(f)
                 # Header
                 x_head = self.x_unit if self.x_unit else "X"
-                y_head = self.y_unit if self.y_unit else "Y"
+                y_head = stick_unit if stick_unit else "Y"
                 writer.writerow([x_head, y_head])
                 for x, y in points:
                     writer.writerow([x, y])
