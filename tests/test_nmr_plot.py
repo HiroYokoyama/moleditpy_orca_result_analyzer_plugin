@@ -783,16 +783,45 @@ if __name__ == "__main__":
 
 
 class TestNucleusSimulationFrequency(_DialogBase):
-    def test_two_letter_and_explicit_isotope_frequencies(self):
+    def _simulated_center_frequency(self, symbol):
         import numpy as np
-        np_mod = sys.modules[N.__package__ + ".nmr_plot"]
-        for symbol, isotope in [("Si", "29Si"), ("Cl", "35Cl"), ("Na", "23Na"), ("15N", "15N"), ("2H", "2H")]:
+
+        plot_module = sys.modules[N.__package__ + ".nmr_plot"]
+        self.dlg.current_nucleus = symbol
+        self.dlg.data = [{"atom_idx": 0, "atom_sym": symbol, "shielding": 0}]
+        self.dlg.displayed_data = self.dlg.data
+        self.dlg.spin_mhz.setValue(400)
+        self.dlg._get_current_peaks = lambda: [(1.0, 1.0, False, [0])]
+        with patch.object(plot_module, "first_order_multiplet", object()), patch.object(
+            self.dlg, "_run_coupling_simulation", return_value=np.ones(8192)
+        ) as simulate:
+            self.dlg.plot_real_spectrum(MagicMock())
+        return simulate.call_args.args[0][0][0]
+
+    def _assert_frequency(self, symbol, isotope):
+        expected = 400 * abs(self.dlg.GAMMA[isotope]) / self.dlg.GAMMA["H"]
+        self.assertAlmostEqual(self._simulated_center_frequency(symbol), expected)
+
+    def test_two_letter_and_explicit_isotope_frequencies(self):
+        for symbol, isotope in [
+            ("Si", "29Si"), ("Cl", "35Cl"), ("Na", "23Na"),
+            ("15N", "15N"), ("2H", "2H"),
+        ]:
             with self.subTest(symbol=symbol):
-                self.dlg.current_nucleus = symbol
-                self.dlg.data = [{"atom_idx": 0, "atom_sym": symbol, "shielding": 0}]
-                self.dlg.displayed_data = self.dlg.data
-                self.dlg.spin_mhz.setValue(400)
-                self.dlg._get_current_peaks = lambda: [(1.0, 1.0, False, [0])]
-                with patch.object(np_mod, "first_order_multiplet", object()), patch.object(self.dlg, "_run_coupling_simulation", return_value=np.ones(8192)) as simulate:
-                    self.dlg.plot_real_spectrum(MagicMock())
-                self.assertAlmostEqual(simulate.call_args.args[0][0][0], 400 * abs(self.dlg.GAMMA[isotope]) / self.dlg.GAMMA["H"])
+                self._assert_frequency(symbol, isotope)
+
+    def test_elements_with_only_isotope_gamma_entries(self):
+        for symbol, isotope in [
+            ("Be", "9Be"), ("Mg", "25Mg"), ("Al", "27Al"), ("Sc", "45Sc"),
+        ]:
+            with self.subTest(symbol=symbol):
+                self.assertNotIn(symbol, self.dlg.GAMMA)
+                self._assert_frequency(symbol, isotope)
+
+    def test_element_case_and_whitespace_variants(self):
+        for symbol in ["SI", "si", "29si", " Si "]:
+            with self.subTest(symbol=symbol):
+                self._assert_frequency(symbol, "29Si")
+
+    def test_unknown_nucleus_keeps_default_frequency(self):
+        self.assertAlmostEqual(self._simulated_center_frequency("Xx"), 400.0)
