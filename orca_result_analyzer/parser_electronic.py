@@ -189,6 +189,10 @@ class _ElectronicParsingMixin:
                             curr += 1
                             continue
 
+                        val_strs = re.findall(
+                            r"[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[Ee][+-]?\d+)?",
+                            " ".join(val_strs),
+                        )
                         if len(val_strs) == len(current_mos):
                             for k, v_str in enumerate(val_strs):
                                 mo_idx = current_mos[k]
