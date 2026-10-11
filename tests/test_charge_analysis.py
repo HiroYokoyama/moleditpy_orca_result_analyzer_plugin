@@ -177,6 +177,21 @@ class TestChargeDialog(unittest.TestCase):
         dlg.apply_colors()  # max_c==0 branch
         self.assertIn(0, host.mw.view_3d_manager._plugin_color_overrides)
 
+    def test_asymmetric_charges_share_zero_centered_color_domain(self):
+        charges = {"Mulliken": [
+            {"atom_idx": i, "atom_sym": "C", "charge": q}
+            for i, q in enumerate([-0.8, 0.2, 0.0])
+        ]}
+        dlg, host = self._dialog(charges=charges)
+        dlg.current_scheme = "Regression"
+        dlg.schemes["Regression"] = ["red", "white", "blue"]
+        dlg.apply_colors()
+        overrides = host.mw.view_3d_manager._plugin_color_overrides
+        self.assertEqual(overrides[2], "#ffffff")
+        self.assertEqual(overrides[0], "#ff0000")
+        self.assertEqual(overrides[1], "#bfbfff")
+        self.assertEqual(host.mw.plotter.add_mesh.call_args.kwargs["clim"], [-0.8, 0.8])
+
     def test_reset_colors_clears_overrides(self):
         dlg, host = self._dialog()
         dlg.apply_colors()
