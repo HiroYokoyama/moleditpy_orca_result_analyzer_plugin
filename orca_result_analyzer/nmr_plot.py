@@ -589,9 +589,11 @@ class _NMRPlotMixin:
         )
 
         ratio = 1.0
-        lookup_sym = target_nuc_sym.upper()
+        lookup_sym = target_nuc_sym.strip()
+        if lookup_sym not in self.GAMMA:
+            lookup_sym = self.get_nucleus_key(lookup_sym)
 
-        element_only = re.sub(r"[^A-Z]", "", lookup_sym)
+        element_only = re.sub(r"[^A-Za-z]", "", lookup_sym).capitalize()
 
         if lookup_sym in self.GAMMA:
             ratio = abs(self.GAMMA[lookup_sym]) / self.GAMMA["H"]
