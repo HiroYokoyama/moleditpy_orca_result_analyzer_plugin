@@ -1,6 +1,6 @@
 """Dialog for defining a custom NMR reference standard (per-nucleus delta/sigma)."""
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,

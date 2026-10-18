@@ -4,7 +4,7 @@ import glob
 import os
 import math
 import logging
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -17,8 +17,8 @@ from PyQt6.QtWidgets import (
     QApplication,
     QToolTip,
 )
-from PyQt6.QtCore import Qt, QRect
-from PyQt6.QtGui import QPainter, QPen, QColor, QFont, QAction
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QPainter, QPen, QColor, QFont, QAction
 
 #: CODATA 2018 Hartree energy in eV.
 HARTREE_TO_EV = 27.211386245988

@@ -3,7 +3,7 @@
 import os
 import re
 import logging
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from .utils import notify
 from .settings import load_section, save_section
 

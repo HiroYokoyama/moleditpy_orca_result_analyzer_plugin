@@ -166,13 +166,13 @@ class TestOpenNicsAnalyzer(unittest.TestCase):
         self.assertIn("could not be opened", message)
 
     def _qtgui(self):
-        """Scoped PyQt6.QtGui so the lazy QAction import resolves."""
-        pkg = types.ModuleType("PyQt6")
+        """Scoped PySide6.QtGui so the lazy QAction import resolves."""
+        pkg = types.ModuleType("PySide6")
         pkg.__path__ = []
-        gui = types.ModuleType("PyQt6.QtGui")
+        gui = types.ModuleType("PySide6.QtGui")
         gui.QAction = type("QAction", (), {})
         pkg.QtGui = gui
-        return patch.dict(sys.modules, {"PyQt6": pkg, "PyQt6.QtGui": gui})
+        return patch.dict(sys.modules, {"PySide6": pkg, "PySide6.QtGui": gui})
 
 
 if __name__ == "__main__":

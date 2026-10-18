@@ -1,6 +1,6 @@
 """Thermochemistry dialog: enthalpy/entropy/free-energy table with CSV export."""
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QTableWidget,

@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this repository.
 
 A MoleditPy plugin that parses ORCA quantum-chemistry output (`.out`) and
 presents it as analysis dialogs — MO visualisation, vibrational modes, NMR,
-TD-DFT, charges, forces, trajectories. PyQt6 for the UI, pyvista for the 3D
+TD-DFT, charges, forces, trajectories. PySide6 for the UI, pyvista for the 3D
 viewer, matplotlib for plots, rdkit for molecule handling.
 
 `orca_result_analyzer/` is the whole plugin; there is no `src/` layout. It ships
@@ -72,7 +72,7 @@ python run_tests.py -k parser       # pytest args are forwarded
 
 **Always use `run_tests.py`, not `pytest` directly.** It sets
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` so local runs match CI, which installs no Qt
-binding. An installed `pytest-qt` would otherwise import a real PyQt6 during
+binding. An installed `pytest-qt` would otherwise import a real PySide6 during
 collection and defeat the stubs the tests rely on — producing failures and
 segfaults that do not reproduce in CI.
 
@@ -130,7 +130,7 @@ MagicMock. The harness provides stateful layouts and a terminating tree iterator
 for this reason; if you add a stub, make sure loop conditions can go falsy.
 
 **Patch where the name is bound.** Some methods import Qt lazily inside the
-function body (`from PyQt6.QtWidgets import QInputDialog`) — wrap those calls in
+function body (`from PySide6.QtWidgets import QInputDialog`) — wrap those calls in
 `gui_harness.qt_available(QInputDialog=fake)`. Others import at module level —
 patch the loaded module's attribute (`patch.object(M, "QInputDialog", fake)`).
 Sibling dialogs imported lazily (`from .bond_analysis import ...`) are patched

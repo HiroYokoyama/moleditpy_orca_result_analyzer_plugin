@@ -4,7 +4,7 @@ import os
 import math
 import numpy as np
 import pyvista as pv
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QComboBox,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from .loading import load_orca_parser
 from .settings import load_section, save_section
 import logging
@@ -89,7 +89,7 @@ class ConvergenceGraphDialog(QDialog):
 
     def export_csv(self):
         """Export convergence data to CSV."""
-        from PyQt6.QtWidgets import QFileDialog
+        from PySide6.QtWidgets import QFileDialog
         import csv
 
         display_keys = {

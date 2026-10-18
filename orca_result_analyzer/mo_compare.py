@@ -8,7 +8,7 @@ isosurfaces coexist in the host's 3D view.
 import logging
 import os
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QComboBox,
@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
-from PyQt6.QtCore import Qt
+from PySide6.QtCore import Qt
 
 try:
     from .vis import CubeVisualizer
@@ -500,7 +500,7 @@ class MOCompareDialog(QDialog):
 
     def pick_slot_color(self, slot, which):
         """Open a color picker for a slot's +/- lobe and re-render on acceptance."""
-        from PyQt6.QtGui import QColor
+        from PySide6.QtGui import QColor
 
         col = QColorDialog.getColor(QColor(slot.color(which)), self, "Select Color")
         if col.isValid():

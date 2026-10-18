@@ -1,8 +1,8 @@
 """Reusable spectrum plot widget: sticks/Gaussian broadening, zoom sync, CSV/PNG export."""
 
 import csv
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
-from PyQt6.QtCore import pyqtSignal, Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtCore import Signal, Qt
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
@@ -26,8 +26,8 @@ class SpectrumWidget(QWidget):
     # pylint: disable=attribute-defined-outside-init,access-member-before-definition
     # Qt pattern: widget/state attributes are created lazily on first use, not in __init__.
 
-    clicked = pyqtSignal(object)
-    range_changed = pyqtSignal(
+    clicked = Signal(object)
+    range_changed = Signal(
         float, float, float, float, bool
     )  # xmin, xmax, ymin, ymax, is_manual
 

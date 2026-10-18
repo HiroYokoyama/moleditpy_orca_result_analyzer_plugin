@@ -4,7 +4,7 @@ import os
 import logging
 import re
 import numpy as np
-from PyQt6.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 try:
     from . import PLUGIN_VERSION
@@ -570,8 +570,8 @@ class BasisSetEngine:
 class CalcWorker(QThread):
     """Background thread that evaluates one MO on a grid and writes its cube file."""
 
-    progress_sig = pyqtSignal(int)
-    finished_sig = pyqtSignal(bool, str)
+    progress_sig = Signal(int)
+    finished_sig = Signal(bool, str)
 
     def __init__(
         self,

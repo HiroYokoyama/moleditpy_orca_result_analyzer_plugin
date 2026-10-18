@@ -7,8 +7,8 @@ application looks hung.
 import logging
 import os
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QProgressDialog
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QProgressDialog
 
 from .parser import OrcaParser, ParseCancelled
 

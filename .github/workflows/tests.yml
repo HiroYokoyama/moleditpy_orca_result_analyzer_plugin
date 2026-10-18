@@ -33,7 +33,7 @@ jobs:
 
       - name: Clone main app (real-context integration tests)
         run: |
-          git clone --depth 1 \
+          git clone --depth 1 --branch "${{ vars.MOLEDITPY_REF || 'migrate/pyside6-without-openbabel' }}" \
             https://github.com/HiroYokoyama/python_molecular_editor.git \
             ../python_molecular_editor || true
 
@@ -74,7 +74,7 @@ jobs:
 
       - name: Clone main MoleditPy application
         run: |
-          git clone --depth 1 \
+          git clone --depth 1 --branch "${{ vars.MOLEDITPY_REF || 'migrate/pyside6-without-openbabel' }}" \
             https://github.com/HiroYokoyama/python_molecular_editor.git \
             ../python_molecular_editor
 
@@ -112,7 +112,7 @@ jobs:
       # pylint is pinned: an unpinned upgrade adds checks and drops the
       # score, which would fail the build for a release nobody made.
       - name: Install pylint and the runtime dependencies
-        run: pip install pylint==4.0.4 rdkit PyQt6 matplotlib Pillow numpy pyvista
+        run: pip install pylint==4.0.4 rdkit PySide6-Essentials matplotlib Pillow numpy pyvista
 
       # Calibrate --fail-under against the score THIS job prints, never a
       # local run: the same pylint scores 9.31 locally and 9.01 here.

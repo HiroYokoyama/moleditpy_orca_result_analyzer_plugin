@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PyQt6.QtGui import QAction, QIcon, QDesktopServices
-from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
+from PySide6.QtGui import QAction, QIcon, QDesktopServices
+from PySide6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .loading import load_orca_parser
 from .parser import IMAGINARY_FREQ_THRESHOLD
 from .utils import (
