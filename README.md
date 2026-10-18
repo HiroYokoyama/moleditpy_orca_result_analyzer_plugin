@@ -130,7 +130,7 @@ Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins
 Ensure the `orca_result_analyzer` folder is placed in your MoleditPy plugins directory.
 
 ## Requirements
-- **MoleditPy**: Version 5.0.0a1 or higher, below 6.0.0.
+- **MoleditPy**: Version 5.0.0 or higher, below 6.0.0.
 - **ORCA Output**: Reads `.out` files. Basis set info (`Print[P_Basis] 2`) is required for MO Cube generation.
 - **Dependencies**: `rdkit`, `matplotlib`, `Pillow` (PIL), and `pyvista` (for 3D vectors). `nmrsim` is optional (for J-coupling simulation). 
 
