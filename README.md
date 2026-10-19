@@ -1,7 +1,5 @@
 # MoleditPy ORCA Result Analyzer Plugin
 
-This branch targets **MoleditPy 5.0.0a1–5.x** and uses **PySide6**. Plugin licensing is unchanged.
-
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20726011.svg)](https://doi.org/10.5281/zenodo.20726011)
 [![Tests](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml/badge.svg)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/graph/badge.svg)](https://codecov.io/gh/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
