@@ -109,7 +109,7 @@ consistency checks.
 | `benzene-opt-ene_cubes/…_MO_21.cube` | 6.1.1 | MO cube (HOMO−1) | 40×40×40 grid, Bohr |
 
 See `tests/sample_outputs/NOTICE` for the licensing position on these files —
-they are ORCA output, excluded from this project's GPL-3.0 licence.
+they are ORCA output, excluded from this project's LGPL-3.0-or-later licence.
 
 ## Integration test strategy
 

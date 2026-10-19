@@ -852,7 +852,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             f"<b>ORCA Result Analyzer v{PLUGIN_VERSION}</b><br><br>"
             "Comprehensive analyzer for ORCA quantum chemistry output files.<br><br>"
             "<b>Author:</b> Hiromichi Yokoyama<br>"
-            "<b>License:</b> GPL-3.0 License<br>"
+            "<b>License:</b> LGPL-3.0-or-later License<br>"
             '<b>GitHub:</b> <a href="https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin">https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin</a>',
         )
 
