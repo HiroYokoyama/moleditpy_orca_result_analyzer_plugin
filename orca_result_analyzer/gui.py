@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -18,8 +18,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PyQt6.QtGui import QAction, QIcon, QDesktopServices
-from PyQt6.QtCore import QSize, Qt, QObject, QEvent, QUrl
+from PySide6.QtGui import QAction, QIcon, QDesktopServices
+from PySide6.QtCore import QSize, Qt, QObject, QEvent, QUrl
 from .loading import load_orca_parser
 from .parser import IMAGINARY_FREQ_THRESHOLD
 from .utils import (
@@ -852,7 +852,7 @@ class OrcaResultAnalyzerDialog(QDialog):
             f"<b>ORCA Result Analyzer v{PLUGIN_VERSION}</b><br><br>"
             "Comprehensive analyzer for ORCA quantum chemistry output files.<br><br>"
             "<b>Author:</b> Hiromichi Yokoyama<br>"
-            "<b>License:</b> GPL-3.0 License<br>"
+            "<b>License:</b> LGPL-3.0-or-later License<br>"
             '<b>GitHub:</b> <a href="https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin">https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin</a>',
         )
 

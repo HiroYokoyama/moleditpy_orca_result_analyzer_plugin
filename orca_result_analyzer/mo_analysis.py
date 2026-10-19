@@ -4,7 +4,7 @@ import csv
 import os
 import tempfile
 import numpy as np
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -29,8 +29,8 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QMenu,
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QBrush
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QBrush
 from .utils import get_default_export_path, notify
 from .settings import load_section, save_section
 import logging

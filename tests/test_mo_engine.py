@@ -3,7 +3,7 @@ tests/test_mo_engine.py
 Unit tests for mo_engine.py: CubeWriter file format and BasisSetEngine
 GTO evaluation. Previously this module had no direct tests.
 
-mo_engine imports numpy (real) and PyQt6.QtCore (stubbed: QThread must be an
+mo_engine imports numpy (real) and PySide6.QtCore (stubbed: QThread must be an
 inheritable class for CalcWorker's class definition to succeed).
 """
 
@@ -37,26 +37,26 @@ PLUGIN_VERSION = _plugin_version()
 
 
 def _load_mo_engine():
-    """Load mo_engine with a temporary PyQt6.QtCore stub.
+    """Load mo_engine with a temporary PySide6.QtCore stub.
 
     The stub is removed from sys.modules afterwards (originals restored) so
-    the minimal QtCore — it only has QThread/pyqtSignal — cannot leak into
-    other test modules that install their own, richer PyQt6 stubs.
+    the minimal QtCore — it only has QThread/Signal — cannot leak into
+    other test modules that install their own, richer PySide6 stubs.
     """
 
     class _QThread:
         def __init__(self, *a, **k):
             pass
 
-    core = types.ModuleType("PyQt6.QtCore")
+    core = types.ModuleType("PySide6.QtCore")
     core.QThread = _QThread
-    core.pyqtSignal = lambda *a, **k: MagicMock()
-    pyqt6 = types.ModuleType("PyQt6")
-    pyqt6.QtCore = core
+    core.Signal = lambda *a, **k: MagicMock()
+    pyside6 = types.ModuleType("PySide6")
+    pyside6.QtCore = core
 
-    saved = {k: sys.modules.get(k) for k in ("PyQt6", "PyQt6.QtCore")}
-    sys.modules["PyQt6"] = pyqt6
-    sys.modules["PyQt6.QtCore"] = core
+    saved = {k: sys.modules.get(k) for k in ("PySide6", "PySide6.QtCore")}
+    sys.modules["PySide6"] = pyside6
+    sys.modules["PySide6.QtCore"] = core
 
     # mo_engine stamps PLUGIN_VERSION into every cube header via `from . import
     # PLUGIN_VERSION`. Give it a package to resolve that against, so the test

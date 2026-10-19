@@ -15,7 +15,7 @@ python run_tests.py tests/test_nmr_dialog.py::TestRecalc
 
 **Use `run_tests.py` rather than calling `pytest` directly.** It sets
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` so local runs match CI, which installs no Qt
-binding. An installed `pytest-qt` would otherwise import a real PyQt6 during
+binding. An installed `pytest-qt` would otherwise import a real PySide6 during
 collection and defeat the stubs the tests rely on — producing failures and
 segfaults that do not reproduce in CI.
 
@@ -78,7 +78,7 @@ that some Qt loop idioms never terminate against a MagicMock.
 
 ### Older stub style
 
-Test modules predating the harness install their own partial PyQt6 stubs at
+Test modules predating the harness install their own partial PySide6 stubs at
 **module level**, to avoid collection-order dependencies. Those still work and
 have not been converted. If you touch one, note that any `sys.modules` stub for
 a third-party package (`numpy`, `matplotlib`, `PIL`) must be a *fallback used
@@ -109,7 +109,7 @@ consistency checks.
 | `benzene-opt-ene_cubes/…_MO_21.cube` | 6.1.1 | MO cube (HOMO−1) | 40×40×40 grid, Bohr |
 
 See `tests/sample_outputs/NOTICE` for the licensing position on these files —
-they are ORCA output, excluded from this project's GPL-3.0 licence.
+they are ORCA output, excluded from this project's LGPL-3.0-or-later licence.
 
 ## Integration test strategy
 
@@ -149,4 +149,4 @@ Real-context mode activates when the repos are siblings:
 - Parser behaviour that needs a new ORCA feature belongs in a new sample file
   under `sample_outputs/`, exercised from `test_parser_samples.py`.
 - New dialog behaviour goes through `gui_harness.load_isolated`, not a
-  hand-rolled PyQt6 stub.
+  hand-rolled PySide6 stub.

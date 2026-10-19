@@ -43,7 +43,7 @@ python run_tests.py tests/test_parser.py -v
 
 Use `run_tests.py` rather than calling `pytest` directly. It disables
 third-party plugin autoload so local runs match CI: CI installs no Qt binding,
-and an installed `pytest-qt` would otherwise import a real PyQt6 during
+and an installed `pytest-qt` would otherwise import a real PySide6 during
 collection, defeating the stubs the tests rely on.
 
 **Coverage**

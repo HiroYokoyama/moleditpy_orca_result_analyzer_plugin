@@ -9,7 +9,7 @@ Covers:
     value whenever scaling coefficients change; only the Scaled column (col 1)
     is updated; the Unscaled column (col 2) stays fixed.
 
-PyQt6, pyvista, rdkit, numpy, and PIL are stubbed so the tests run headlessly.
+PySide6, pyvista, rdkit, numpy, and PIL are stubbed so the tests run headlessly.
 """
 
 import os
@@ -260,10 +260,10 @@ def _install_stubs():
         def setAlignment(self, *a):
             pass
 
-    sys.modules.get("PyQt6.QtWidgets")
-    sys.modules.get("PyQt6.QtCore")
-    sys.modules.get("PyQt6.QtGui")
-    sys.modules.get("PyQt6")
+    sys.modules.get("PySide6.QtWidgets")
+    sys.modules.get("PySide6.QtCore")
+    sys.modules.get("PySide6.QtGui")
+    sys.modules.get("PySide6")
 
     _WIDGET_MOCKS = [
         "QVBoxLayout",
@@ -294,30 +294,30 @@ def _install_stubs():
         "QLabel": _QLabel,
     }
 
-    # Build and install new stubs, overriding any existing PyQt6 modules to avoid
+    # Build and install new stubs, overriding any existing PySide6 modules to avoid
     # constructing real widgets (which requires a QApplication and crashes headlessly).
-    _pyqt6 = types.ModuleType("PyQt6")
-    _core = types.ModuleType("PyQt6.QtCore")
+    _pyside6 = types.ModuleType("PySide6")
+    _core = types.ModuleType("PySide6.QtCore")
     _core.Qt = MagicMock()
     _core.QTimer = _QTimer
-    _widgets = types.ModuleType("PyQt6.QtWidgets")
+    _widgets = types.ModuleType("PySide6.QtWidgets")
     for name in _WIDGET_MOCKS:
         setattr(_widgets, name, MagicMock)
     for name, cls in _WIDGET_CLASSES.items():
         setattr(_widgets, name, cls)
-    _pyqt6.QtWidgets = _widgets
-    _pyqt6.QtCore = _core
-    _gui = types.ModuleType("PyQt6.QtGui")
+    _pyside6.QtWidgets = _widgets
+    _pyside6.QtCore = _core
+    _gui = types.ModuleType("PySide6.QtGui")
     _gui.QColor = _QColor
     _gui.QBrush = MagicMock
-    _pyqt6.QtGui = _gui
+    _pyside6.QtGui = _gui
 
     sys.modules.update(
         {
-            "PyQt6": _pyqt6,
-            "PyQt6.QtWidgets": _widgets,
-            "PyQt6.QtCore": _core,
-            "PyQt6.QtGui": _gui,
+            "PySide6": _pyside6,
+            "PySide6.QtWidgets": _widgets,
+            "PySide6.QtCore": _core,
+            "PySide6.QtGui": _gui,
         }
     )
 
@@ -439,40 +439,40 @@ def _make_dialog(frequencies):
     dlg.custom_presets = {}
 
     # Spin boxes
-    dlg.spin_sf_a = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.spin_sf_a = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_sf_a._val = 1.0
-    dlg.spin_sf_b = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.spin_sf_b = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_sf_b._val = 0.0
 
     # Tree widget (real stub class)
-    dlg.tree = sys.modules["PyQt6.QtWidgets"].QTreeWidget()
+    dlg.tree = sys.modules["PySide6.QtWidgets"].QTreeWidget()
 
     # Manual displacement mocks
-    dlg.chk_manual_displ = sys.modules["PyQt6.QtWidgets"].QCheckBox()
-    dlg.slider_displ = sys.modules["PyQt6.QtWidgets"].QSlider()
-    dlg.lbl_displ_val = sys.modules["PyQt6.QtWidgets"].QLabel()
-    dlg.spin_amp = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.chk_manual_displ = sys.modules["PySide6.QtWidgets"].QCheckBox()
+    dlg.slider_displ = sys.modules["PySide6.QtWidgets"].QSlider()
+    dlg.lbl_displ_val = sys.modules["PySide6.QtWidgets"].QLabel()
+    dlg.spin_amp = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_amp._val = 1.0
 
     # Playback button mocks
-    dlg.btn_play = sys.modules["PyQt6.QtWidgets"].QPushButton()
-    dlg.btn_pause = sys.modules["PyQt6.QtWidgets"].QPushButton()
-    dlg.btn_stop = sys.modules["PyQt6.QtWidgets"].QPushButton()
-    dlg.btn_gif = sys.modules["PyQt6.QtWidgets"].QPushButton()
+    dlg.btn_play = sys.modules["PySide6.QtWidgets"].QPushButton()
+    dlg.btn_pause = sys.modules["PySide6.QtWidgets"].QPushButton()
+    dlg.btn_stop = sys.modules["PySide6.QtWidgets"].QPushButton()
+    dlg.btn_gif = sys.modules["PySide6.QtWidgets"].QPushButton()
 
     # Dipole-change overlay (its own tab, its own settings)
     dlg.dipole_color = "magenta"
     dlg.dipole_actor = None
-    dlg.chk_dipole = sys.modules["PyQt6.QtWidgets"].QCheckBox()
+    dlg.chk_dipole = sys.modules["PySide6.QtWidgets"].QCheckBox()
     dlg.chk_dipole.setChecked(False)
-    dlg.lbl_dipole = sys.modules["PyQt6.QtWidgets"].QLabel()
-    dlg.spin_dip_scale = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.lbl_dipole = sys.modules["PySide6.QtWidgets"].QLabel()
+    dlg.spin_dip_scale = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_dip_scale._val = 20.0
-    dlg.spin_dip_res = sys.modules["PyQt6.QtWidgets"].QSpinBox()
+    dlg.spin_dip_res = sys.modules["PySide6.QtWidgets"].QSpinBox()
     dlg.spin_dip_res._val = 20
-    dlg.spin_dip_alpha = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.spin_dip_alpha = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_dip_alpha._val = 1.0
-    dlg.spin_vec_alpha = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+    dlg.spin_vec_alpha = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
     dlg.spin_vec_alpha._val = 1.0
 
     return dlg
@@ -697,9 +697,9 @@ class TestManualDisplacement(unittest.TestCase):
 
         self.dlg.mw.current_mol = self.mock_mol
         self.dlg.context = MagicMock()
-        self.dlg.chk_vector = sys.modules["PyQt6.QtWidgets"].QCheckBox()
+        self.dlg.chk_vector = sys.modules["PySide6.QtWidgets"].QCheckBox()
         self.dlg.chk_vector.setChecked(False)
-        self.dlg.spin_vec_scale = sys.modules["PyQt6.QtWidgets"].QDoubleSpinBox()
+        self.dlg.spin_vec_scale = sys.modules["PySide6.QtWidgets"].QDoubleSpinBox()
         self.dlg.spin_vec_scale._val = 2.0
 
     def test_toggle_manual_displacement(self):

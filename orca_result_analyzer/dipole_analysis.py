@@ -3,7 +3,7 @@
 import numpy as np
 import os
 import pyvista as pv
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QGroupBox,
 )
-from PyQt6.QtGui import QColor
+from PySide6.QtGui import QColor
 from .settings import load_section, save_section
 import logging
 

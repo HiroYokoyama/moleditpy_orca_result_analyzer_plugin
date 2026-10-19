@@ -1,6 +1,6 @@
 """GIF encoding shared by the frequency-mode and trajectory animation dialogs.
 
-Kept free of PyQt6 so it can be regression-tested without stubbing Qt.
+Kept free of PySide6 so it can be regression-tested without stubbing Qt.
 """
 
 try:

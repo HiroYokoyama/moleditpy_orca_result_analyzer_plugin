@@ -1,6 +1,6 @@
 """SCF Trace dialog: convergence plot per iteration, dispersion and spin-contamination."""
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,

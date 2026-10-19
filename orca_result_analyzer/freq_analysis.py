@@ -1,6 +1,6 @@
 """Vibrational frequency dialog: mode list, 3D vectors, animation and IR/Raman spectrum window."""
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -26,8 +26,8 @@ from PyQt6.QtWidgets import (
     QSlider,
     QTabWidget,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
 import math
 import numpy as np
 import os
@@ -843,7 +843,7 @@ class FrequencyDialog(QDialog):
 
     def save_custom_preset(self):
         """Prompt for a name and save the current scaling factors as a new custom preset."""
-        from PyQt6.QtWidgets import QInputDialog
+        from PySide6.QtWidgets import QInputDialog
 
         name, ok = QInputDialog.getText(self, "Save Scaling Preset", "Preset Name:")
         if ok and name:
@@ -1342,7 +1342,7 @@ class FrequencyDialog(QDialog):
         except (RuntimeError, AttributeError, TypeError, ValueError) as e:
             logging.warning("Error in reset_geometry: %s", e)
 
-    # pylint: disable=duplicate-code  # Qt setup mirrors traj_analysis.save_gif; gif_export.py stays PyQt6-free
+    # pylint: disable=duplicate-code  # Qt setup mirrors traj_analysis.save_gif; gif_export.py stays PySide6-free
     def save_gif(self):
         """Prompt for GIF settings and export one animation cycle of the selected mode as an animated GIF."""
         if not HAS_PIL:

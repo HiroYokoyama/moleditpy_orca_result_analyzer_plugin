@@ -3,8 +3,8 @@
 import re
 import logging
 import threading
-from PyQt6.QtWidgets import QApplication, QProgressDialog
-from PyQt6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QProgressDialog
+from PySide6.QtCore import Qt
 import pyvista as pv
 import numpy as np
 

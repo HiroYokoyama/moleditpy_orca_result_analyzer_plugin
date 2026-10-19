@@ -78,22 +78,22 @@ def _load_module(name, filename):
 
     mo_engine needs QThread to be a real, subclassable class for CalcWorker's
     class body to execute. The stub is torn down afterwards so it cannot leak
-    into test modules that install their own, richer PyQt6 stand-ins.
+    into test modules that install their own, richer PySide6 stand-ins.
     """
 
     class _QThread:
         def __init__(self, *a, **k):
             pass
 
-    core = types.ModuleType("PyQt6.QtCore")
+    core = types.ModuleType("PySide6.QtCore")
     core.QThread = _QThread
-    core.pyqtSignal = lambda *a, **k: MagicMock()
-    pyqt6 = types.ModuleType("PyQt6")
-    pyqt6.QtCore = core
+    core.Signal = lambda *a, **k: MagicMock()
+    pyside6 = types.ModuleType("PySide6")
+    pyside6.QtCore = core
 
-    saved = {k: sys.modules.get(k) for k in ("PyQt6", "PyQt6.QtCore")}
-    sys.modules["PyQt6"] = pyqt6
-    sys.modules["PyQt6.QtCore"] = core
+    saved = {k: sys.modules.get(k) for k in ("PySide6", "PySide6.QtCore")}
+    sys.modules["PySide6"] = pyside6
+    sys.modules["PySide6.QtCore"] = core
     try:
         spec = importlib.util.spec_from_file_location(
             name, os.path.join(_PKG, filename)

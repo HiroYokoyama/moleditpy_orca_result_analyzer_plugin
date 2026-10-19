@@ -59,7 +59,7 @@ def _trigger_menu_action(main_window, exclude=None) -> bool:
     it the search could find and re-trigger the entry that called us.
     """
     try:
-        from PyQt6.QtGui import QAction
+        from PySide6.QtGui import QAction
 
         for action in main_window.findChildren(QAction):
             if exclude is not None and action is exclude:

@@ -4,7 +4,7 @@ import hashlib
 import os
 import json
 import logging
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 from .utils import save_json_atomic, notify
 
 

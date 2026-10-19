@@ -8,7 +8,7 @@ matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from .parser import OrcaParser
 from .gif_export import Image, HAS_PIL, encode_frames_to_gif
 from .utils import (
@@ -1179,7 +1179,7 @@ class TrajectoryResultDialog(QDialog):
             except Exception as e:  # pylint: disable=broad-exception-caught
                 QMessageBox.critical(self, "Error", str(e))
 
-    # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PyQt6-free
+    # pylint: disable=duplicate-code  # Qt setup mirrors freq_analysis.save_gif; gif_export.py stays PySide6-free
     def save_gif(self):
         """Prompt for GIF settings and export a playback loop of all steps as an animated GIF."""
         if not HAS_PIL:

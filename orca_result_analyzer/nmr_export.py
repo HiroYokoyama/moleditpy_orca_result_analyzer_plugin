@@ -1,7 +1,7 @@
 """NMR dialog mixin: exporting the shielding/coupling tables and spectrum plot."""
 
 import os
-from PyQt6.QtWidgets import QApplication, QMessageBox, QFileDialog
+from PySide6.QtWidgets import QApplication, QMessageBox, QFileDialog
 from .utils import get_default_export_path, notify
 
 
