@@ -17,11 +17,11 @@ permissions:
   contents: read
 
 env:
-  MOLEDITPY_REF: ${{ inputs.moleditpy_ref || vars.MOLEDITPY_REF || 'migrate/pyside6-without-openbabel' }}
+  MOLEDITPY_REF: ${{ inputs.moleditpy_ref || vars.MOLEDITPY_REF || 'main' }}
 
 jobs:
   # -------------------------------------------------------------------------
-  # Standard unit tests — no external dependencies required
+  # Standard unit tests  Eno external dependencies required
   # -------------------------------------------------------------------------
   test:
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
           git -C "../python_molecular_editor" log -1 --format="%H %s"
 
       # Single run: plain output and coverage in one pass. Coverage is
-      # reported, not enforced — the build fails on test failures only.
+      # reported, not enforced  Ethe build fails on test failures only.
       - name: Run tests with coverage
         env:
           CI_MAIN_APP_SRC: ${{ github.workspace }}/../python_molecular_editor/moleditpy/src
@@ -67,7 +67,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # -------------------------------------------------------------------------
-  # Integration tests — clones the main MoleditPy app to enable real
+  # Integration tests  Eclones the main MoleditPy app to enable real
   # PluginContext tests (TestWithRealPluginContext, TestAPIChecker)
   # -------------------------------------------------------------------------
   test-integration:
@@ -104,7 +104,7 @@ jobs:
         run: python -m pytest tests/test_plugin_integration.py tests/test_api.py -v
 
   # -------------------------------------------------------------------------
-  # Static analysis — pylint against .pylintrc.
+  # Static analysis  Epylint against .pylintrc.
   #
   # The score is a ratchet, not a gate on individual messages: --fail-under
   # lets it rise freely and fails the build if it drops. Nothing enforced
