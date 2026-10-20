@@ -144,6 +144,19 @@ from orca_result_analyzer.gui import OrcaResultAnalyzerDialog  # noqa: E402
 from orca_result_analyzer.parser import OrcaParser  # noqa: E402
 
 
+# Keep patches attached to the module captured by this dialog class. Other
+# test modules temporarily replace package/module attributes during collection.
+_GUI_MODULE = sys.modules[OrcaResultAnalyzerDialog.__module__]
+
+
+def _patch_gui(target, *args, **kwargs):
+    owner = _GUI_MODULE
+    parts = target.split(".")
+    for name in parts[:-1]:
+        owner = getattr(owner, name)
+    return unittest.mock.patch.object(owner, parts[-1], *args, **kwargs)
+
+
 class TestLoadFileClearsAtomColorOverrides(unittest.TestCase):
     def _make_dialog(self):
         parser = OrcaParser()
@@ -159,7 +172,7 @@ class TestLoadFileClearsAtomColorOverrides(unittest.TestCase):
 
     def test_load_file_calls_clear_atom_color_overrides(self):
         dlg = self._make_dialog()
-        with patch("orca_result_analyzer.gui.clear_atom_color_overrides") as mock_clear:
+        with _patch_gui("clear_atom_color_overrides") as mock_clear:
             # Path need not exist: the reset call happens before file I/O,
             # and any read failure is caught internally by load_file().
             dlg.load_file("/nonexistent/path/calc.out")
@@ -168,7 +181,7 @@ class TestLoadFileClearsAtomColorOverrides(unittest.TestCase):
     def test_load_file_clears_overrides_even_on_read_failure(self):
         """A missing/unreadable file must not skip the override reset."""
         dlg = self._make_dialog()
-        with patch("orca_result_analyzer.gui.clear_atom_color_overrides") as mock_clear:
+        with _patch_gui("clear_atom_color_overrides") as mock_clear:
             try:
                 dlg.load_file("/definitely/does/not/exist.out")
             except Exception as exc:  # load_file must swallow read errors
@@ -178,7 +191,7 @@ class TestLoadFileClearsAtomColorOverrides(unittest.TestCase):
     def test_load_file_clears_before_closing_sub_dialogs_is_also_called(self):
         """Both cleanup steps must run on every load, in the same call."""
         dlg = self._make_dialog()
-        with patch("orca_result_analyzer.gui.clear_atom_color_overrides") as mock_clear:
+        with _patch_gui("clear_atom_color_overrides") as mock_clear:
             dlg.load_file("/nonexistent/path/calc.out")
             dlg.close_all_sub_dialogs.assert_called_once()
             mock_clear.assert_called_once()

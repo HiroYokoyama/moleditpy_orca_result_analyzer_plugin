@@ -138,7 +138,7 @@ Run the test suite with `python run_tests.py` (it forwards any pytest
 arguments). Use that wrapper rather than calling `pytest` directly — it
 disables third-party plugin autoload so local runs match CI.
 
-Tests run on Python 3.11–3.13 with no Qt binding installed; the dialogs are
+Tests run on Python 3.9–3.13 with no Qt binding installed; the dialogs are
 exercised headlessly through `tests/gui_harness.py`. CI reports coverage on
 every run, with a target of **above 80%**.
 

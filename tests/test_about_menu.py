@@ -139,8 +139,21 @@ from orca_result_analyzer.gui import OrcaResultAnalyzerDialog  # noqa: E402
 from orca_result_analyzer.parser import OrcaParser  # noqa: E402
 
 
+# Keep patches attached to the module captured by this dialog class. Other
+# test modules temporarily replace package/module attributes during collection.
+_GUI_MODULE = sys.modules[OrcaResultAnalyzerDialog.__module__]
+
+
+def _patch_gui(target, *args, **kwargs):
+    owner = _GUI_MODULE
+    parts = target.split(".")
+    for name in parts[:-1]:
+        owner = getattr(owner, name)
+    return unittest.mock.patch.object(owner, parts[-1], *args, **kwargs)
+
+
 class TestAboutMenu(unittest.TestCase):
-    @unittest.mock.patch("PySide6.QtWidgets.QMessageBox.about", create=True)
+    @_patch_gui("QMessageBox.about", create=True)
     def test_show_about(self, mock_about):
         """Test that show_about calls QMessageBox.about."""
         parser = OrcaParser()
@@ -178,12 +191,12 @@ class TestAboutMenu(unittest.TestCase):
 
         dlg.open_directory = MagicMock()
 
-        with patch(
-            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+        with _patch_gui(
+            "QApplication.keyboardModifiers",
             return_value=no_mod,
         ):
-            with patch(
-                "orca_result_analyzer.gui.QFileDialog.getOpenFileName",
+            with _patch_gui(
+                "QFileDialog.getOpenFileName",
                 return_value=("", ""),
             ) as mock_get:
                 dlg.open_file()
@@ -206,12 +219,12 @@ class TestAboutMenu(unittest.TestCase):
 
         dlg.open_directory = MagicMock()
 
-        with patch(
-            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+        with _patch_gui(
+            "QApplication.keyboardModifiers",
             return_value=shift_mod,
         ):
-            with patch(
-                "orca_result_analyzer.gui.QFileDialog.getOpenFileName",
+            with _patch_gui(
+                "QFileDialog.getOpenFileName",
                 return_value=("", ""),
             ) as mock_get:
                 dlg.open_file()
@@ -227,7 +240,7 @@ class TestAboutMenu(unittest.TestCase):
         ctx = MagicMock()
         dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
 
-        with patch("orca_result_analyzer.gui.ConvergenceGraphDialog") as mock_graph_dlg:
+        with _patch_gui("ConvergenceGraphDialog") as mock_graph_dlg:
             dlg.show_convergence_graph_direct()
             mock_graph_dlg.assert_called_once()
             mock_graph_dlg.return_value.show.assert_called_once()
@@ -247,11 +260,11 @@ class TestAboutMenu(unittest.TestCase):
         ctx = MagicMock()
         dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
 
-        with patch(
-            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+        with _patch_gui(
+            "QApplication.keyboardModifiers",
             return_value=no_mod,
         ):
-            with patch("orca_result_analyzer.gui.ForceViewerDialog") as mock_force_dlg:
+            with _patch_gui("ForceViewerDialog") as mock_force_dlg:
                 dlg.show_forces()
                 mock_force_dlg.assert_called_once()
 
@@ -271,12 +284,12 @@ class TestAboutMenu(unittest.TestCase):
         ctx = MagicMock()
         dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
 
-        with patch(
-            "orca_result_analyzer.gui.QApplication.keyboardModifiers",
+        with _patch_gui(
+            "QApplication.keyboardModifiers",
             return_value=shift_mod,
         ):
-            with patch(
-                "orca_result_analyzer.gui.ConvergenceGraphDialog"
+            with _patch_gui(
+                "ConvergenceGraphDialog"
             ) as mock_graph_dlg:
                 dlg.show_forces()
                 mock_graph_dlg.assert_called_once()
@@ -291,11 +304,11 @@ class TestAboutMenu(unittest.TestCase):
         dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
         dlg.load_file = MagicMock()
 
-        with patch(
-            "orca_result_analyzer.gui.list_orca_output_files",
+        with _patch_gui(
+            "list_orca_output_files",
             return_value=["only_one.out"],
         ):
-            with patch("orca_result_analyzer.gui._DirectoryFilePicker") as mock_picker:
+            with _patch_gui("_DirectoryFilePicker") as mock_picker:
                 dlg._open_directory_path("/mock/dir")
                 expected_path = os.path.join("/mock/dir", "only_one.out")
                 dlg.load_file.assert_called_once_with(expected_path)
@@ -311,11 +324,11 @@ class TestAboutMenu(unittest.TestCase):
         dlg = OrcaResultAnalyzerDialog(None, parser, "", ctx)
         dlg.load_file = MagicMock()
 
-        with patch(
-            "orca_result_analyzer.gui.list_orca_output_files",
+        with _patch_gui(
+            "list_orca_output_files",
             return_value=["one.out", "two.out"],
         ):
-            with patch("orca_result_analyzer.gui._DirectoryFilePicker") as mock_picker:
+            with _patch_gui("_DirectoryFilePicker") as mock_picker:
                 mock_inst = mock_picker.return_value
                 mock_inst.exec.return_value = QDialog.DialogCode.Accepted
                 mock_inst.selected_path = "/mock/dir/one.out"

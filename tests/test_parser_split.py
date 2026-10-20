@@ -99,7 +99,7 @@ class TestMixinsOwnExactlyTheirMethods(unittest.TestCase):
                 own_methods = {
                     k
                     for k, v in vars(cls).items()
-                    if not k.startswith("__") and callable(v)
+                    if not k.startswith("__") and callable(getattr(cls, k))
                 }
                 self.assertEqual(own_methods, set(names))
 

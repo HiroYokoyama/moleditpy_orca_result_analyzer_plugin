@@ -52,7 +52,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 # Master copy lives in moleditpy-plugins/api-checker/; external plugin repos
 # carry copies as tests/plugin_api_checker.py. Bump on every change so
@@ -430,7 +430,7 @@ class AppAPIExtractor:
 #   "mw"       -> {direct_mw_attr_name, ...}
 # ---------------------------------------------------------------------------
 
-_MANAGER_ALLOWLIST: dict[str, dict | set] = {
+_MANAGER_ALLOWLIST: dict[str, Union[dict, set]] = {
     "manager": {
         # StateManager.data is the central MoleculeData object.
         # It is set externally via molecule loading, not in StateManager.__init__.
@@ -456,7 +456,7 @@ _MANAGER_ALLOWLIST: dict[str, dict | set] = {
     },
 }
 
-_MW_ALLOWLIST: dict[str, dict | set] = {
+_MW_ALLOWLIST: dict[str, Union[dict, set]] = {
     # MW-level attrs that are legacy compat bridges or monkey-patched at runtime.
     # Only suppressed when --mw-allowlist is explicitly passed, so that real
     # V3 migration bugs in mw.X access patterns remain visible by default.
