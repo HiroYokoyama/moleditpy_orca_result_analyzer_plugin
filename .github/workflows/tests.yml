@@ -24,7 +24,8 @@ jobs:
   # Standard unit tests  Eno external dependencies required
   # -------------------------------------------------------------------------
   test:
-    runs-on: ubuntu-latest
+    # Python 3.9 is not available on Ubuntu 26.04 (the current ubuntu-latest).
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
