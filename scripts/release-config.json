@@ -1,0 +1,19 @@
+{
+  "source": "orca_result_analyzer/__init__.py",
+  "title": "ORCA Result Analyzer",
+  "package": "orca_result_analyzer",
+  "archive": "orca_result_analyzer_{version}.zip",
+  "assets": [
+    "orca_result_analyzer_{version}.zip"
+  ],
+  "include": [
+    "README.md",
+    "LICENSE",
+    "COPYING",
+    "LICENSING.md"
+  ],
+  "exclude": [
+    "*/__pycache__/*",
+    "*/.git/*"
+  ]
+}

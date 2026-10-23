@@ -186,3 +186,7 @@ ratchet via `--fail-under`, so the score may rise but not fall. Treat its
 advice as advice: its `unnecessary-lambda` reports are wrong here, because
 `connect(lambda: self.method())` deliberately stops Qt feeding a signal's
 argument into a method's first parameter.
+
+## Copied maintenance scripts
+
+See [scripts/COMMON_TOOLS.md](scripts/COMMON_TOOLS.md) for canonical ownership, pinned versions and update instructions. Common script unit tests stay in the canonical repository; retain this repository's own integration checks.
