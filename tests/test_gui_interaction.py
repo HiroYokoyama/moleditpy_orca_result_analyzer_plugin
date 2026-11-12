@@ -313,6 +313,14 @@ class TestDragAndDrop(_GuiCase):
         self.dlg.dragEnterEvent(ev)
         ev.ignore.assert_called_once()
 
+    def test_moving_a_drag_judges_it_as_on_entry(self):
+        accepted = _drop_event([os.path.join(self.tmp, "other.out")])
+        self.dlg.dragMoveEvent(accepted)
+        accepted.accept.assert_called_once()
+        refused = _drop_event([os.path.join(self.tmp, "notes.txt")])
+        self.dlg.dragMoveEvent(refused)
+        refused.ignore.assert_called_once()
+
     def test_dropping_an_output_file_loads_it(self):
         target = os.path.join(self.tmp, "dropped.out")
         with open(target, "w", encoding="utf-8") as fh:
