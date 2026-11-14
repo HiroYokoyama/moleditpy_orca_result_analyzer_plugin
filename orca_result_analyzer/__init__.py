@@ -1,12 +1,12 @@
 """Plugin entry points and metadata for the ORCA Result Analyzer plugin."""
 
 PLUGIN_NAME = "ORCA Result Analyzer"
-PLUGIN_VERSION = "5.0.6"
+PLUGIN_VERSION = "5.0.7"
 PLUGIN_AUTHOR = "HiroYokoyama"
 PLUGIN_DESCRIPTION = "Comprehensive analyzer for ORCA output files (.out). Includes Vibrational, MO, TDDFT, and NMR analysis."
 PLUGIN_SUPPORTED_MOLEDITPY_VERSION = ">=5.0.0, <6.0.0"
 PLUGIN_SUPPORTED_PYTHON_VERSION = ">=3.9, <3.15"
-PLUGIN_DEPENDENCIES = ["rdkit", "PySide6", "matplotlib", "Pillow"]
+PLUGIN_DEPENDENCIES = ["rdkit", "PySide6-Essentials", "matplotlib", "Pillow"]
 PLUGIN_OPTIONAL_DEPENDENCIES = ["nmrsim"]
 
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
