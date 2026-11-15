@@ -621,5 +621,163 @@ class TestGridBuilding(_VisCase):
         self.mw.plotter.render.assert_called_once()
 
 
+def _extended_data():
+    """_bond_data() plus the extended NBO sections, parser-shaped."""
+    data = _bond_data()
+    data["nbo_totals"] = {
+        "lewis": 9.98992,
+        "lewis_pct": 99.899,
+        "valence_nonlewis": 0.00027,
+        "rydberg_nonlewis": 0.00982,
+        "total_nonlewis": 0.01009,
+    }
+    data["nbo_population"] = [
+        {
+            "index": 1,
+            "element": "O",
+            "charge": -0.88482,
+            "core": 1.99996,
+            "valence": 6.8689,
+            "rydberg": 0.01596,
+            "total": 8.88482,
+        }
+    ]
+    data["nbo_configurations"] = [
+        {"index": 1, "element": "O", "core": True, "orbitals": {"2p": 5.12, "2s": 1.75}}
+    ]
+    data["nbo_nao"] = [
+        {
+            "index": 1,
+            "element": "O",
+            "atom": 1,
+            "lang": "s",
+            "kind": "Cor",
+            "ao": "1s",
+            "occupancy": 1.99996,
+            "energy": -18.75648,
+        },
+        {
+            "index": 2,
+            "element": "O",
+            "atom": 1,
+            "lang": "s",
+            "kind": "Val",
+            "ao": "2s",
+            "occupancy": 1.75234,
+            "energy": None,
+        },
+    ]
+    data["nbo_bending"] = [
+        {
+            "index": 5,
+            "type": "LP",
+            "atoms": [("O", 1)],
+            "loc_theta": None,
+            "loc_phi": None,
+            "h1_theta": 90.8,
+            "h1_phi": 0.0,
+            "h1_dev": None,
+            "h2_theta": None,
+            "h2_phi": None,
+            "h2_dev": None,
+        }
+    ]
+    return data
+
+
+class _FakeTabs:
+    """QTabWidget stand-in recording the (title, table) pairs it is given.
+
+    The harness has no stateful QTabWidget stub, so tab titles are
+    asserted through this recorder instead of the widget tree.
+    """
+
+    def __init__(self):
+        self.added = []
+        self.currentChanged = MagicMock()
+
+    def addTab(self, widget, title):
+        self.added.append((title, widget))
+
+    def count(self):
+        return len(self.added)
+
+
+class _FakeLabel:
+    """QLabel stand-in recording the text of every label built."""
+
+    instances = []
+
+    def __init__(self, text="", *a, **k):
+        self._text = text
+        _FakeLabel.instances.append(self)
+
+    def setStyleSheet(self, *a, **k):
+        pass
+
+    def text(self):
+        return self._text
+
+
+class TestNboExtendedTabs(_BondCase):
+    def setUp(self):
+        super().setUp()
+        self.fake_tabs = _FakeTabs()
+        _FakeLabel.instances = []
+        for name, fake in (("QTabWidget", lambda *a, **k: self.fake_tabs),
+                           ("QLabel", _FakeLabel)):
+            patcher = patch.object(B, name, fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.dlg = B.BondAnalysisDialog(self.host, _extended_data())
+        self.tables = dict(self.fake_tabs.added)
+
+    def test_all_extended_tabs_are_shown(self):
+        for expected in (
+            "NBO Population (1)",
+            "NBO Configurations (1)",
+            "NAO (2)",
+            "Bond Bending (1)",
+        ):
+            self.assertIn(expected, self.tables)
+
+    def test_the_totals_summary_line_is_shown(self):
+        texts = [label.text() for label in _FakeLabel.instances]
+        summary = [t for t in texts if "Lewis structure" in t]
+        self.assertEqual(len(summary), 1)
+        self.assertIn("9.98992", summary[0])
+        self.assertIn("99.90%", summary[0])
+
+    def test_population_values(self):
+        table = self.tables["NBO Population (1)"]
+        self.assertEqual(table.item(0, 0).text(), "1 O")
+        self.assertEqual(table.item(0, 1).text(), "-0.88482")
+        self.assertEqual(table.item(0, 5).text(), "8.88482")
+
+    def test_configuration_shells_are_sorted(self):
+        table = self.tables["NBO Configurations (1)"]
+        headers = [
+            table.horizontalHeaderItem(c).text() for c in range(table.columnCount())
+        ]
+        self.assertEqual(headers, ["Atom", "2s", "2p"])
+        self.assertEqual(table.item(0, 2).text(), "5.12")
+
+    def test_nao_energy_is_blank_when_not_printed(self):
+        table = self.tables["NAO (2)"]
+        self.assertEqual(table.item(0, 3).text(), "Cor( 1s)")
+        self.assertEqual(table.item(0, 5).text(), "-18.75648")
+        self.assertEqual(table.item(1, 5).text(), "")
+
+    def test_bending_dashes_for_missing_deviations(self):
+        table = self.tables["Bond Bending (1)"]
+        self.assertEqual(table.item(0, 0).text(), "LP O 1")
+        self.assertEqual(table.item(0, 1).text(), "--")
+        self.assertEqual(table.item(0, 3).text(), "90.8")
+
+    def test_a_dialog_with_extended_data_builds_unpatched(self):
+        dlg = B.BondAnalysisDialog(self.host, _extended_data())
+        self.assertEqual(len(dlg._nbo), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

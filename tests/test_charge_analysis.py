@@ -149,6 +149,16 @@ class TestChargeDialog(unittest.TestCase):
         dlg.on_type_change("NBO")
         self.assertEqual(dlg.current_type, "NBO")
 
+    def test_nbo_type_shows_the_population_decomposition(self):
+        dlg, _ = self._dialog()
+        dlg.on_type_change("NBO")
+        headers = [
+            dlg.table.horizontalHeaderItem(c).text()
+            for c in range(dlg.table.columnCount())
+        ]
+        for expected in ("Core", "Valence", "Rydberg", "Total"):
+            self.assertIn(expected, headers)
+
     def test_scheme_change_updates_gradient_and_saves(self):
         dlg, _ = self._dialog()
         with tempfile.TemporaryDirectory() as d:
