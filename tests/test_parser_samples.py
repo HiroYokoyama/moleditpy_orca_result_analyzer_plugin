@@ -1631,6 +1631,70 @@ class TestNboAnalysis(unittest.TestCase):
         self.assertEqual(p.data["nbo_perturbation"], [])
 
 
+class TestNboExtendedSections(unittest.TestCase):
+    """nbo-test.out — the NBO sections beyond orbitals / E(2) / hybrids:
+    Lewis totals, the NPA breakdown, electron configurations, NAO
+    occupancies and the bond-bending table."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _load("nbo-test.out")
+
+    def test_totals(self):
+        totals = self.p.data["nbo_totals"]
+        self.assertIsNotNone(totals)
+        self.assertAlmostEqual(totals["lewis"], 9.98992, places=4)
+        self.assertAlmostEqual(totals["lewis_pct"], 99.899, places=2)
+        self.assertAlmostEqual(totals["valence_nonlewis"], 0.00027, places=4)
+        self.assertAlmostEqual(totals["rydberg_nonlewis"], 0.00982, places=4)
+
+    def test_population(self):
+        rows = self.p.data["nbo_population"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual([r["index"] for r in rows], [1, 2, 3])
+        self.assertEqual(rows[0]["element"], "O")
+        self.assertAlmostEqual(rows[0]["charge"], -0.88482, places=4)
+        self.assertAlmostEqual(rows[0]["core"], 1.99996, places=4)
+        self.assertAlmostEqual(rows[0]["valence"], 6.86890, places=4)
+        self.assertAlmostEqual(rows[0]["rydberg"], 0.01596, places=4)
+        self.assertAlmostEqual(rows[0]["total"], 8.88482, places=4)
+
+    def test_configurations(self):
+        configs = self.p.data["nbo_configurations"]
+        self.assertEqual(len(configs), 3)
+        self.assertTrue(configs[0]["core"])
+        self.assertAlmostEqual(configs[0]["orbitals"]["2s"], 1.75, places=2)
+        self.assertAlmostEqual(configs[0]["orbitals"]["2p"], 5.12, places=2)
+        self.assertFalse(configs[1]["core"])
+        self.assertAlmostEqual(configs[1]["orbitals"]["1s"], 0.55, places=2)
+
+    def test_nao(self):
+        rows = self.p.data["nbo_nao"]
+        self.assertEqual(len(rows), 24)
+        self.assertAlmostEqual(
+            sum(r["occupancy"] for r in rows), 10.0, places=2
+        )
+        self.assertEqual(rows[0]["kind"], "Cor")
+        self.assertEqual(rows[0]["ao"], "1s")
+        self.assertAlmostEqual(rows[0]["energy"], -18.75648, places=3)
+
+    def test_bending(self):
+        rows = self.p.data["nbo_bending"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["type"], "LP")
+        self.assertEqual(rows[0]["atoms"], [("O", 1)])
+        self.assertAlmostEqual(rows[0]["h1_theta"], 90.8, places=1)
+        self.assertIsNone(rows[0]["h1_dev"])
+
+    def test_non_nbo_file_empty(self):
+        p = _load("benzene-opt.out")
+        self.assertIsNone(p.data["nbo_totals"])
+        self.assertEqual(p.data["nbo_population"], [])
+        self.assertEqual(p.data["nbo_configurations"], [])
+        self.assertEqual(p.data["nbo_nao"], [])
+        self.assertEqual(p.data["nbo_bending"], [])
+
+
 # ---------------------------------------------------------------------------
 # Post-HF energy components  —  ORCA 6 (mp2-test.out, ccsd-test.out)
 # ---------------------------------------------------------------------------
