@@ -1051,6 +1051,47 @@ _NBO_BENDING_ONE_ROW = """\
      5. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
 """
 
+_NBO_BENDING_UNRECOGNIZED_ROW = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+         [Thresholds for printing:  angular deviation  >  1.0 degree]
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+     5. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
+     6. LP* (   1) C   1            --     --     45.0    0.0   --       --     --    --
+"""
+
+_NBO_BENDING_UNRECOGNIZED_FIRST = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+         [Thresholds for printing:  angular deviation  >  1.0 degree]
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+     5. LP* (   1) C   1            --     --     45.0    0.0   --       --     --    --
+     6. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
+"""
+
+_NBO_NAO_TWO_TABLES = """\
+ NATURAL POPULATIONS:  Natural atomic orbital occupancies
+
+  NAO Atom No lang   Type(AO)    Occupancy      Energy
+ -------------------------------------------------------
+   1    O  1  s      Cor( 1s)     1.99996     -18.75648
+   2    O  1  s      Val( 2s)     1.75234      -0.75321
+
+ NATURAL POPULATIONS:  Natural atomic orbital occupancies
+
+  NAO Atom No lang   Type(AO)    Occupancy      Energy
+ -------------------------------------------------------
+   1    O  1  s      Cor( 1s)     1.00000     -18.00000
+"""
+
 _NBO_BENDING_EMPTY = """\
  NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
 
@@ -1115,6 +1156,32 @@ class TestParseNboExtended(unittest.TestCase):
     def test_bending_empty_table(self):
         p = _parse_method(_NBO_BENDING_EMPTY, "parse_nbo_bending")
         self.assertEqual(p.data["nbo_bending"], [])
+
+    def test_bending_stops_at_an_unrecognized_orbital(self):
+        # An LP* row is not one of the recognized NBO types; the table
+        # scan stops there instead of guessing at its columns.
+        p = _parse_method(_NBO_BENDING_UNRECOGNIZED_ROW, "parse_nbo_bending")
+        rows = p.data["nbo_bending"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "LP")
+
+    def test_bending_skips_an_unrecognized_orbital_before_rows(self):
+        # The same unrecognized row before any valid row is skipped,
+        # and the scan goes on to the rows that do parse.
+        p = _parse_method(_NBO_BENDING_UNRECOGNIZED_FIRST, "parse_nbo_bending")
+        rows = p.data["nbo_bending"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "LP")
+        self.assertEqual(rows[0]["index"], 6)
+
+    def test_nao_stops_at_the_next_spin_table(self):
+        # Open-shell jobs print a per-spin NAO table after the summed
+        # one; only the first table's rows are reported.
+        p = _parse_method(_NBO_NAO_TWO_TABLES, "parse_nbo_nao")
+        rows = p.data["nbo_nao"]
+        self.assertEqual(len(rows), 2)
+        self.assertAlmostEqual(rows[0]["occupancy"], 1.99996, places=5)
+        self.assertAlmostEqual(rows[1]["occupancy"], 1.75234, places=5)
 
 
 # ---------------------------------------------------------------------------
