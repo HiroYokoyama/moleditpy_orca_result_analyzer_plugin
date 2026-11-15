@@ -342,6 +342,259 @@ class _PropertyParsingMixin:
                 )
         self.data["nbo_perturbation"] = inter
 
+    def parse_nbo_totals(self):
+        """Lewis / non-Lewis occupancy totals of the last NBO summary.
+
+        The footer under the "NATURAL BOND ORBITALS (Summary)" table, e.g.:
+            Total Lewis    9.98992  ( 99.8992%)
+            Valence non-Lewis    0.00027  (  0.0027%)
+            Rydberg non-Lewis    0.00982  (  0.0982%)
+        Stored as {"lewis", "lewis_pct", "valence_nonlewis",
+        "valence_nonlewis_pct", "rydberg_nonlewis", "rydberg_nonlewis_pct"}
+        (occupancies in electrons, percents of the total), or None when the
+        job printed no NBO summary. The same lines also appear in the NPA
+        summary block, and open-shell jobs print one footer per spin set;
+        the first occurrence of each label wins (the alpha set in
+        open-shell jobs), consistent with the NPA charge reader.
+        """
+        pattern = re.compile(
+            r"^\s*(Total Lewis|Valence non-Lewis|Rydberg non-Lewis|Total non-Lewis)"
+            r"\s+(\d+\.\d+)\s+\(\s*(\d+\.\d+)%"
+        )
+        keys = {
+            "Total Lewis": "lewis",
+            "Valence non-Lewis": "valence_nonlewis",
+            "Rydberg non-Lewis": "rydberg_nonlewis",
+            "Total non-Lewis": "total_nonlewis",
+        }
+        found = {}
+        for line in self.lines:
+            match = pattern.match(line)
+            if match and keys[match.group(1)] not in found:
+                found[keys[match.group(1)]] = (
+                    float(match.group(2)),
+                    float(match.group(3)),
+                )
+        totals = None
+        if "lewis" in found:
+            totals = {}
+            for key, (occupancy, pct) in found.items():
+                totals[key] = occupancy
+                totals[f"{key}_pct"] = pct
+        self.data["nbo_totals"] = totals
+
+    def parse_nbo_population(self):
+        """Per-atom NPA breakdown: charge, Core, Valence, Rydberg, Total.
+
+        Reads the first "Summary of Natural Population Analysis" table —
+        the same table parse_charges takes the NBO charges from, keeping
+        its remaining columns. The first table is the spin-summed one in
+        open-shell jobs (per-spin tables follow it). Each entry is
+        {"index", "element", "charge", "core", "valence", "rydberg",
+        "total"} with electron counts; [] when no table was printed.
+        """
+        row_pattern = re.compile(
+            r"^\s*([A-Z][a-z]?)\s+(\d+)\s+(-?\d+\.\d+)\s+(\d+\.\d+)\s+"
+            r"(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s*$"
+        )
+        rows = []
+        start = next(
+            (
+                i
+                for i, line in enumerate(self.lines)
+                if "Summary of Natural Population Analysis" in line
+            ),
+            None,
+        )
+        if start is not None:
+            for line in self.lines[start : start + 60]:
+                match = row_pattern.match(line)
+                if match:
+                    rows.append(
+                        {
+                            "index": int(match.group(2)),
+                            "element": match.group(1),
+                            "charge": float(match.group(3)),
+                            "core": float(match.group(4)),
+                            "valence": float(match.group(5)),
+                            "rydberg": float(match.group(6)),
+                            "total": float(match.group(7)),
+                        }
+                    )
+                elif rows and "===" in line:
+                    break
+        self.data["nbo_population"] = rows
+
+    def parse_nbo_configurations(self):
+        """Natural electron configuration of each atom.
+
+        The "Natural Electron Configuration" table, e.g.
+        ``O  1  [core]2s( 1.75)2p( 5.12)3p( 0.01)`` becomes
+        {"index", "element", "core": True,
+         "orbitals": {"2s": 1.75, "2p": 5.12, "3p": 0.01},
+         "raw": "[core]2s( 1.75)2p( 5.12)3p( 0.01)"}.
+        First table wins, as for parse_nbo_population; [] when absent.
+        """
+        orbital_pattern = re.compile(
+            r"(\d+[a-z][a-z0-9]*)\(\s*(\d+\.\d+)\)", re.IGNORECASE
+        )
+        configs = []
+        start = next(
+            (
+                i
+                for i, line in enumerate(self.lines)
+                if "Natural Electron Configuration" in line
+            ),
+            None,
+        )
+        if start is not None:
+            for line in self.lines[start + 1 : start + 80]:
+                match = re.match(r"^\s*([A-Z][a-z]?)\s+(\d+)\s+(\S.*)$", line)
+                if match:
+                    orbitals = {
+                        label.lower(): float(occ)
+                        for label, occ in orbital_pattern.findall(match.group(3))
+                    }
+                    if orbitals:
+                        configs.append(
+                            {
+                                "index": int(match.group(2)),
+                                "element": match.group(1),
+                                "core": "[core]" in match.group(3),
+                                "orbitals": orbitals,
+                                "raw": match.group(3).strip(),
+                            }
+                        )
+                        continue
+                if configs:
+                    break
+        self.data["nbo_configurations"] = configs
+
+    def parse_nbo_nao(self):
+        """Natural atomic orbital (NAO) occupancies and energies.
+
+        Reads the first "Natural atomic orbital occupancies" table.
+        Each entry is {"index", "element", "atom", "lang", "kind",
+        "ao", "occupancy", "energy"} where kind is Cor/Val/Ryd and ao
+        the orbital label inside the parentheses (e.g. "2p"). The first
+        table is the spin-summed one in open-shell jobs; NBO 3.1 prints
+        no Energy column there, so energy is None for its rows.
+        [] when no table was printed.
+        """
+        row_pattern = re.compile(
+            r"^\s*(\d+)\s+([A-Z][a-z]?)\s+(\d+)\s+(\S+)\s+"
+            r"(Cor|Val|Ryd)\(\s*([^)]+)\)\s+(\d+\.\d+)(?:\s+(-?\d+\.\d+))?\s*$"
+        )
+        rows = []
+        start = next(
+            (
+                i
+                for i, line in enumerate(self.lines)
+                if "natural atomic orbital occupancies" in line.lower()
+            ),
+            None,
+        )
+        if start is not None:
+            gap = 0
+            for line in self.lines[start + 1 : start + 5000]:
+                if rows and "natural atomic orbital occupancies" in line.lower():
+                    break  # the next (per-spin) NAO table begins
+                match = row_pattern.match(line)
+                if match:
+                    gap = 0
+                    rows.append(
+                        {
+                            "index": int(match.group(1)),
+                            "element": match.group(2),
+                            "atom": int(match.group(3)),
+                            "lang": match.group(4),
+                            "kind": match.group(5),
+                            "ao": match.group(6).strip(),
+                            "occupancy": float(match.group(7)),
+                            "energy": (
+                                float(match.group(8)) if match.group(8) else None
+                            ),
+                        }
+                    )
+                elif rows:
+                    # Atom blocks inside the table are separated by
+                    # blank lines; tolerate a few before giving up.
+                    gap += 1
+                    if gap > 10:
+                        break
+        self.data["nbo_nao"] = rows
+
+    def parse_nbo_bending(self):
+        """NHO directionality / bond-bending deviations.
+
+        Reads the last "NHO Directionality and Bond Bending" table that
+        prints any rows (it belongs to the final NBO analysis, like the
+        summary; open-shell jobs print one table per spin set, and a set
+        with no above-threshold rows prints an empty table). Each
+        entry is {"index", "type", "atoms", "loc_theta", "loc_phi",
+        "h1_theta", "h1_phi", "h1_dev", "h2_theta", "h2_phi",
+        "h2_dev"} in degrees, with None where the table prints "--"
+        (e.g. a lone pair has no line of centers). [] when no table
+        printed any rows — NBO only prints rows above its thresholds.
+        """
+        row_pattern = re.compile(
+            r"^\s*(\d+)\.\s+(.+?)\s{2,}"
+            r"((?:--|-?\d+\.\d+)(?:\s+(?:--|-?\d+\.\d+)){7})\s*$"
+        )
+        entries = []
+        starts = [
+            i
+            for i, line in enumerate(self.lines)
+            if "nho directionality" in line.lower()
+        ]
+        for start in reversed(starts):
+            entries = []
+            i = start
+            while i < len(self.lines) and "====" not in self.lines[i]:
+                i += 1
+            for line in self.lines[i + 1 : i + 200]:
+                match = row_pattern.match(line)
+                if not match:
+                    if entries:
+                        break
+                    continue
+                descriptor = match.group(2).strip()
+                head = re.match(
+                    r"^(CR|LP|LV|BD\*|BD|RY\*|RY)\s*\(\s*(\d+)\)\s*(.*)$",
+                    descriptor,
+                )
+                if not head:
+                    if entries:
+                        break
+                    continue
+                values = [
+                    None if token == "--" else float(token)
+                    for token in match.group(3).split()
+                ]
+                entries.append(
+                    {
+                        "index": int(match.group(1)),
+                        "type": head.group(1),
+                        "atoms": [
+                            (element, int(number))
+                            for element, number in re.findall(
+                                r"([A-Z][a-z]?)\s+(\d+)", head.group(3)
+                            )
+                        ],
+                        "loc_theta": values[0],
+                        "loc_phi": values[1],
+                        "h1_theta": values[2],
+                        "h1_phi": values[3],
+                        "h1_dev": values[4],
+                        "h2_theta": values[5],
+                        "h2_phi": values[6],
+                        "h2_dev": values[7],
+                    }
+                )
+            if entries:
+                break
+        self.data["nbo_bending"] = entries
+
     def parse_nbo_hybrids(self):
         """Augment nbo_orbitals with per-atom hybridization (%s / %p / %d).
 

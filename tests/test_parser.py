@@ -999,6 +999,191 @@ class TestParseNboMultipleBlocks(unittest.TestCase):
         self.assertAlmostEqual(cr["hybrids"][0]["s_pct"], 100.0, places=1)
 
 
+_NBO_TOTALS_TWO_FOOTERS = """\
+              Total Lewis    4.99913  ( 99.9825%)
+        Valence non-Lewis    0.00027  (  0.0054%)
+        Rydberg non-Lewis    0.00060  (  0.0120%)
+              Total Lewis    3.99971  ( 99.9927%)
+        Valence non-Lewis    0.00010  (  0.0025%)
+        Rydberg non-Lewis    0.00019  (  0.0048%)
+"""
+
+_NBO_POPULATION_TABLE = """\
+ Summary of Natural Population Analysis:
+
+                                       Natural Population
+                Natural  -----------------------------------------------
+    Atom  No    Charge         Core      Valence    Rydberg      Total
+ -----------------------------------------------------------------------
+      C    1   -0.53615      1.99968     4.52636    0.01010     6.53615
+      H    2    0.17874      0.00000     0.82109    0.00017     0.82126
+ =======================================================================
+   * Total *    0.00000      1.99968     6.98972    0.01060     9.00000
+"""
+
+_NBO_CONFIG_31 = """\
+    Atom No         Natural Electron Configuration
+ ----------------------------------------------------------------------------
+      O  1      [core]2S( 1.77)2p( 5.15)3d( 0.01)
+      H  2            1S( 0.53)
+"""
+
+_NBO_NAO_BLOCKS = """\
+ NATURAL POPULATIONS:  Natural atomic orbital occupancies
+
+   NAO  Atom  No  lang   Type(AO)    Occupancy      Energy
+ ----------------------------------------------------------
+     1    O    1  S      Cor( 1S)     1.99992     -18.98978
+     2    O    1  S      Val( 2S)     1.76527      -0.88019
+
+     3    H    2  S      Val( 1S)     0.55134       0.08879
+"""
+
+_NBO_BENDING_ONE_ROW = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+         [Thresholds for printing:  angular deviation  >  1.0 degree]
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+     5. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
+"""
+
+_NBO_BENDING_UNRECOGNIZED_ROW = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+         [Thresholds for printing:  angular deviation  >  1.0 degree]
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+     5. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
+     6. LP* (   1) C   1            --     --     45.0    0.0   --       --     --    --
+"""
+
+_NBO_BENDING_UNRECOGNIZED_FIRST = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+         [Thresholds for printing:  angular deviation  >  1.0 degree]
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+     5. LP* (   1) C   1            --     --     45.0    0.0   --       --     --    --
+     6. LP (   1) C   1             --     --     90.0    0.0   --       --     --    --
+"""
+
+_NBO_NAO_TWO_TABLES = """\
+ NATURAL POPULATIONS:  Natural atomic orbital occupancies
+
+  NAO Atom No lang   Type(AO)    Occupancy      Energy
+ -------------------------------------------------------
+   1    O  1  s      Cor( 1s)     1.99996     -18.75648
+   2    O  1  s      Val( 2s)     1.75234      -0.75321
+
+ NATURAL POPULATIONS:  Natural atomic orbital occupancies
+
+  NAO Atom No lang   Type(AO)    Occupancy      Energy
+ -------------------------------------------------------
+   1    O  1  s      Cor( 1s)     1.00000     -18.00000
+"""
+
+_NBO_BENDING_EMPTY = """\
+ NHO Directionality and "Bond Bending" (deviations from line of nuclear centers)
+
+                                Line of Centers        Hybrid 1              Hybrid 2
+                                ---------------  -------------------   ------------------
+                NBO               Theta   Phi    Theta   Phi    Dev    Theta   Phi    Dev
+ ========================================================================================
+
+"""
+
+
+class TestParseNboExtended(unittest.TestCase):
+    """Synthetic blocks for the newer NBO section parsers."""
+
+    def test_totals_first_footer_wins(self):
+        # Open-shell jobs print one footer per spin set; the first is
+        # the alpha set and is the one reported.
+        p = _parse_method(_NBO_TOTALS_TWO_FOOTERS, "parse_nbo_totals")
+        self.assertAlmostEqual(p.data["nbo_totals"]["lewis"], 4.99913, places=4)
+        self.assertAlmostEqual(
+            p.data["nbo_totals"]["rydberg_nonlewis"], 0.00060, places=4
+        )
+
+    def test_totals_absent_is_none(self):
+        p = _parse_method("no nbo here\n", "parse_nbo_totals")
+        self.assertIsNone(p.data["nbo_totals"])
+
+    def test_population_rows_skip_total_row(self):
+        p = _parse_method(_NBO_POPULATION_TABLE, "parse_nbo_population")
+        rows = p.data["nbo_population"]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["element"], "C")
+        self.assertAlmostEqual(rows[0]["valence"], 4.52636, places=4)
+        self.assertAlmostEqual(rows[1]["total"], 0.82126, places=4)
+
+    def test_configurations_uppercase_labels_normalised(self):
+        # NBO 3.1 prints 2S/1S; labels come back lowercased like NBO 7.
+        p = _parse_method(_NBO_CONFIG_31, "parse_nbo_configurations")
+        configs = p.data["nbo_configurations"]
+        self.assertEqual(len(configs), 2)
+        self.assertTrue(configs[0]["core"])
+        self.assertAlmostEqual(configs[0]["orbitals"]["2s"], 1.77, places=2)
+        self.assertAlmostEqual(configs[1]["orbitals"]["1s"], 0.53, places=2)
+
+    def test_nao_tolerates_blank_line_between_atom_blocks(self):
+        p = _parse_method(_NBO_NAO_BLOCKS, "parse_nbo_nao")
+        rows = p.data["nbo_nao"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[2]["element"], "H")
+        self.assertAlmostEqual(rows[2]["energy"], 0.08879, places=4)
+
+    def test_bending_row(self):
+        p = _parse_method(_NBO_BENDING_ONE_ROW, "parse_nbo_bending")
+        rows = p.data["nbo_bending"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "LP")
+        self.assertEqual(rows[0]["atoms"], [("C", 1)])
+        self.assertAlmostEqual(rows[0]["h1_theta"], 90.0, places=1)
+        self.assertIsNone(rows[0]["loc_theta"])
+        self.assertIsNone(rows[0]["h1_dev"])
+
+    def test_bending_empty_table(self):
+        p = _parse_method(_NBO_BENDING_EMPTY, "parse_nbo_bending")
+        self.assertEqual(p.data["nbo_bending"], [])
+
+    def test_bending_stops_at_an_unrecognized_orbital(self):
+        # An LP* row is not one of the recognized NBO types; the table
+        # scan stops there instead of guessing at its columns.
+        p = _parse_method(_NBO_BENDING_UNRECOGNIZED_ROW, "parse_nbo_bending")
+        rows = p.data["nbo_bending"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "LP")
+
+    def test_bending_skips_an_unrecognized_orbital_before_rows(self):
+        # The same unrecognized row before any valid row is skipped,
+        # and the scan goes on to the rows that do parse.
+        p = _parse_method(_NBO_BENDING_UNRECOGNIZED_FIRST, "parse_nbo_bending")
+        rows = p.data["nbo_bending"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "LP")
+        self.assertEqual(rows[0]["index"], 6)
+
+    def test_nao_stops_at_the_next_spin_table(self):
+        # Open-shell jobs print a per-spin NAO table after the summed
+        # one; only the first table's rows are reported.
+        p = _parse_method(_NBO_NAO_TWO_TABLES, "parse_nbo_nao")
+        rows = p.data["nbo_nao"]
+        self.assertEqual(len(rows), 2)
+        self.assertAlmostEqual(rows[0]["occupancy"], 1.99996, places=5)
+        self.assertAlmostEqual(rows[1]["occupancy"], 1.75234, places=5)
+
+
 # ---------------------------------------------------------------------------
 # TestParseTerminationStatus
 # ---------------------------------------------------------------------------

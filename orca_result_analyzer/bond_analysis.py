@@ -4,6 +4,9 @@ Tabs are shown only for the data present in the file:
   - Mayer bond orders
   - NBO orbitals (NATURAL BOND ORBITALS summary)
   - NBO second-order perturbation (donor -> acceptor E(2))
+  - NBO population breakdown, natural electron configurations,
+    NAO occupancies and NHO bond bending, with the Lewis / non-Lewis
+    totals as a summary line above the tabs
 
 Selecting a row highlights the relevant bond / atoms in the host 3D editor:
 a Mayer bond row highlights that bond; an NBO orbital row highlights the
@@ -11,6 +14,7 @@ atom(s) it spans.
 """
 
 import logging
+import re
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -38,6 +42,19 @@ def _hyb_percent(hybrids):
             seg += f" {h['d_pct']:.0f}d"
         out.append(seg)
     return "   ·   ".join(out)
+
+
+def _shell_sort_key(label):
+    """Order shell labels as 1s < 2s < 2p < 3s < 3p < 3d < 4f."""
+    m = re.match(r"(\d+)([spdf])", label)
+    if not m:
+        return (99, 9, label)
+    return (int(m.group(1)), "spdf".index(m.group(2)), label)
+
+
+def _dev(value):
+    """Format a bond-bending deviation, '--' when NBO printed none."""
+    return f"{value:.1f}" if value is not None else "--"
 
 
 class _CopyableTable(QTableWidget):
@@ -232,6 +249,100 @@ class BondAnalysisDialog(QDialog):
                 f"NBO E(2) ({len(pert)})",
             )
 
+        population = data.get("nbo_population", [])
+        if population:
+            rows = [
+                [
+                    f"{p['index']} {p['element']}",
+                    f"{p['charge']:.5f}",
+                    f"{p['core']:.5f}",
+                    f"{p['valence']:.5f}",
+                    f"{p['rydberg']:.5f}",
+                    f"{p['total']:.5f}",
+                ]
+                for p in population
+            ]
+            tabs.addTab(
+                _make_table(
+                    ["Atom", "Charge", "Core", "Valence", "Rydberg", "Total"], rows
+                ),
+                f"NBO Population ({len(population)})",
+            )
+
+        configs = data.get("nbo_configurations", [])
+        if configs:
+            shells = sorted(
+                {s for c in configs for s in c["orbitals"]}, key=_shell_sort_key
+            )
+            rows = [
+                [f"{c['index']} {c['element']}"]
+                + [
+                    f"{c['orbitals'][s]:.2f}" if s in c["orbitals"] else ""
+                    for s in shells
+                ]
+                for c in configs
+            ]
+            tabs.addTab(
+                _make_table(["Atom"] + shells, rows),
+                f"NBO Configurations ({len(configs)})",
+            )
+
+        nao = data.get("nbo_nao", [])
+        if nao:
+            rows = [
+                [
+                    str(r["index"]),
+                    f"{r['atom']} {r['element']}",
+                    r["lang"],
+                    f"{r['kind']}( {r['ao']})",
+                    f"{r['occupancy']:.5f}",
+                    f"{r['energy']:.5f}" if r["energy"] is not None else "",
+                ]
+                for r in nao
+            ]
+            tabs.addTab(
+                _make_table(
+                    ["NAO", "Atom", "l", "Type (AO)", "Occupancy", "Energy (Eh)"],
+                    rows,
+                ),
+                f"NAO ({len(nao)})",
+            )
+
+        bending = data.get("nbo_bending", [])
+        if bending:
+            rows = [
+                [
+                    f"{b['type']} "
+                    + "- ".join(f"{s} {n}" for s, n in b["atoms"]),
+                    _dev(b["loc_theta"]),
+                    _dev(b["loc_phi"]),
+                    _dev(b["h1_theta"]),
+                    _dev(b["h1_phi"]),
+                    _dev(b["h1_dev"]),
+                    _dev(b["h2_theta"]),
+                    _dev(b["h2_phi"]),
+                    _dev(b["h2_dev"]),
+                ]
+                for b in bending
+            ]
+            tabs.addTab(
+                _make_table(
+                    [
+                        "NBO",
+                        "Loc θ",
+                        "Loc φ",
+                        "H1 θ",
+                        "H1 φ",
+                        "H1 dev",
+                        "H2 θ",
+                        "H2 φ",
+                        "H2 dev",
+                    ],
+                    rows,
+                ),
+                f"Bond Bending ({len(bending)})",
+            )
+
         if tabs.count() == 0:
             layout.addWidget(QLabel("No bond-analysis data found."))
         else:
@@ -241,6 +352,17 @@ class BondAnalysisDialog(QDialog):
             )
             hint.setStyleSheet("color:#777; font-size:9pt;")
             layout.addWidget(hint)
+            totals = data.get("nbo_totals")
+            if totals:
+                summary = QLabel(
+                    f"NBO Lewis structure: {totals['lewis']:.5f} e "
+                    f"({totals['lewis_pct']:.2f}%) · non-Lewis: "
+                    f"{totals['total_nonlewis']:.5f} e (valence "
+                    f"{totals['valence_nonlewis']:.5f} + Rydberg "
+                    f"{totals['rydberg_nonlewis']:.5f})"
+                )
+                summary.setStyleSheet("color:#444; font-size:9.5pt;")
+                layout.addWidget(summary)
             layout.addWidget(tabs)
 
         btn_row = QHBoxLayout()
