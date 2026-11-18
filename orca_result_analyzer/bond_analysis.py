@@ -52,6 +52,38 @@ def _shell_sort_key(label):
     return (int(m.group(1)), "spdf".index(m.group(2)), label)
 
 
+def _nbo_totals_text(totals):
+    """The Lewis / non-Lewis summary line, from whichever totals were read.
+
+    The non-Lewis total is printed on its own line in the NBO output, so an
+    output cut off before it still has the Lewis total; the line then shows
+    what is known instead of failing. Returns "" without a Lewis total.
+    """
+    if not totals or totals.get("lewis") is None:
+        return ""
+    text = f"NBO Lewis structure: {totals['lewis']:.5f} e"
+    if totals.get("lewis_pct") is not None:
+        text += f" ({totals['lewis_pct']:.2f}%)"
+    parts = [
+        f"{label} {totals[key]:.5f}"
+        for label, key in (
+            ("valence", "valence_nonlewis"),
+            ("Rydberg", "rydberg_nonlewis"),
+        )
+        if totals.get(key) is not None
+    ]
+    total = totals.get("total_nonlewis")
+    if total is None and len(parts) == 2:
+        total = totals["valence_nonlewis"] + totals["rydberg_nonlewis"]
+    if total is not None:
+        text += f" · non-Lewis: {total:.5f} e"
+        if parts:
+            text += f" ({' + '.join(parts)})"
+    elif parts:
+        text += f" · non-Lewis: {' + '.join(parts)}"
+    return text
+
+
 def _dev(value):
     """Format a bond-bending deviation, '--' when NBO printed none."""
     return f"{value:.1f}" if value is not None else "--"
@@ -352,15 +384,9 @@ class BondAnalysisDialog(QDialog):
             )
             hint.setStyleSheet("color:#777; font-size:9pt;")
             layout.addWidget(hint)
-            totals = data.get("nbo_totals")
-            if totals:
-                summary = QLabel(
-                    f"NBO Lewis structure: {totals['lewis']:.5f} e "
-                    f"({totals['lewis_pct']:.2f}%) · non-Lewis: "
-                    f"{totals['total_nonlewis']:.5f} e (valence "
-                    f"{totals['valence_nonlewis']:.5f} + Rydberg "
-                    f"{totals['rydberg_nonlewis']:.5f})"
-                )
+            totals_text = _nbo_totals_text(data.get("nbo_totals"))
+            if totals_text:
+                summary = QLabel(totals_text)
                 summary.setStyleSheet("color:#444; font-size:9.5pt;")
                 layout.addWidget(summary)
             layout.addWidget(tabs)
