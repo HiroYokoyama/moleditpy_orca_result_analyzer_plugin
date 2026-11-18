@@ -41,7 +41,8 @@ class Summary(unittest.TestCase):
         self.assertIn("Program:     ORCA 6.1.1", out)
         self.assertIn("Status:      Terminated normally", out)
         self.assertIn("Molecule:    C3H6O, 10 atoms, charge 0, multiplicity 1", out)
-        self.assertIn("SCF energy:  -192.8958723644 Eh (converged)", out)
+        self.assertIn("SCF energy:  -192.8958723644 Eh\n", out)
+        self.assertIn("Optimised:   converged", out)
         self.assertIn("Frequencies: 24 modes, 0 imaginary", out)
         self.assertIn("Gibbs:       -192.84077533 Eh at 298.15 K", out)
         self.assertIn("Steps:       5 opt_cycle, 1 opt_final", out)
@@ -60,6 +61,12 @@ class Summary(unittest.TestCase):
         sections = out.rsplit("Sections:", 1)[1]
         self.assertIn("nbo_population", sections)
         self.assertNotIn("tddft", sections)
+
+    def test_a_scan_is_not_called_an_optimisation(self):
+        code, out, _ = _run("parse", _sample("ethane-scan.out"))
+        self.assertEqual(code, 0)
+        self.assertIn("5 scan_step", out)
+        self.assertNotIn("Optimised:", out)
 
     def test_nmr(self):
         code, out, _ = _run("parse", _sample("benzene-opt-nmr.out"))
@@ -143,6 +150,12 @@ class Frontier(unittest.TestCase):
             {"spin": "beta", "occupation": 0.0, "energy_eh": 0.05},
         ]
         self.assertEqual(M._frontier(orbitals), (-0.3, 0.1))
+
+    def test_an_optimisation_without_its_final_step_is_not_converged(self):
+        data = {"scan_steps": [{"type": "opt_cycle"}, {"type": "opt_cycle"}]}
+        self.assertFalse(M._optimisation_converged(data))
+        lines = M.summary_lines("x.out", dict(data, version="6.1.1"))
+        self.assertIn("Optimised:   not converged", lines)
 
     def test_formula_is_hill_ordered(self):
         self.assertEqual(M._formula(["Cl", "H", "C", "H", "O"]), "CH2ClO")

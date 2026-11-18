@@ -31,6 +31,19 @@ def _empty(value):
     return value is None or value == [] or value == {} or value == ""
 
 
+#: Keys the parser fills with a default whatever the file holds.
+_ALWAYS_SET = ("termination_status", "charge", "mult")
+
+
+def _found_anything(data):
+    """Whether parsing recognised any part of the file; flags do not count."""
+    return any(
+        not _empty(value) and not isinstance(value, bool)
+        for key, value in data.items()
+        if key not in _ALWAYS_SET
+    )
+
+
 def parse_file(path):
     """Read and parse *path*, returning the parser's data dict."""
     parser = OrcaParser()
@@ -43,6 +56,11 @@ def _formula(atoms):
     order = [s for s in ("C", "H") if s in counts] if "C" in counts else []
     order += sorted(s for s in counts if s not in order)
     return "".join(s + (str(counts[s]) if counts[s] > 1 else "") for s in order)
+
+
+def _optimisation_converged(data):
+    """ORCA marks the stationary point it reached with an opt_final step."""
+    return any(step.get("type") == "opt_final" for step in data["scan_steps"])
 
 
 def _frontier(orbitals):
@@ -64,9 +82,10 @@ def _frontier(orbitals):
 def summary_lines(path, data):
     """Human-readable lines describing what *data* holds."""
     lines = [f"File:        {path}"]
-    lines.append(
-        f"Program:     {PROGRAM} {data.get('version') or '(version not found)'}"
-    )
+    version = data.get("version") or "(version not found)"
+    if not version.startswith(PROGRAM):
+        version = f"{PROGRAM} {version}"
+    lines.append(f"Program:     {version}")
     lines.append(f"Status:      {data.get('termination_status') or 'unknown'}")
     atoms = data.get("atoms") or []
     if atoms:
@@ -75,8 +94,7 @@ def summary_lines(path, data):
             f"charge {data.get('charge', 0)}, multiplicity {data.get('mult', 1)}"
         )
     if data.get("scf_energy") is not None:
-        state = "converged" if data.get("converged") else "not converged"
-        lines.append(f"SCF energy:  {data['scf_energy']:.10f} Eh ({state})")
+        lines.append(f"SCF energy:  {data['scf_energy']:.10f} Eh")
     s2 = data.get("spin_s2")
     if isinstance(s2, dict) and s2.get("actual") is not None:
         lines.append(f"<S**2>:      {s2['actual']:.4f} (ideal {s2.get('ideal')})")
@@ -96,6 +114,9 @@ def summary_lines(path, data):
             "Steps:       "
             + ", ".join(f"{n} {kind}" for kind, n in sorted(kinds.items()))
         )
+        if kinds.get("opt_cycle") and not data.get("is_scan"):
+            state = "converged" if _optimisation_converged(data) else "not converged"
+            lines.append(f"Optimised:   {state}")
     modes = [m for m in data.get("frequencies") or [] if m.get("freq")]
     if modes:
         imaginary = [m["freq"] for m in modes if m["freq"] < -IMAGINARY_FREQ_THRESHOLD]
@@ -175,7 +196,7 @@ def _parse_command(args):
     except OSError as exc:
         print(f"Error: cannot read {args.file}: {exc}", file=sys.stderr)
         return 1
-    if not data.get("version") and not data.get("atoms"):
+    if not _found_anything(data):
         print(
             f"Error: {args.file} does not look like {PROGRAM} output.", file=sys.stderr
         )
