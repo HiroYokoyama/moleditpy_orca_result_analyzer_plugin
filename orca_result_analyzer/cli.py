@@ -1,7 +1,8 @@
 """Command line: read an output file without a window and print what was found.
 
 ``moleditpy -r orca_result_analyzer parse FILE`` prints a summary, and
-``--json`` the parsed data that every dialog reads, for scripts and ``jq``.
+``--json`` the parsed data that every dialog reads, for scripts and ``jq``;
+``xyz FILE`` writes the final structure, and ``xyz --all`` every step.
 No QApplication is created.
 """
 
@@ -184,23 +185,117 @@ def _build_parser():
     parse.add_argument(
         "--indent", type=int, default=1, metavar="N", help="JSON indent (default 1)"
     )
+    xyz = commands.add_parser(
+        "xyz",
+        help="write the final structure, or every step, as XYZ",
+        description="Write the final structure as XYZ in Angstrom, or with --all "
+        "every step as a multi-frame XYZ: the points of a scan or IRC, otherwise "
+        "the optimisation cycles.",
+    )
+    xyz.add_argument("file", help=f"{PROGRAM} output file")
+    xyz.add_argument(
+        "--all",
+        action="store_true",
+        help="every scan or IRC point, or every optimisation cycle, one frame "
+        "each with its energy in the comment line",
+    )
+    xyz.add_argument(
+        "-o",
+        "--output",
+        metavar="PATH",
+        help="write to PATH instead of standard output",
+    )
     return parser
+
+
+def _load(path):
+    """Parse *path*, or report why not; returns (data, None) or (None, status)."""
+    try:
+        data = parse_file(path)
+    except OSError as exc:
+        print(f"Error: cannot read {path}: {exc}", file=sys.stderr)
+        return None, 1
+    if not _found_anything(data):
+        print(f"Error: {path} does not look like {PROGRAM} output.", file=sys.stderr)
+        return None, 1
+    return data, None
+
+
+def _write(args, text):
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text + "\n")
+    else:
+        sys.stdout.write(text + "\n")
+
+
+def xyz_frame(atoms, coords, comment):
+    """One XYZ frame; the comment is kept to a single line."""
+    lines = [str(len(atoms)), " ".join(comment.splitlines())]
+    lines += [
+        f"{symbol:<2} {x:15.8f} {y:15.8f} {z:15.8f}"
+        for symbol, (x, y, z) in zip(atoms, coords)
+    ]
+    return "\n".join(lines)
+
+
+def _step_comment(step):
+    if step.get("type") == "scan_step" and step.get("scan_step_id") is not None:
+        parts = [f"point {step['scan_step_id']}"]
+    else:
+        parts = [f"{step.get('type', 'step')} {step.get('step', '')}".strip()]
+    if step.get("energy") is not None:
+        parts.append(f"E = {step['energy']:.10f} Eh")
+    if step.get("scan_coord") is not None:
+        parts.append(f"coordinate = {step['scan_coord']}")
+    return "  ".join(parts)
+
+
+def trajectory_steps(data):
+    """The steps to write: a scan's or IRC's points, otherwise every cycle."""
+    steps = [
+        s for s in data.get("scan_steps") or [] if s.get("atoms") and s.get("coords")
+    ]
+    points = [s for s in steps if s.get("type") == "scan_step"]
+    return points or steps
+
+
+def _xyz_command(args):
+    data, status = _load(args.file)
+    if data is None:
+        return status
+    name = os.path.basename(args.file)
+    if args.all:
+        steps = trajectory_steps(data)
+        if not steps:
+            print(
+                f"Error: {name} has no optimisation, scan or IRC steps.",
+                file=sys.stderr,
+            )
+            return 1
+        frames = [
+            xyz_frame(s["atoms"], s["coords"], f"{name}  {_step_comment(s)}")
+            for s in steps
+        ]
+    else:
+        if not data.get("atoms") or not data.get("coords"):
+            print(f"Error: {name} has no structure.", file=sys.stderr)
+            return 1
+        comment = name
+        if data.get("scf_energy") is not None:
+            comment += f"  E = {data['scf_energy']:.10f} Eh"
+        frames = [xyz_frame(data["atoms"], data["coords"], comment)]
+    _write(args, "\n".join(frames))
+    return 0
 
 
 def _parse_command(args):
     if args.section and not args.json:
         print("Error: --section needs --json.", file=sys.stderr)
         return 2
-    try:
-        data = parse_file(args.file)
-    except OSError as exc:
-        print(f"Error: cannot read {args.file}: {exc}", file=sys.stderr)
-        return 1
-    if not _found_anything(data):
-        print(
-            f"Error: {args.file} does not look like {PROGRAM} output.", file=sys.stderr
-        )
-        return 1
+    data, status = _load(args.file)
+    if data is None:
+        return status
     if args.json:
         if args.section:
             missing = [name for name in args.section if name not in data]
@@ -215,11 +310,7 @@ def _parse_command(args):
         text = json.dumps(data, indent=args.indent, ensure_ascii=False, default=str)
     else:
         text = "\n".join(summary_lines(os.path.abspath(args.file), data))
-    if args.output:
-        with open(args.output, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(text + "\n")
-    else:
-        sys.stdout.write(text + "\n")
+    _write(args, text)
     return 0
 
 
@@ -229,5 +320,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.command == "parse":
         return _parse_command(args)
+    if args.command == "xyz":
+        return _xyz_command(args)
     parser.print_help()
     return 2
