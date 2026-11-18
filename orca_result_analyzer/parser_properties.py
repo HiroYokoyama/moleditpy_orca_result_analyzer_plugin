@@ -9,6 +9,11 @@ import logging
 AU_TO_DEBYE = 2.541746473
 
 
+def _split_atom_label(line):
+    """Split a table row, separating a fused label such as "Cl101" from 100 on."""
+    return re.sub(r"^\s*([A-Z][a-z]?)(\d+)(?=\s)", r"\1 \2", line).split()
+
+
 class _PropertyParsingMixin:
     """Dipole, charge, NBO, Mayer and energy-component parsing for OrcaParser."""
 
@@ -275,12 +280,14 @@ class _PropertyParsingMixin:
         if start == -1:
             return
         pattern = re.compile(
-            r"^\s*(\d+)\.\s+(\S+?)\s*\(\s*\d+\)\s+(.+?)\s{2,}(\d+\.\d+)\s+(-?\d+\.\d+)"
+            r"^\s*(\d+)\.\s+(\S+?)\s*\(\s*\d+\)\s*(.+?)\s{2,}(\d+\.\d+)\s+(-?\d+\.\d+)"
         )
         orbitals = []
-        for j in range(start + 1, min(start + 2000, len(self.lines))):
+        for j in range(start + 1, len(self.lines)):
             line = self.lines[j]
-            if "NBO analysis completed" in line:
+            if "NBO analysis completed" in line or (
+                orbitals and "Total Lewis" in line
+            ):
                 break
             m = pattern.match(line)
             if m:
@@ -394,7 +401,7 @@ class _PropertyParsingMixin:
         "total"} with electron counts; [] when no table was printed.
         """
         row_pattern = re.compile(
-            r"^\s*([A-Z][a-z]?)\s+(\d+)\s+(-?\d+\.\d+)\s+(\d+\.\d+)\s+"
+            r"^\s*([A-Z][a-z]?)\s*(\d+)\s+(-?\d+\.\d+)\s+(\d+\.\d+)\s+"
             r"(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s*$"
         )
         rows = []
@@ -407,7 +414,7 @@ class _PropertyParsingMixin:
             None,
         )
         if start is not None:
-            for line in self.lines[start : start + 60]:
+            for line in self.lines[start:]:
                 match = row_pattern.match(line)
                 if match:
                     rows.append(
@@ -421,8 +428,8 @@ class _PropertyParsingMixin:
                             "total": float(match.group(7)),
                         }
                     )
-                elif rows and "===" in line:
-                    break
+                elif rows:
+                    break  # the "====" rule under the last atom
         self.data["nbo_population"] = rows
 
     def parse_nbo_configurations(self):
@@ -448,8 +455,8 @@ class _PropertyParsingMixin:
             None,
         )
         if start is not None:
-            for line in self.lines[start + 1 : start + 80]:
-                match = re.match(r"^\s*([A-Z][a-z]?)\s+(\d+)\s+(\S.*)$", line)
+            for line in self.lines[start + 1 :]:
+                match = re.match(r"^\s*([A-Z][a-z]?)\s*(\d+)\s+(\S.*)$", line)
                 if match:
                     orbitals = {
                         label.lower(): float(occ)
@@ -482,7 +489,7 @@ class _PropertyParsingMixin:
         [] when no table was printed.
         """
         row_pattern = re.compile(
-            r"^\s*(\d+)\s+([A-Z][a-z]?)\s+(\d+)\s+(\S+)\s+"
+            r"^\s*(\d+)\s+([A-Z][a-z]?)\s*(\d+)\s+(\S+)\s+"
             r"(Cor|Val|Ryd)\(\s*([^)]+)\)\s+(\d+\.\d+)(?:\s+(-?\d+\.\d+))?\s*$"
         )
         rows = []
@@ -496,7 +503,7 @@ class _PropertyParsingMixin:
         )
         if start is not None:
             gap = 0
-            for line in self.lines[start + 1 : start + 5000]:
+            for line in self.lines[start + 1 :]:
                 if rows and "natural atomic orbital occupancies" in line.lower():
                     break  # the next (per-spin) NAO table begins
                 match = row_pattern.match(line)
@@ -552,7 +559,7 @@ class _PropertyParsingMixin:
             i = start
             while i < len(self.lines) and "====" not in self.lines[i]:
                 i += 1
-            for line in self.lines[i + 1 : i + 200]:
+            for line in self.lines[i + 1 :]:
                 match = row_pattern.match(line)
                 if not match:
                     if entries:
@@ -578,7 +585,7 @@ class _PropertyParsingMixin:
                         "atoms": [
                             (element, int(number))
                             for element, number in re.findall(
-                                r"([A-Z][a-z]?)\s+(\d+)", head.group(3)
+                                r"([A-Z][a-z]?)\s*(\d+)", head.group(3)
                             )
                         ],
                         "loc_theta": values[0],
@@ -630,7 +637,7 @@ class _PropertyParsingMixin:
             r"^\s*(\d+)\.\s*\(\s*[\d.]+\)\s*\S+?\s*\(\s*\d+\)\s*(.*)$"
         )
         pol_re = re.compile(
-            r"^\s*\(\s*([\d.]+)%\)\s+[-\d.]+\*?\s*([A-Za-z]+)\s+(\d+)\s+(.*)$"
+            r"^\s*\(\s*([\d.]+)%\)\s+[-\d.]+\*?\s*([A-Za-z]+)\s*(\d+)\s+(.*)$"
         )
 
         def _label(s_pct, p_pct, d_pct):
@@ -686,7 +693,7 @@ class _PropertyParsingMixin:
                 rest = hm.group(2)
                 comp = _extract(rest)
                 if comp is not None:
-                    am = re.match(r"\s*([A-Za-z]+)\s+(\d+)", rest)
+                    am = re.match(r"\s*([A-Za-z]+)\s*(\d+)", rest)
                     if am:
                         comp["atom_sym"] = am.group(1)
                         comp["atom_idx"] = int(am.group(2)) - 1
@@ -947,7 +954,7 @@ class _PropertyParsingMixin:
                         curr += 1
                         continue
 
-                    parts = line.split()
+                    parts = _split_atom_label(line)
                     # C  1   -0.49495      1.99999     4.48487    0.01009     6.49495
                     if len(parts) >= 7:
                         try:
@@ -1006,7 +1013,7 @@ class _PropertyParsingMixin:
                         curr += 1
                         continue
 
-                    parts = line.split()
+                    parts = _split_atom_label(line)
                     if len(parts) >= 3:
                         try:
                             # Simple format: Atom No Charge ...
