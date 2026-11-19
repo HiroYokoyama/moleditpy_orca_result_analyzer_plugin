@@ -122,6 +122,45 @@ Hand the open output straight to the **ORCA NICS Analyzer** plugin via **Analysi
 - **Keyboard Shortcuts**: `Ctrl+O` (Open File), `Shift+Ctrl+O` (Select from Directory), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
 - **Persistence**: Remembers your presets, NMR references, and explicitly saved merged peaks across sessions.
 
+## Command line
+
+The analyzer also runs without a window, so a
+script, a batch job or a remote shell can read an output file directly. No
+editor and no Qt window is opened.
+
+```bash
+moleditpy -r orca_result_analyzer parse job.out                 # summary
+moleditpy -r orca_result_analyzer parse job.out --json          # every parsed value, as JSON
+moleditpy -r orca_result_analyzer parse job.out --json -s thermal -s frequencies
+moleditpy -r orca_result_analyzer xyz job.out -o final.xyz      # final structure
+moleditpy -r orca_result_analyzer xyz job.out --all -o path.xyz # every step, one frame each
+```
+
+`moleditpy -r` needs MoleditPy 5.3.0 or later. `-r` is short for
+`--run-plugin`; `moleditpy --list-plugins` shows the installed
+plugins that can be run this way. `python -m` works just as well, from the
+folder that contains the `orca_result_analyzer` folder (your plugins folder, or a checkout of
+this repository), with the Python MoleditPy is installed in, and needs no
+MoleditPy launcher:
+
+```bash
+python -m orca_result_analyzer parse job.out
+```
+
+`FILE` is an ORCA output file (`.out`).
+
+| Command | What it does |
+|---|---|
+| `parse FILE` | Prints a summary: program version, termination, formula, charge and multiplicity, SCF energy, <S**2>, HOMO/LUMO gap, dipole, steps and whether an optimisation converged, frequencies with the number of imaginary modes, Gibbs energy, excited states, NMR, charges and NBO, each only when the file has it. The last line lists the sections present. |
+| `parse FILE --json` | Prints the parsed data the analysis windows read, as JSON. `-s NAME` (repeatable) keeps only those top-level sections; `--indent N` sets the indent. |
+| `xyz FILE` | Writes the final structure as XYZ in Angstrom, with the SCF energy in the comment line. |
+| `xyz FILE --all` | Writes a multi-frame XYZ: the points of a scan or IRC, otherwise every optimisation cycle, each with its energy in the comment line. |
+
+Every command takes `-o PATH` to write a file instead of standard output.
+The exit status is 0 on success, 1 when the file cannot be read, is not ORCA
+output or has nothing to write, and 2 for a usage error such as an unknown
+section.
+
 ## Installation
 Download from [Plugin Explorer](https://hiroyokoyama.github.io/moleditpy-plugins/explorer/?q=ORCA+Result+Analyzer).  
 
