@@ -25,9 +25,25 @@ class _FakeItem:
 
     def __init__(self, text=""):
         self._text = text
+        self._row = self._col = 0
 
     def text(self):
         return self._text
+
+    def row(self):
+        return self._row
+
+    def column(self):
+        return self._col
+
+    def font(self):
+        return MagicMock()
+
+    def setFont(self, _font):
+        pass
+
+    def setTextAlignment(self, _align):
+        pass
 
 
 # Load thermal_analysis in isolation (Qt stubs swapped in then restored, leaving
@@ -58,6 +74,16 @@ class _FakeTable:
     def __init__(self):
         self._rows = 0
         self._cells = {}
+        self.selected = []
+
+    def clearSpans(self):
+        pass
+
+    def setSpan(self, *_args):
+        pass
+
+    def selectedItems(self):
+        return [self._cells[rc] for rc in self.selected]
 
     def setRowCount(self, n):
         self._rows = n
@@ -66,10 +92,17 @@ class _FakeTable:
         return self._rows
 
     def setItem(self, r, c, item):
+        item._row, item._col = r, c
         self._cells[(r, c)] = item
 
     def item(self, r, c):
         return self._cells.get((r, c))
+
+    def units(self):
+        return {
+            self._cells[(r, 0)].text(): self._cells[(r, 2)].text()
+            for r in range(self._rows)
+        }
 
     def rows_as_pairs(self):
         return [
@@ -96,8 +129,11 @@ class TestUpdateTable(unittest.TestCase):
         dlg = _bare_dialog({"electronic_energy": -76.12345678, "temperature": 298.15})
         dlg.update_table()
         pairs = dict(dlg.table.rows_as_pairs())
-        self.assertEqual(pairs["Electronic Energy (SP)"], "-76.12345678 Eh")
-        self.assertEqual(pairs["Temperature (K)"], "298.15 K")
+        self.assertEqual(pairs["Electronic Energy (SP)"], "-76.12345678")
+        self.assertEqual(pairs["Temperature"], "298.15")
+        units = dlg.table.units()
+        self.assertEqual(units["Electronic Energy (SP)"], "Eh")
+        self.assertEqual(units["Temperature"], "K")
 
     def test_missing_values_render_as_dash(self):
         dlg = _bare_dialog({})  # nothing provided
@@ -107,17 +143,19 @@ class TestUpdateTable(unittest.TestCase):
         self.assertEqual(pairs["Zero Point Energy"], "-")
         self.assertEqual(pairs["Gibbs Free Energy (G)"], "-")
 
-    def test_float_value_gets_eh_suffix(self):
+    def test_value_and_unit_are_separate_cells(self):
         dlg = _bare_dialog({"gibbs": -76.5})
         dlg.update_table()
         pairs = dict(dlg.table.rows_as_pairs())
-        self.assertEqual(pairs["Gibbs Free Energy (G)"], "-76.50000000 Eh")
+        self.assertEqual(pairs["Gibbs Free Energy (G)"], "-76.50000000")
+        self.assertEqual(dlg.table.units()["Gibbs Free Energy (G)"], "Eh")
 
     def test_imaginary_freq_count_included_when_present(self):
         dlg = _bare_dialog({"imaginary_freq_count": 2})
         dlg.update_table()
         pairs = dict(dlg.table.rows_as_pairs())
         self.assertEqual(pairs["Imaginary Frequencies"], "2")
+        self.assertEqual(dlg.table.units()["Imaginary Frequencies"], "")
 
     def test_imaginary_freq_absent_when_none(self):
         dlg = _bare_dialog({})
@@ -129,16 +167,16 @@ class TestUpdateTable(unittest.TestCase):
         dlg = _bare_dialog({"corr_vib": -0.001}, show_details=False)
         dlg.update_table()
         labels = [p for p, _ in dlg.table.rows_as_pairs()]
-        self.assertNotIn("--- Detailed Corrections ---", labels)
+        self.assertNotIn("Detailed Corrections", labels)
         self.assertNotIn("Thermal Vib Correction", labels)
 
     def test_details_on_shows_breakdown(self):
         dlg = _bare_dialog({"corr_vib": -0.001, "s_vib": 0.02}, show_details=True)
         dlg.update_table()
         labels = [p for p, _ in dlg.table.rows_as_pairs()]
-        self.assertIn("--- Detailed Corrections ---", labels)
+        self.assertIn("Detailed Corrections", labels)
         self.assertIn("Thermal Vib Correction", labels)
-        self.assertIn("--- Entropy Breakdown ---", labels)
+        self.assertIn("Entropy Breakdown", labels)
 
     def test_row_count_matches_items(self):
         dlg = _bare_dialog({"electronic_energy": -1.0})
@@ -152,9 +190,7 @@ class TestUpdateTable(unittest.TestCase):
 
 
 class TestCopyTable(unittest.TestCase):
-    def test_copy_builds_tab_separated_text(self):
-        dlg = _bare_dialog({"gibbs": -76.5, "electronic_energy": -76.0})
-        dlg.update_table()
+    def _copy(self, dlg, method="copy_table"):
         captured = {}
         clip = MagicMock()
         clip.setText.side_effect = lambda t: captured.setdefault("text", t)
@@ -162,13 +198,45 @@ class TestCopyTable(unittest.TestCase):
         T.QApplication = MagicMock()
         T.QApplication.clipboard.return_value = clip
         try:
-            dlg.copy_table()
+            getattr(dlg, method)()
         finally:
             T.QApplication = saved_app
-        text = captured["text"]
-        self.assertIn("Gibbs Free Energy (G)\t-76.50000000 Eh\n", text)
-        # every logical row becomes one line
-        self.assertEqual(text.count("\n"), dlg.table.rowCount())
+        return captured.get("text")
+
+    def test_copy_without_selection_copies_the_whole_table(self):
+        dlg = _bare_dialog({"gibbs": -76.5, "electronic_energy": -76.0})
+        dlg.update_table()
+        text = self._copy(dlg)
+        self.assertTrue(text.startswith("Property\tValue\tUnit\n"))
+        self.assertIn("Gibbs Free Energy (G)\t-76.50000000\tEh\n", text)
+        # header plus every logical row, one line each
+        self.assertEqual(text.count("\n"), dlg.table.rowCount() + 1)
+
+    def test_single_selected_cell_still_copies_the_whole_table(self):
+        dlg = _bare_dialog({"gibbs": -76.5})
+        dlg.update_table()
+        dlg.table.selected = [(0, 1)]
+        self.assertTrue(self._copy(dlg).startswith("Property\tValue\tUnit\n"))
+
+    def test_multi_cell_selection_copies_only_those_cells(self):
+        dlg = _bare_dialog({"electronic_energy": -76.0, "temperature": 298.15})
+        dlg.update_table()
+        # Values of the first two rows, selected out of order.
+        dlg.table.selected = [(1, 1), (0, 1)]
+        self.assertEqual(self._copy(dlg), "-76.00000000\n298.15\n")
+
+    def test_selection_keeps_rows_and_columns_as_a_grid(self):
+        dlg = _bare_dialog({"electronic_energy": -76.0, "temperature": 298.15})
+        dlg.update_table()
+        dlg.table.selected = [(0, 1), (0, 2), (1, 1), (1, 2)]
+        self.assertEqual(
+            self._copy(dlg, "copy_selection"), "-76.00000000\tEh\n298.15\tK\n"
+        )
+
+    def test_copy_selection_with_nothing_selected_leaves_the_clipboard(self):
+        dlg = _bare_dialog({"gibbs": -76.5})
+        dlg.update_table()
+        self.assertIsNone(self._copy(dlg, "copy_selection"))
 
 
 # ---------------------------------------------------------------------------
@@ -194,9 +262,9 @@ class TestExportCsv(unittest.TestCase):
 
             with open(out, newline="", encoding="utf-8") as f:
                 rows = list(csv.reader(f))
-        self.assertEqual(rows[0], ["Property", "Value"])
-        flat = {r[0]: r[1] for r in rows[1:] if len(r) == 2}
-        self.assertEqual(flat["Gibbs Free Energy (G)"], "-76.50000000 Eh")
+        self.assertEqual(rows[0], ["Property", "Value", "Unit"])
+        flat = {r[0]: r[1:] for r in rows[1:]}
+        self.assertEqual(flat["Gibbs Free Energy (G)"], ["-76.50000000", "Eh"])
 
     def test_export_cancelled_writes_nothing(self):
         dlg = _bare_dialog({"gibbs": -76.5})
