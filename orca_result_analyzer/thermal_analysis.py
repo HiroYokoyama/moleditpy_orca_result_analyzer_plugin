@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QApplication,
     QCheckBox,
+    QComboBox,
+    QLabel,
     QAbstractItemView,
     QFileDialog,
     QMessageBox,
@@ -25,10 +27,23 @@ from .utils import notify
 HEADERS = ["Property", "Value", "Unit"]
 _SECTION = "section"
 
+#: Energy units offered for display: hartree multiplier and decimals shown.
+#: Factors are CODATA 2018.
+ENERGY_UNITS = {
+    "Eh": (1.0, 8),
+    "kcal/mol": (627.5094740631, 4),
+    "kJ/mol": (2625.4996394799, 4),
+    "eV": (27.211386245988, 6),
+}
+DEFAULT_UNIT = "Eh"
 
-def _energy(name, value):
-    """A row for an energy in hartree, '-' when the output had none."""
-    return (name, "-" if value is None else f"{value:.8f}", "Eh")
+
+def _energy(name, value, unit=DEFAULT_UNIT):
+    """A row for an energy given in hartree, shown in ``unit``; '-' when absent."""
+    if value is None:
+        return (name, "-", unit)
+    factor, decimals = ENERGY_UNITS[unit]
+    return (name, f"{value * factor:.{decimals}f}", unit)
 
 
 def selection_rows(table):
@@ -60,16 +75,26 @@ class ThermalTableDialog(QDialog):
     def __init__(self, parent, data):
         super().__init__(parent)
         self.setWindowTitle("Thermochemistry")
-        self.resize(560, 480)
+        self.resize(480, 480)
         self.data = data
         self.settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
 
         layout = QVBoxLayout(self)
 
+        top_row = QHBoxLayout()
         self.chk_details = QCheckBox("Show Detailed Values")
         self.chk_details.setChecked(False)
-        self.chk_details.stateChanged.connect(self.update_table)
-        layout.addWidget(self.chk_details)
+        self.chk_details.stateChanged.connect(lambda: self.update_table())
+        top_row.addWidget(self.chk_details)
+        top_row.addStretch()
+        top_row.addWidget(QLabel("Energy unit:"))
+        self.cmb_unit = QComboBox()
+        self.cmb_unit.addItems(list(ENERGY_UNITS))
+        self.cmb_unit.setCurrentText(DEFAULT_UNIT)
+        self.cmb_unit.setToolTip("Unit for every energy row; temperature stays in K.")
+        self.cmb_unit.currentTextChanged.connect(lambda: self.update_table())
+        top_row.addWidget(self.cmb_unit)
+        layout.addLayout(top_row)
 
         self.table = _ThermalTable(self.copy_selection)
         self.table.setColumnCount(len(HEADERS))
@@ -80,8 +105,8 @@ class ThermalTableDialog(QDialog):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setHighlightSections(False)
         self.table.setToolTip(
@@ -131,12 +156,14 @@ class ThermalTableDialog(QDialog):
         event.accept()
 
     def load_settings(self):
-        """Restore the saved 'show detailed values' preference."""
+        """Restore the saved 'show detailed values' and energy-unit preferences."""
         if os.path.exists(self.settings_file):
             settings = load_section(self.settings_file, "thermal_settings")
             try:
                 if "show_details" in settings:
                     self.chk_details.setChecked(bool(settings["show_details"]))
+                if settings.get("energy_unit") in ENERGY_UNITS:
+                    self.cmb_unit.setCurrentText(settings["energy_unit"])
 
             except (
                 RuntimeError,
@@ -148,23 +175,32 @@ class ThermalTableDialog(QDialog):
                 logging.warning("Error loading thermal settings: %s", e)
 
     def save_settings(self):
-        """Persist the 'show detailed values' preference."""
-        thermal_settings = {"show_details": self.chk_details.isChecked()}
+        """Persist the 'show detailed values' and energy-unit preferences."""
+        thermal_settings = {
+            "show_details": self.chk_details.isChecked(),
+            "energy_unit": self.energy_unit(),
+        }
         save_section(self.settings_file, "thermal_settings", thermal_settings)
+
+    def energy_unit(self):
+        """The energy unit picked in the combo box, falling back to hartree."""
+        unit = self.cmb_unit.currentText()
+        return unit if unit in ENERGY_UNITS else DEFAULT_UNIT
 
     def build_rows(self):
         """The table rows as (property, value, unit) or (title, _SECTION) tuples."""
         data = self.data
+        unit = self.energy_unit()
         rows = []
         e_el = data.get("electronic_energy")
         if e_el is not None:
-            rows.append(_energy("Electronic Energy (SP)", e_el))
+            rows.append(_energy("Electronic Energy (SP)", e_el, unit))
         temp = data.get("temperature")
         if temp is not None:
             rows.append(("Temperature", f"{temp:.2f}", "K"))
 
         rows.extend(
-            _energy(name, data.get(key))
+            _energy(name, data.get(key), unit)
             for name, key in (
                 ("Zero Point Energy", "zpe"),
                 ("Total Thermal Energy (U)", "thermal_energy"),
@@ -183,7 +219,7 @@ class ThermalTableDialog(QDialog):
         if self.chk_details.isChecked():
             rows.append(("Detailed Corrections", _SECTION))
             rows.extend(
-                _energy(name, data.get(key))
+                _energy(name, data.get(key), unit)
                 for name, key in (
                     ("Thermal Vib Correction", "corr_vib"),
                     ("Thermal Rot Correction", "corr_rot"),
@@ -195,7 +231,7 @@ class ThermalTableDialog(QDialog):
             )
             rows.append(("Entropy Breakdown", _SECTION))
             rows.extend(
-                _energy(name, data.get(key))
+                _energy(name, data.get(key), unit)
                 for name, key in (
                     ("Electronic Entropy (T*S_el)", "s_el"),
                     ("Vibrational Entropy (T*S_vib)", "s_vib"),

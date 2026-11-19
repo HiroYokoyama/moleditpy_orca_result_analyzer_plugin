@@ -70,6 +70,17 @@ class _FakeCheck:
         self._checked = bool(v)
 
 
+class _FakeCombo:
+    def __init__(self, text="Eh"):
+        self._text = text
+
+    def currentText(self):
+        return self._text
+
+    def setCurrentText(self, text):
+        self._text = text
+
+
 class _FakeTable:
     def __init__(self):
         self._rows = 0
@@ -111,10 +122,11 @@ class _FakeTable:
         ]
 
 
-def _bare_dialog(data, show_details=False):
+def _bare_dialog(data, show_details=False, unit="Eh"):
     inst = T.ThermalTableDialog.__new__(T.ThermalTableDialog)
     inst.data = data
     inst.chk_details = _FakeCheck(show_details)
+    inst.cmb_unit = _FakeCombo(unit)
     inst.table = _FakeTable()
     return inst
 
@@ -182,6 +194,77 @@ class TestUpdateTable(unittest.TestCase):
         dlg = _bare_dialog({"electronic_energy": -1.0})
         dlg.update_table()
         self.assertEqual(dlg.table.rowCount(), len(dlg.table.rows_as_pairs()))
+
+
+# ---------------------------------------------------------------------------
+# energy unit conversion
+# ---------------------------------------------------------------------------
+
+
+class TestEnergyUnits(unittest.TestCase):
+    def test_every_energy_row_follows_the_chosen_unit(self):
+        data = {"gibbs": -1.0, "zpe": 0.01, "corr_vib": 0.001, "s_vib": 0.002}
+        dlg = _bare_dialog(data, show_details=True, unit="kcal/mol")
+        dlg.update_table()
+        pairs = dict(dlg.table.rows_as_pairs())
+        units = dlg.table.units()
+        self.assertEqual(pairs["Gibbs Free Energy (G)"], "-627.5095")
+        self.assertEqual(pairs["Zero Point Energy"], "6.2751")
+        self.assertEqual(pairs["Thermal Vib Correction"], "0.6275")
+        self.assertEqual(pairs["Vibrational Entropy (T*S_vib)"], "1.2550")
+        self.assertEqual(units["Gibbs Free Energy (G)"], "kcal/mol")
+        self.assertEqual(units["Vibrational Entropy (T*S_vib)"], "kcal/mol")
+
+    def test_kj_and_ev(self):
+        for unit, expected in (("kJ/mol", "2625.4996"), ("eV", "27.211386")):
+            dlg = _bare_dialog({"gibbs": 1.0}, unit=unit)
+            dlg.update_table()
+            self.assertEqual(
+                dict(dlg.table.rows_as_pairs())["Gibbs Free Energy (G)"], expected
+            )
+
+    def test_temperature_and_counts_are_not_converted(self):
+        data = {"temperature": 298.15, "imaginary_freq_count": 1}
+        dlg = _bare_dialog(data, unit="eV")
+        dlg.update_table()
+        pairs = dict(dlg.table.rows_as_pairs())
+        self.assertEqual(pairs["Temperature"], "298.15")
+        self.assertEqual(dlg.table.units()["Temperature"], "K")
+        self.assertEqual(pairs["Imaginary Frequencies"], "1")
+
+    def test_missing_value_keeps_the_dash_with_the_unit(self):
+        dlg = _bare_dialog({}, unit="kJ/mol")
+        dlg.update_table()
+        self.assertEqual(dict(dlg.table.rows_as_pairs())["Zero Point Energy"], "-")
+        self.assertEqual(dlg.table.units()["Zero Point Energy"], "kJ/mol")
+
+    def test_unknown_unit_falls_back_to_hartree(self):
+        dlg = _bare_dialog({"gibbs": -1.5}, unit="bogus")
+        dlg.update_table()
+        self.assertEqual(
+            dict(dlg.table.rows_as_pairs())["Gibbs Free Energy (G)"], "-1.50000000"
+        )
+
+    def test_unit_round_trips_through_settings(self):
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            dlg = _bare_dialog({}, unit="kcal/mol")
+            dlg.settings_file = settings
+            dlg.save_settings()
+            other = _bare_dialog({})
+            other.settings_file = settings
+            other.load_settings()
+        self.assertEqual(other.cmb_unit.currentText(), "kcal/mol")
+
+    def test_an_unknown_saved_unit_is_ignored(self):
+        with tempfile.TemporaryDirectory() as d:
+            settings = os.path.join(d, "settings.json")
+            with open(settings, "w", encoding="utf-8") as f:
+                json.dump({"thermal_settings": {"energy_unit": "furlongs"}}, f)
+            dlg = _bare_dialog({})
+            dlg.settings_file = settings
+            dlg.load_settings()
+        self.assertEqual(dlg.cmb_unit.currentText(), "Eh")
 
 
 # ---------------------------------------------------------------------------
