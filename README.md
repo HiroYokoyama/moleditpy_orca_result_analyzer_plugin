@@ -8,11 +8,15 @@
 [![GitHub tag](https://img.shields.io/github/v/tag/HiroYokoyama/moleditpy_orca_result_analyzer_plugin?label=version)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/tags)
 [![GitHub Downloads](https://img.shields.io/github/downloads/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/total)](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin/releases)
 
-A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA quantum chemistry calculations.
+A plugin for MoleditPy that reads ORCA output (`.out`) and presents it as analysis
+windows: orbitals, vibrational modes, spectra, charges, bonding and optimization
+paths.
 
-Repo: [https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
+This plugin is an independent project and is not affiliated with or endorsed by the
+ORCA developers or FACCTs. You need your own copy of ORCA to produce the files it
+reads.
 
-![MoleditPy with the ORCA Result Analyzer open on a benzene optimization](img/main.png)
+## Screenshots
 
 The analyzer works beside the MoleditPy window rather than inside a viewer of its
 own. Pick an orbital, a normal mode or an optimization step, and MoleditPy's 3D view
@@ -20,119 +24,93 @@ follows: orbitals as isosurfaces, modes as arrows and animation, steps as geomet
 
 ![Benzene HOMO, evaluated from the MO coefficients in the output and drawn in MoleditPy](img/mo.gif)
 
-All screenshots are taken with MoleditPy 5.3.2 from the jobs in `tests/sample_outputs`.
+| Normal mode animation | Optimization playback |
+|---|---|
+| ![Acetone normal mode animated in the 3D view](img/freq.gif) | ![Acetone optimization played back step by step](img/opt.gif) |
+
+**Main window**: one button per analysis, enabled when the output holds the data.
+
+![MoleditPy with the ORCA Result Analyzer open on a benzene optimization](img/main.png)
+
+| Molecular orbitals | Compare MOs |
+|---|---|
+| ![Benzene HOMO](img/mo.png) | ![Benzene HOMO as a surface and LUMO as a wireframe in one view](img/mo_compare.png) |
+
+| Frequencies | Atomic charges |
+|---|---|
+| ![Acetone IR-active mode with displacement vectors](img/freq.png) | ![Acetone Mulliken charges as atom colors and labels](img/charge.png) |
+
+| Optimization | TD-DFT |
+|---|---|
+| ![Acetone optimization energy profile](img/opt.png) | ![Benzene absorption spectrum](img/tddft.png) |
+
+| NMR | Convergence thresholds |
+|---|---|
+| ![Benzene 1H stick spectrum with the protons highlighted](img/nmr.png) | ![Gradient and step criteria across the optimization](img/conv_threshold.png) |
+
+All taken with MoleditPy 5.3.2 from the jobs in `tests/sample_outputs`, except the
+convergence-threshold graph.
 
 ## Features
 
-### 1. SCF Trace
-Real-time convergence visualization for SCF energy cycles.
-- **Concatenated View**: View a single continuous plot of all SCF cycles throughout the calculation.
-- **Interactive Tools**: Full zoom, pan, and save support via an integrated Matplotlib toolbar.
+- **SCF trace**: energy against iteration, all SCF cycles of the job as one continuous plot.
+- **Molecular orbitals**: energy levels with HOMO/LUMO marked, and 3D isosurfaces with
+  s to g shells, smooth shading and saved color presets. **Compare MOs** shows up to
+  four orbitals in one view, each with its own colors, isovalue, opacity and style,
+  and generates missing cubes on demand; **Sync Iso** puts every slot on Orbital 1's
+  contour level.
+- **Optimization and scan**: energy against step or scanned coordinate, absolute or
+  relative, in kJ/mol, kcal/mol, eV or Eh, with an optional log scale. Click a point
+  to show that geometry; play the path and export it as a GIF.
+- **Forces**: gradient vectors for every step, with auto scaling, and RMS/MAX gradient
+  and step against ORCA's criteria. **Shift+Click** on Forces opens the convergence
+  threshold graph directly.
+- **Atomic charges**: Mulliken, Loewdin, Hirshfeld, Mayer, CHELPG, MBIS, RESP and NBO,
+  shown as atom colors and labels in the 3D view.
+- **Dipole moment** as a vector on the structure.
+- **Frequencies**: normal modes with IR intensities and Raman activities, animated with
+  displacement vectors; stick and broadened IR/Raman spectra; GIF export.
+- **Thermochemistry**: electronic energy, ZPE, enthalpy and Gibbs energy, with optional
+  vibrational, rotational and translational contributions, in Eh, kcal/mol, kJ/mol or eV.
+- **TD-DFT**: excited states with simulated absorption and CD spectra.
+- **NMR**: shieldings as stick spectra per nucleus against TMS, CDCl3, DMSO-d6 or custom
+  references, J-coupling multiplets when ORCA prints the couplings (needs `nmrsim`),
+  merging of equivalent atoms, and two-way highlighting between peaks and atoms.
+- **Bond analysis**: Mayer bond orders, NBO orbitals with hybridization, and E(2)
+  donor-acceptor energies; selecting a row highlights its atoms.
+- **Post-HF energies and properties**: reference, MP2/CCSD correlation and (T) energies,
+  <S**2>, dispersion corrections.
+- **NICS** (optional): **Analysis > NICS Analysis...** passes the open file to the
+  ORCA NICS Analyzer plugin when it is installed.
 
-### 2. MO Analysis
-- **Levels**: View orbital energies and occupancy with HOMO/LUMO identification.
-- **Visualization**: Generate 3D Cubes (isosurfaces) with **Smooth Shading** and adjustable opacity.
-- **Presets**: Save and manage visualization presets (colors, isovalues, styles).
-- **Compare MOs**: Show up to four orbitals at once in a separate window, each with
-  its own lobe colors, isovalue, opacity and style. Opens on the orbitals selected
-  in the table — or on HOMO, LUMO, LUMO+1 and HOMO-1 when nothing is selected —
-  and generates any missing cubes on demand. **Sync Iso** puts every slot on
-  Orbital 1's contour level so the shapes are comparable. Also available from
-  the orbital table's right-click menu.
-- **Advanced Support**: Successfully handles S, P, D, F, and G shells (L=4).
-- **Feedback**: Integrated warning system identifies missing ORCA output keywords required for cube generation.
+Open a file through **File > Open**, by dropping it on MoleditPy or the analyzer
+window, or from **Extensions > ORCA Result Analyzer**. Dropping a folder opens a
+picker of the outputs in it. All analysis windows are modeless, tables copy with
+`Ctrl+C`, and presets, NMR references and saved merges are remembered.
+Shortcuts: `Ctrl+O` open, `Shift+Ctrl+O` select from directory, `Ctrl+R` reload,
+`Ctrl+W` close.
 
-![MO Analysis: benzene HOMO](img/mo.png)
+## Keywords to request from ORCA
 
-![Compare Molecular Orbitals](img/mo_compare.png)
+Geometries and energies need nothing extra. Orbitals in 3D need the basis set and
+MO coefficients:
 
-### 3. Optimization / Scan
-Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
-- **Interactive Graph**: Plot Energy vs. Step. Click points to update the 3D structure.
-- **Display Modes**: Toggle between **Absolute** and **Relative** energy (kJ/mol, kcal/mol, eV, Eh).
-- **Log Scale**: Supports log-scale visualization for relative energy changes.
-- **Animation**: Play/Pause trajectory animations with adjustable FPS.
-- **Export**: Save plots as images or export the full 3D animation as high-quality **GIFs**.
+```text
+%output
+  Print[P_Basis] 2  # Required for Basis Set parsing
+  Print[P_Mos] 1    # Ensure MO coefficients are printed
+end
+```
 
-![Acetone optimization played back step by step](img/opt.gif)
+J-coupling multiplets in NMR need the couplings:
 
-![Optimization energy profile](img/opt.png)
+```text
+! NMR
 
-### 4. Forces
-Analyze structural forces for the current structure or the entire trajectory.
-- **Historical Gradients**: Capture and display force vectors for **every** step of an optimization or scan.
-- **Visualization Controls**: **Auto Scale** feature automatically optimizes vector size for visibility, especially for small gradients.
-- **Step-by-Step Navigation**: Precise control with `<` and `>` buttons or the trajectory slider.
-- **Convergence Tracking**: Multi-line display of **RMS/MAX Gradient** and **RMS/MAX Step**, color-coded (**Green for YES**, **Red for NO**).
-- **Modeless Threshold Graph**: View a non-blocking convergence threshold plot across all optimization steps. The graph features color-matched Y-axes for each metric and easy dropdown metric selection. (Shortcut: **Shift+Click** the "Forces" button in the main GUI to open this graph directly, bypassing the force viewer).
-- **Data Table**: Full breakdown of gradients, force components, and magnitudes.
-
-![threshold](img/conv_threshold.png)
-
-### 5. Atomic Charges
-- **Populations**: Mulliken, Loewdin, Hirshfeld, and **NBO** populations (if available).
-- **3D Coloring**: Color atoms in the 3D viewer based on charge value or population type.
-
-![Acetone Mulliken charges as atom colors and labels](img/charge.png)
-
-### 6. Dipole Moment
-- **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
-
-### 7. Frequencies
-Visualize vibrational modes and spectra.
-- **IR/Raman**: Stick and broadened spectra plots with interactive peak labels.
-- **Visualization**: Animated vibrational modes with vector arrows.
-
-![Acetone normal mode animated in the 3D view](img/freq.gif)
-
-![Frequencies with displacement vectors](img/freq.png)
-
-### 8. Thermochemistry
-Detailed analysis of thermodynamic properties based on frequency calculations.
-- **Broad Summary**: Electronic Energy, ZPE, Enthalpy (H), Gibbs Free Energy (G).
-- **Detailed Corrections**: Optional breakdown of **vibrational, rotational, and translational** contributions to energy and entropy.
-
-### 9. TDDFT
-Analyze electronic excitations and absorption spectra.
-- **Spectra**: **Absorption** and **CD** (Circular Dichroism) spectra with Gaussian broadening.
-- **Controls**: Adjustable broadening (Sigma) and peak-stick overlays.
-
-### 10. NMR
-Advanced NMR chemical shielding validation and visualization.
-- **Stick Spectrum**: Nucleus-specific stick spectra (1H, 13C, etc.) with experimental reference standards (TMS, CDCl3, DMSO-d6, etc.).
-- **Multiplet Simulation**: Realistic J-coupling splitting patterns and first-order multiplicity calculations with adjustable Lorentzian line-widths.
-- **Custom References**: Add and manage custom reference standards (delta_ref and sigma_ref).
-- **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks. Merges are saved explicitly via the **Save Merges** button (you are prompted to save or discard unsaved merges when closing the dialog).
-- **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels can optionally show the chemical shift ("Show shift values" checkbox, off by default); merged atoms show both their original and merged values (δ orig → merged).
-
-![Benzene 1H stick spectrum with the protons highlighted](img/nmr.png)
-
-### 11. Bond Analysis
-Comprehensive bonding and orbital analysis:
-- **Mayer Bond Orders**: View and inspect parsed Mayer bond-order matrix values in a clean tabular view.
-- **NBO Orbitals & Hybridization**: Full breakdown of Natural Bond Orbitals (NBO) list with hybridization composition (%s / %p / %d / %f per atom). Double-clicking an entry displays the raw NBO details.
-- **E(2) Perturbation**: Tabulate donor-acceptor second-order perturbation energy \(E^{(2)}\) interaction values.
-- **3D Viewer Integration**: Selecting rows in any bond analysis table automatically highlights the involved atom(s) in the 3D viewport.
-
-### 12. Post-HF Energies & Properties
-- **Post-HF Energy Components**: Separate panel displaying Reference Energy, Correlation Energy (MP2, CCSD), and Triples Correction (CCSD(T)) components.
-- **Properties**: Parse and display physical parameters such as spin contamination expectation values (\(\langle S^2 \rangle\)) and dispersion corrections.
-
-### 13. NICS (optional)
-Hand the open output straight to the **ORCA NICS Analyzer** plugin via **Analysis > NICS Analysis...**.
-- **Only when installed**: the menu entry appears only while that plugin is loaded, and hides again when it is not.
-- **File hand-off**: the file already open in the analyzer is passed over, so no second file dialog is needed.
-
-## Interface & Usability
-- **MoleditPy v4 Ready**: Fully integrated with the new `PluginContext` architecture for stable window management and safe main-window interaction.
-- **Standalone Launch**: Open the analyzer at any time via **Extensions > ORCA Result Analyzer** without selecting a file first.
-- **Drag-and-Drop**: Drag a `.out` file directly onto the analyzer window to open it, or drag a folder to open the "Select from Directory" picker.
-- **Logical Workflow**: Buttons grouped by task: Electronic -> Geometry -> Properties -> Spectroscopy.
-- **Modeless Design**: All analysis windows are modeless, allowing side-by-side comparison and 3D viewer interaction.
-- **Copyable Tables**: Support selecting and copying data (via `Ctrl+C`) from analysis tables to external spreadsheet editors.
-- **Interactive Highlighting**: Highlight atoms in the 3D viewer (with VDW scaling) when selecting rows in the Properties or Bond Analysis tables.
-- **Keyboard Shortcuts**: `Ctrl+O` (Open File), `Shift+Ctrl+O` (Select from Directory), `Ctrl+R` (Reload), `Ctrl+W` (Close Window).
-- **Persistence**: Remembers your presets, NMR references, and explicitly saved merged peaks across sessions.
+%eprnmr
+  NUCLEI = ALL H {SHIFT, SSALL} # Required for J-coupling (nmrsim)
+end
+```
 
 ## Command line
 
@@ -209,30 +187,6 @@ The test fixtures in `tests/sample_outputs/` are ORCA quantum chemistry output f
 ORCA is proprietary software distributed free for academic use under its own license. These output files are included solely as test fixtures for the parser. They are **excluded from this project's LGPL-3.0-or-later license** — they are not source code of this project and carry no additional redistribution grant beyond what the general scientific community norm considers acceptable for test data.
 
 If you need to regenerate these files, you will need your own ORCA installation.
-
-## Required ORCA Keywords
-
-**For MO Cube Generation:**
-
-*Note: Standard output is usually sufficient for Geometry and Energies, but Basis Set information is strictly required for generating cubes.*
-
-```text
-%output
-  Print[P_Basis] 2  # Required for Basis Set parsing
-  Print[P_Mos] 1    # Ensure MO coefficients are printed
-end
-
-```
-
-**For NMR Simulation (J-Coupling):**
-
-```text
-! NMR
-
-%eprnmr
-  NUCLEI = ALL H {SHIFT, SSALL} # Required for J-coupling (nmrsim)
-end
-```
 
 ## License & Disclaimer
 
