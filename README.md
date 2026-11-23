@@ -12,7 +12,15 @@ A comprehensive plugin for MoleditPy to analyze and visualize results from ORCA 
 
 Repo: [https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin](https://github.com/HiroYokoyama/moleditpy_orca_result_analyzer_plugin)
 
-![Main UI](img/main.png)
+![MoleditPy with the ORCA Result Analyzer open on a benzene optimization](img/main.png)
+
+The analyzer works beside the MoleditPy window rather than inside a viewer of its
+own. Pick an orbital, a normal mode or an optimization step, and MoleditPy's 3D view
+follows: orbitals as isosurfaces, modes as arrows and animation, steps as geometries.
+
+![Benzene HOMO, evaluated from the MO coefficients in the output and drawn in MoleditPy](img/mo.gif)
+
+All screenshots are taken with MoleditPy 5.3.2 from the jobs in `tests/sample_outputs`.
 
 ## Features
 
@@ -34,7 +42,7 @@ Real-time convergence visualization for SCF energy cycles.
 - **Advanced Support**: Successfully handles S, P, D, F, and G shells (L=4).
 - **Feedback**: Integrated warning system identifies missing ORCA output keywords required for cube generation.
 
-![MO Analysis](img/mo.png)
+![MO Analysis: benzene HOMO](img/mo.png)
 
 ![Compare Molecular Orbitals](img/mo_compare.png)
 
@@ -46,7 +54,9 @@ Analyze **Geometry Optimizations** and **Relaxed Surface Scans**.
 - **Animation**: Play/Pause trajectory animations with adjustable FPS.
 - **Export**: Save plots as images or export the full 3D animation as high-quality **GIFs**.
 
-![Optimization](img/opt.png)
+![Acetone optimization played back step by step](img/opt.gif)
+
+![Optimization energy profile](img/opt.png)
 
 ### 4. Forces
 Analyze structural forces for the current structure or the entire trajectory.
@@ -63,7 +73,7 @@ Analyze structural forces for the current structure or the entire trajectory.
 - **Populations**: Mulliken, Loewdin, Hirshfeld, and **NBO** populations (if available).
 - **3D Coloring**: Color atoms in the 3D viewer based on charge value or population type.
 
-![Atomic Charges](img/charge.png)
+![Acetone Mulliken charges as atom colors and labels](img/charge.png)
 
 ### 6. Dipole Moment
 - **Vector Visualization**: Display the total dipole moment vector magnitude and direction in the 3D viewer.
@@ -73,7 +83,9 @@ Visualize vibrational modes and spectra.
 - **IR/Raman**: Stick and broadened spectra plots with interactive peak labels.
 - **Visualization**: Animated vibrational modes with vector arrows.
 
-![Frequencies](img/freq.png)
+![Acetone normal mode animated in the 3D view](img/freq.gif)
+
+![Frequencies with displacement vectors](img/freq.png)
 
 ### 8. Thermochemistry
 Detailed analysis of thermodynamic properties based on frequency calculations.
@@ -93,7 +105,7 @@ Advanced NMR chemical shielding validation and visualization.
 - **Equivalent Atom Merging**: Manually merge equivalent atoms into single peaks. Merges are saved explicitly via the **Save Merges** button (you are prompted to save or discard unsaved merges when closing the dialog).
 - **Interactive Sync**: Robust bidirectional synchronization—selecting peaks in the spectrum highlights atoms in 3D (and vice-versa). 3D atom labels can optionally show the chemical shift ("Show shift values" checkbox, off by default); merged atoms show both their original and merged values (δ orig → merged).
 
-![NMR](img/nmr.png)
+![Benzene 1H stick spectrum with the protons highlighted](img/nmr.png)
 
 ### 11. Bond Analysis
 Comprehensive bonding and orbital analysis:
